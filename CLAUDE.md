@@ -7,8 +7,8 @@ recebido em 22/10/2026, entrega até 29/10/2026. Deploy obrigatório. Projeto
 solo, de portfólio. Enunciado em `docs/desafio-elite-dev.md`.
 
 ## Estado atual
-**ARQUITETURA CONCLUÍDA.** AD-1 a AD-30 vinculantes, sem bloqueadores. Ainda sem
-código de aplicação: a implementação só começa quando eu mandar. Restam só as
+**ARQUITETURA CONCLUÍDA. IMPLEMENTAÇÃO LIBERADA.** AD-1 a AD-30 vinculantes.
+Épico em andamento: 1. Story em andamento: 1.1. Restam só as
 questões de implementação (abaixo), que não mudam a arquitetura.
 
 ## Regras de trabalho
