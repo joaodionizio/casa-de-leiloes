@@ -1,0 +1,9 @@
+_bmad/
+.claude/skills/
+.claude/settings.local.json
+.env
+.env.*
+.venv/
+node_modules/
+dist/
+__pycache__/
