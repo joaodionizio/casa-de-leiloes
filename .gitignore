@@ -3,7 +3,12 @@ _bmad/
 .claude/settings.local.json
 .env
 .env.*
+!.env.example
 .venv/
 node_modules/
 dist/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+.review/
+.DS_Store
