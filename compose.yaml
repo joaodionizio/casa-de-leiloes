@@ -17,7 +17,7 @@ services:
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # -h força TCP: o servidor temporário da inicialização só escuta no socket.
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U casa"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U casa -d postgres"]
       interval: 2s
       timeout: 3s
       retries: 30
