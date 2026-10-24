@@ -744,6 +744,14 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
     Render para bancos novos; descartei 17 e 16); variáveis de banco
     `DATABASE_URL` e `TEST_DATABASE_URL`. Detalhes e alternativas descartadas em
     `_bmad-output/implementation-artifacts/1-2-postgresql-com-bancos-isolados-e-migrations.md`.
+    **Resolvidos na Story 2.2 (24/10/2026):** o segredo do JWT é `JWT_SECRET`
+    (obrigatório, no mínimo 32 caracteres, só em variável de ambiente; descartei
+    deixá-lo opcional); as rotas de autenticação são `POST /api/auth/login`,
+    `POST /api/auth/logout` e `GET /api/me` (descartei `/api/session` e
+    `/api/login`). Continuam abertos: a rota do WebSocket da sala, as rotas do
+    comprovante e do link compartilhável e a ferramenta de teste do front-end.
+    Detalhes e alternativas descartadas em
+    `_bmad-output/implementation-artifacts/2-2-login-papéis-e-política-de-acesso.md`.
 
 ## Pontos de atenção (consequências, não decisões)
 
@@ -770,6 +778,10 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- Questão 10: segredo do JWT (`JWT_SECRET`) e rotas de autenticação
+  (`/api/auth/login`, `/api/auth/logout`, `/api/me`) resolvidos na Story 2.2.
+  Nenhuma AD alterada.
 
 - Questão 10: local do Compose, versão do Python, versão do PostgreSQL e nomes
   das variáveis de banco resolvidos na Story 1.2. Nenhuma AD alterada.

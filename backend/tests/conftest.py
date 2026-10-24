@@ -1,3 +1,6 @@
+import os
+import secrets
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -5,11 +8,18 @@ from alembic import command
 from alembic.config import Config
 from pydantic import ValidationError
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.config import get_origin_settings, get_settings
-from tests.db_guard import (
+# JWT_SECRET dos testes (Story 2.2, P1 a): gerado a cada execução e sempre
+# sobrescrito, nunca o do backend/.env. Precisa existir antes de qualquer import
+# de `app.main`, que cria a aplicação no import. O valor nunca é impresso.
+os.environ["JWT_SECRET"] = secrets.token_urlsafe(48)
+
+from app.config import get_origin_settings, get_settings  # noqa: E402
+from app.db import create_db_engine, create_session_factory  # noqa: E402
+from tests.db_guard import (  # noqa: E402
     UnsafeTestDatabaseError,
     assert_connected_to_test_database,
     assert_connection_is_test_database,
@@ -86,3 +96,26 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 def test_database_url() -> str:
     assert _test_database_url is not None
     return _test_database_url
+
+
+@pytest.fixture(scope="session")
+def db_engine(test_database_url: str) -> Iterator[Engine]:
+    engine = create_db_engine(test_database_url)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+def db_session_factory(db_engine: Engine) -> sessionmaker[Session]:
+    return create_session_factory(db_engine)
+
+
+@pytest.fixture
+def clean_users(db_engine: Engine, test_database_url: str) -> None:
+    """Esvazia `users` no banco _test antes do teste que grava usuários, pela
+    mesma guarda de banco de teste do reset da sessão."""
+    with db_engine.begin() as connection:
+        assert_connection_is_test_database(
+            connection, make_url(test_database_url).database or ""
+        )
+        connection.execute(text("TRUNCATE users"))

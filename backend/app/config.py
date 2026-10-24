@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,6 +12,11 @@ POSTGRES_DRIVER = "postgresql+psycopg"
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
+
+MIN_JWT_SECRET_LENGTH = 32
+LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+SESSION_COOKIE_NAME = "auction_session"
+SECURE_SESSION_COOKIE_NAME = f"__Host-{SESSION_COOKIE_NAME}"
 
 
 def normalize_database_url(url: str) -> str:
@@ -103,3 +109,57 @@ class OriginSettings(BaseSettings):
 @lru_cache
 def get_origin_settings() -> OriginSettings:
     return OriginSettings()  # type: ignore[call-arg]  # app_origin vem do ambiente
+
+
+class AuthSettings(BaseSettings):
+    """O segredo do JWT (Story 2.2, P1). Separado de `Settings` para que importar
+    a aplicação não exija `DATABASE_URL`. O valor nunca aparece em erro, log ou
+    resposta."""
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, extra="ignore", hide_input_in_errors=True
+    )
+
+    jwt_secret: SecretStr
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _long_enough(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                f"JWT_SECRET must have at least {MIN_JWT_SECRET_LENGTH} characters"
+            )
+        return value
+
+
+@lru_cache
+def get_auth_settings() -> AuthSettings:
+    return AuthSettings()  # type: ignore[call-arg]  # jwt_secret vem do ambiente
+
+
+@dataclass(frozen=True)
+class SessionConfig:
+    """Tudo o que a sessão precisa, montado uma vez em `create_app()`."""
+
+    jwt_secret: SecretStr
+    cookie_name: str
+    cookie_secure: bool
+
+
+def session_cookie_for_origin(canonical_origin: str) -> tuple[str, bool]:
+    """Nome e `Secure` do cookie de sessão, derivados só da `APP_ORIGIN` (P4).
+
+    `https` usa `__Host-` com `Secure`; `http` só vale para localhost, 127.0.0.1 ou
+    ::1, sem `Secure`. Outro host em `http` é recusado, sem ecoar a origem.
+    """
+    origin = parse_origin(canonical_origin)
+    if origin is None:
+        raise ValueError("APP_ORIGIN must be scheme://host[:port]")
+    scheme, host, _ = origin
+    if scheme == "https":
+        return SECURE_SESSION_COOKIE_NAME, True
+    if host in LOCAL_HTTP_HOSTS:
+        return SESSION_COOKIE_NAME, False
+    raise ValueError(
+        "APP_ORIGIN must use https unless the host is localhost, 127.0.0.1 or ::1"
+    )

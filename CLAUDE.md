@@ -51,6 +51,19 @@ que não mudam a arquitetura.
 | WebSocket, auth, CSRF | AD-10, AD-25, AD-11, AD-29 |
 | API externa, imagem, seed | AD-12, AD-22, AD-23, AD-24 |
 | Testes, `verify`, deploy | AD-17, AD-26, AD-27, AD-28, AD-14 |
+| Front-end, UX, layout, responsividade | `_bmad-output/planning-artifacts/DESIGN.md`, `_bmad-output/planning-artifacts/EXPERIENCE.md`, `_bmad-output/planning-artifacts/VITRINE-BLUEPRINT.md` quando a tarefa envolver a Vitrine, AD-15 e AD-22 |
+| Processo de implementação/review do front-end, skills BMAD no front-end | `docs/FRONTEND-WORKFLOW.md` |
+
+### Regra para stories de front-end
+- Toda story que toque `frontend/` lê `DESIGN.md` e `EXPERIENCE.md` antes de
+  planejar ou editar; se tocar a Vitrine, lê também `VITRINE-BLUEPRINT.md`.
+- São vinculantes para UX/visual no seu escopo, subordinados a: story/enunciado
+  > `docs/ARQUITETURA.md` > esses documentos > Figma/protótipos/referências.
+- Marca: `frontend/public/favicon.svg`; roxo é assinatura, não massa de fundo;
+  a obra é a protagonista. Nada de cara de SaaS/curso/fintech nem "AI slop".
+- Figma e protótipos são referência, não especificação nem contrato de estado.
+- Não renderize controle sem funcionalidade na story (busca/filtro só com OPT1).
+- Fluxo de skills, prompts-base e critérios de review: `docs/FRONTEND-WORKFLOW.md`.
 
 ## Decisões vinculantes (resumo; alternativas descartadas em docs/ARQUITETURA.md)
 - AD-1 Python + FastAPI. AD-2 PostgreSQL, SQLAlchemy 2.x síncrono (`Session`),
@@ -146,8 +159,10 @@ que não mudam a arquitetura.
 ## Fluxo BMAD
 BMAD em português, artefatos em `_bmad-output/`. Brainstorm, arquitetura (feita),
 UX, épicos e stories (o épico 1 inclui o 1º deploy), sprint planning,
-implementação story a story, code review por épico. PRD dispensado: o enunciado
-já é a especificação (registrar o motivo).
+implementação story a story. PRD dispensado: o enunciado já é a especificação
+(registrar o motivo).
+- Code review por épico como regra geral; para stories de front-end, code review
+  por story conforme `docs/FRONTEND-WORKFLOW.md`.
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
 1. Intervalos do scheduler e do heartbeat; reconexão do cliente com espera crescente.

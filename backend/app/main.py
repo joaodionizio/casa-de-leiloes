@@ -3,10 +3,20 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from app import infra_check
-from app.config import OriginSettings, get_origin_settings, get_spa_settings
+from app.access import AccessPolicy, api_route
+from app.auth import register_auth_routes
+from app.config import (
+    AuthSettings,
+    OriginSettings,
+    SessionConfig,
+    get_auth_settings,
+    get_origin_settings,
+    get_spa_settings,
+    session_cookie_for_origin,
+)
 from app.csrf import ApiWriteGuardMiddleware
 from app.errors import register_error_handlers
+from app.infra_check import register_infra_check_routes
 from app.spa import register_spa_routes, validate_spa_dist_dir
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
@@ -14,14 +24,24 @@ logger = logging.getLogger("uvicorn.error")
 
 
 def create_app(
-    spa_dist_dir: Path | None = None, app_origin: str | None = None
+    spa_dist_dir: Path | None = None,
+    app_origin: str | None = None,
+    jwt_secret: str | None = None,
 ) -> FastAPI:
-    """Monta a aplicação. Sem argumentos, lê `SPA_DIST_DIR` e `APP_ORIGIN` da
-    configuração; sem `APP_ORIGIN` a criação falha (Story 2.1, D2)."""
+    """Monta a aplicação. Sem argumentos, lê `SPA_DIST_DIR`, `APP_ORIGIN` e
+    `JWT_SECRET` da configuração; sem `APP_ORIGIN` ou sem um `JWT_SECRET` de pelo
+    menos 32 caracteres a criação falha, sem ecoar o valor (Story 2.1 D2, 2.2 P1).
+    Uma `APP_ORIGIN` `http` fora de localhost também impede a criação (2.2 P4)."""
     if app_origin is None:
         app_origin = get_origin_settings().app_origin
     else:
         app_origin = OriginSettings(_env_file=None, app_origin=app_origin).app_origin
+
+    if jwt_secret is None:
+        auth_settings = get_auth_settings()
+    else:
+        auth_settings = AuthSettings(_env_file=None, jwt_secret=jwt_secret)
+    cookie_name, cookie_secure = session_cookie_for_origin(app_origin)
 
     app = FastAPI(
         title="Casa de Leilões",
@@ -30,15 +50,23 @@ def create_app(
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
     )
+    # Segredo, nome e `Secure` do cookie ficam na app, para que apps de teste com
+    # origens diferentes convivam no mesmo processo.
+    app.state.session_config = SessionConfig(
+        jwt_secret=auth_settings.jwt_secret,
+        cookie_name=cookie_name,
+        cookie_secure=cookie_secure,
+    )
 
     register_error_handlers(app)
     app.add_middleware(ApiWriteGuardMiddleware, allowed_origin=app_origin)
 
-    @app.get("/health")
+    @api_route(app, "/health", methods=["GET"], policy=AccessPolicy.PUBLIC)
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    app.include_router(infra_check.router)
+    register_auth_routes(app)
+    register_infra_check_routes(app)
 
     if spa_dist_dir is None:
         spa_dist_dir = get_spa_settings().spa_dist_dir

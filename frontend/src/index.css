@@ -1,8 +1,28 @@
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Marca (DESIGN.md §2 e §3). O roxo é assinatura, não massa de fundo. */
+  --color-brand: #863bff;
+  --color-brand-strong: #7e14ff;
+  --color-brand-soft: #ede6ff;
+  --color-brand-blue: #47bfff;
+
+  --color-ink: #18131f;
+  --color-text: #29242f;
+  --color-muted: #716a78;
+
+  --color-canvas: #f8f7f5;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f4f1f8;
+  --color-border: #ddd7e2;
+
+  --color-success: #2d7552;
+  --color-warning: #8b6418;
+  --color-danger: #9b2c2c;
+
+  /* Tipografia (DESIGN.md §4). */
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: Georgia, 'Times New Roman', serif;
+
   line-height: 1.5;
-  color: #1a1a1a;
-  background-color: #ffffff;
 }
 
 * {
@@ -11,4 +31,7 @@
 
 body {
   margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-ui);
 }

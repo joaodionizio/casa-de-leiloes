@@ -13,6 +13,7 @@ from collections.abc import Mapping, Sequence
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 CODE_BY_STATUS = {
@@ -30,6 +31,8 @@ CODE_BY_STATUS = {
 # Códigos de causa específica, usados pela proteção HTTP (app/csrf.py).
 CSRF_ORIGIN_MISSING = "csrf_origin_missing"
 CSRF_ORIGIN_MISMATCH = "csrf_origin_mismatch"
+# Login recusado (Story 2.2): sai só da rota de login, com 401.
+INVALID_CREDENTIALS = "invalid_credentials"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -45,7 +48,31 @@ MESSAGES = {
     "internal_error": "Erro interno. Tente novamente mais tarde.",
     CSRF_ORIGIN_MISSING: "Não foi possível verificar a origem da requisição.",
     CSRF_ORIGIN_MISMATCH: "Origem da requisição não permitida.",
+    INVALID_CREDENTIALS: "E-mail ou senha inválidos.",
 }
+
+
+class ErrorDetail(BaseModel):
+    """Só documentação (OpenAPI): o item de `details` do 422."""
+
+    loc: list[str | int]
+    type: str
+
+
+class ErrorResponse(BaseModel):
+    """Só documentação (OpenAPI): o envelope real de erro. Não é `response_model`
+    de nenhuma rota; `details` é omitido em runtime quando vazio."""
+
+    status: int
+    code: str
+    message: str
+    details: list[ErrorDetail] | None = None
+
+
+def error_responses(*statuses: int) -> dict[int | str, dict[str, object]]:
+    """`responses=` de uma rota: documenta o envelope real em vez do padrão do
+    FastAPI. Declarar o 422 também tira `HTTPValidationError` do schema."""
+    return {status: {"model": ErrorResponse} for status in statuses}
 
 
 def code_for_status(status: int) -> str:

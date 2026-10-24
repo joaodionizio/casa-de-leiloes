@@ -103,6 +103,8 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
         "internal_error": "Erro interno. Tente novamente mais tarde.",
         "csrf_origin_missing": "Não foi possível verificar a origem da requisição.",
         "csrf_origin_mismatch": "Origem da requisição não permitida.",
+        # Story 2.2: código específico do login, emitido só pela rota de login.
+        "invalid_credentials": "E-mail ou senha inválidos.",
     }
 
 

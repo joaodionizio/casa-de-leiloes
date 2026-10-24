@@ -2,7 +2,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.engine import make_url
 
-from app.config import OriginSettings, Settings, normalize_database_url
+from app import main
+from app.config import AuthSettings, OriginSettings, Settings, normalize_database_url
 from app.main import create_app
 
 
@@ -127,3 +128,97 @@ def test_app_origin_is_read_from_the_environment(
 def test_create_app_rejects_an_invalid_origin_argument() -> None:
     with pytest.raises(ValidationError):
         create_app(app_origin="lixo")
+
+
+# --- JWT_SECRET (Story 2.2, P1) ---
+
+JWT_SECRET_OK = "s" * 32
+JWT_SECRET_SHORT = "p" * 31
+
+
+@pytest.mark.parametrize("raw", ["", JWT_SECRET_SHORT, "curto"])
+def test_short_or_empty_jwt_secret_is_rejected_without_the_value(raw: str) -> None:
+    with pytest.raises(ValidationError) as error:
+        AuthSettings(_env_file=None, jwt_secret=raw)
+    message = str(error.value)
+    if raw:
+        assert raw not in message
+
+
+def test_missing_jwt_secret_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    with pytest.raises(ValidationError):
+        AuthSettings(_env_file=None)
+
+
+def test_jwt_secret_with_32_characters_is_accepted() -> None:
+    settings = AuthSettings(_env_file=None, jwt_secret=JWT_SECRET_OK)
+    assert settings.jwt_secret.get_secret_value() == JWT_SECRET_OK
+    assert JWT_SECRET_OK not in repr(settings)
+
+
+def test_jwt_secret_is_read_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JWT_SECRET", JWT_SECRET_OK)
+    assert AuthSettings(_env_file=None).jwt_secret.get_secret_value() == JWT_SECRET_OK
+
+
+def test_create_app_rejects_a_short_jwt_secret_without_echoing_it() -> None:
+    with pytest.raises(ValidationError) as error:
+        create_app(app_origin="https://casa.example", jwt_secret="curto")
+    assert "curto" not in str(error.value)
+
+
+def test_create_app_fails_without_jwt_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    monkeypatch.setattr(main, "get_auth_settings", lambda: AuthSettings(_env_file=None))
+    with pytest.raises(ValidationError):
+        create_app(app_origin="https://casa.example")
+
+
+# --- modo do cookie pela APP_ORIGIN (Story 2.2, P4, OQ-1) ---
+
+
+def build_session_config(origin: str):
+    app = create_app(app_origin=origin, jwt_secret=JWT_SECRET_OK)
+    return app.state.session_config
+
+
+def test_https_origin_uses_the_host_prefixed_secure_cookie() -> None:
+    session_config = build_session_config("https://casa.example")
+    assert session_config.cookie_name == "__Host-auction_session"
+    assert session_config.cookie_secure is True
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["http://localhost:5173", "http://127.0.0.1:8000", "http://[::1]:5173"],
+)
+def test_local_http_origin_uses_the_plain_cookie_without_secure(origin: str) -> None:
+    session_config = build_session_config(origin)
+    assert session_config.cookie_name == "auction_session"
+    assert session_config.cookie_secure is False
+
+
+@pytest.mark.parametrize(
+    "origin",
+    ["http://casa.example", "http://192.168.0.10:8000", "http://localhost.evil"],
+)
+def test_remote_http_origin_stops_create_app_without_echoing_it(origin: str) -> None:
+    # `OriginSettings` continua aceitando a origem (testes da 2.1 inalterados).
+    assert OriginSettings(_env_file=None, app_origin=origin).app_origin
+    with pytest.raises(ValueError) as error:
+        create_app(app_origin=origin, jwt_secret=JWT_SECRET_OK)
+    message = str(error.value)
+    assert "https" in message
+    assert origin not in message
+    assert "casa.example" not in message
+    assert "192.168" not in message
+
+
+def test_session_config_never_shows_the_secret() -> None:
+    session_config = build_session_config("https://casa.example")
+    assert JWT_SECRET_OK not in repr(session_config)

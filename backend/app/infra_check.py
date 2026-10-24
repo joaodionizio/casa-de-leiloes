@@ -1,25 +1,23 @@
-"""Verificações técnicas de infraestrutura para o primeiro deploy (Story 1.4).
+"""Verificação técnica de infraestrutura do primeiro deploy (Story 1.4).
 
-Provam, atrás do proxy real do Render, que um WebSocket `wss://` e um cookie
-`__Host-` funcionam na mesma origem. Não leem nem gravam nada, não usam o banco,
-não autenticam e não identificam ninguém. Ficam fora do OpenAPI.
+Prova, atrás do proxy real do Render, que um WebSocket `wss://` funciona na mesma
+origem. Não lê nem grava nada, não usa o banco, não autentica e não identifica
+ninguém. Fica fora do OpenAPI.
 
-Destino: o cookie sai na Story 2.2 (cookie real do JWT) e o WebSocket sai na
-Story 4.1 (sala ao vivo). Até lá, a 2.2 os classifica como rotas públicas na
-política de acesso. A checagem de `Origin` daqui vale só para esta verificação;
-a política da sala (Q2) continua em aberto para a 4.1.
+O cookie técnico da 1.4 saiu na Story 2.2 (o cookie real do JWT o substitui). O
+WebSocket sai na Story 4.1 (sala ao vivo); até lá é uma rota pública na política
+de acesso. A checagem de `Origin` daqui vale só para esta verificação; a política
+da sala (Q2) continua em aberto para a 4.1.
 """
 
 import asyncio
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Request, Response, WebSocket
+from fastapi import FastAPI, WebSocket
 
-router = APIRouter(prefix="/api/infra-check", include_in_schema=False)
+from app.access import AccessPolicy, websocket_route
 
-COOKIE_NAME = "__Host-infra_check"
-COOKIE_VALUE = "1"
-COOKIE_MAX_AGE_SECONDS = 600
+WEBSOCKET_PATH = "/api/infra-check/ws"
 
 MAX_MESSAGE_BYTES = 64
 RECEIVE_TIMEOUT_SECONDS = 10.0
@@ -61,25 +59,6 @@ def is_allowed_origin(origin: str | None, host: str | None) -> bool:
     return origin_host(origin) == host.lower()
 
 
-@router.get("/cookie")
-def cookie_check(request: Request, response: Response) -> dict[str, bool]:
-    """Devolve se o cookie voltou e o emite de novo. Sem efeito no servidor."""
-    received = request.cookies.get(COOKIE_NAME) == COOKIE_VALUE
-    response.set_cookie(
-        COOKIE_NAME,
-        COOKIE_VALUE,
-        max_age=COOKIE_MAX_AGE_SECONDS,
-        path="/",
-        domain=None,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-    )
-    response.headers["Cache-Control"] = "no-store"
-    return {"cookie_received": received}
-
-
-@router.websocket("/ws")
 async def websocket_check(websocket: WebSocket) -> None:
     """Uma troca e fecha: recebe um texto curto e devolve `echo:<texto>`."""
     if not is_allowed_origin(
@@ -107,3 +86,7 @@ async def websocket_check(websocket: WebSocket) -> None:
 
     await websocket.send_text(f"echo:{text}")
     await websocket.close(code=NORMAL_CLOSURE)
+
+
+def register_infra_check_routes(app: FastAPI) -> None:
+    websocket_route(app, WEBSOCKET_PATH, policy=AccessPolicy.PUBLIC)(websocket_check)

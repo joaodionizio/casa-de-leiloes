@@ -4,6 +4,8 @@ from pathlib import Path, PurePosixPath
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from app.access import AccessPolicy, api_route
+
 INDEX_FILE = "index.html"
 SPA_FALLBACK_PATH = "/{full_path:path}"
 
@@ -54,9 +56,11 @@ def register_spa_routes(app: FastAPI, dist_dir: Path) -> None:
     Só GET e HEAD. Outros métodos caem no 405 JSON do roteador.
     """
 
-    @app.api_route(
+    @api_route(
+        app,
         SPA_FALLBACK_PATH,
         methods=["GET", "HEAD"],
+        policy=AccessPolicy.PUBLIC,
         include_in_schema=False,
         response_model=None,
     )

@@ -1,11 +1,20 @@
-"""Rotas sintéticas só para os testes da Story 2.1. Nunca entram na aplicação real."""
+"""Rotas sintéticas só para os testes (Stories 2.1 e 2.2). Nunca entram na
+aplicação real."""
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from app import main
+from app.access import (
+    AccessPolicy,
+    api_route,
+    optional_user,
+    require_auctioneer,
+    require_bidder,
+)
 from app.config import SpaSettings
 from app.main import create_app
+from app.users import User
 
 ALLOWED_ORIGIN = "https://casa.example"
 WRITE_METHODS = ["POST", "PUT", "PATCH", "DELETE"]
@@ -69,3 +78,30 @@ def build_app(
     app = create_app(app_origin=allowed_origin)
     app.include_router(build_router(calls))
     return app, calls
+
+
+def register_role_routes(app: FastAPI) -> None:
+    """Rotas só de teste, uma por papel (Story 2.2, P10), registradas pelo mesmo
+    helper da aplicação real. O 403 real de cada rota de negócio é testado na
+    story que a cria."""
+
+    @api_route(
+        app,
+        "/api/test/auctioneer-only",
+        methods=["GET"],
+        policy=AccessPolicy.AUCTIONEER,
+    )
+    def auctioneer_only(user: User = Depends(require_auctioneer)) -> dict[str, str]:
+        return {"email": user.email}
+
+    @api_route(
+        app, "/api/test/bidder-only", methods=["GET"], policy=AccessPolicy.BIDDER
+    )
+    def bidder_only(user: User = Depends(require_bidder)) -> dict[str, str]:
+        return {"email": user.email}
+
+    @api_route(app, "/api/test/optional", methods=["GET"], policy=AccessPolicy.OPTIONAL)
+    def optional(user: User | None = Depends(optional_user)) -> dict[str, object]:
+        if user is None:
+            return {"anonymous": True}
+        return {"email": user.email}

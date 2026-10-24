@@ -6,7 +6,6 @@ from starlette.websockets import WebSocketDisconnect
 
 from app import infra_check
 from app.infra_check import (
-    COOKIE_NAME,
     MAX_MESSAGE_BYTES,
     is_allowed_origin,
     origin_host,
@@ -43,101 +42,24 @@ def client(dist: Path) -> TestClient:
     )
 
 
-def parse_set_cookie(header: str) -> tuple[str, str, dict[str, str]]:
-    """Separa `nome=valor` dos atributos (chaves em minúsculas; flags sem valor)."""
-    first, *attributes = [part.strip() for part in header.split(";")]
-    name, _, value = first.partition("=")
-    parsed: dict[str, str] = {}
-    for attribute in attributes:
-        key, _, attribute_value = attribute.partition("=")
-        parsed[key.lower()] = attribute_value
-    return name, value, parsed
-
-
-def test_cookie_check_sets_host_cookie_with_production_attributes(
+def test_technical_cookie_route_is_gone_and_answers_the_json_404(
     client: TestClient,
 ) -> None:
     response = client.get(COOKIE_PATH)
 
-    assert response.status_code == 200
+    assert response.status_code == 404
     assert response.headers["content-type"].startswith("application/json")
-    assert response.json() == {"cookie_received": False}
-    assert response.headers["cache-control"] == "no-store"
-
-    set_cookie_headers = response.headers.get_list("set-cookie")
-    assert len(set_cookie_headers) == 1
-    name, value, attributes = parse_set_cookie(set_cookie_headers[0])
-    assert name == COOKIE_NAME == "__Host-infra_check"
-    assert value == "1"
-    assert "httponly" in attributes
-    assert "secure" in attributes
-    assert attributes["samesite"].lower() == "lax"
-    assert attributes["path"] == "/"
-    assert attributes["max-age"] == "600"
-    assert "domain" not in attributes
-
-
-def test_cookie_round_trip(client: TestClient) -> None:
-    first = client.get(COOKIE_PATH)
-    second = client.get(COOKIE_PATH)
-
-    assert first.json() == {"cookie_received": False}
-    assert second.json() == {"cookie_received": True}
-    # Sempre reemitido, também na segunda chamada.
-    assert len(second.headers.get_list("set-cookie")) == 1
-    assert second.headers["cache-control"] == "no-store"
-
-
-def test_cookie_with_other_value_is_not_received(client: TestClient) -> None:
-    client.cookies.set(COOKIE_NAME, "2")
-    assert client.get(COOKIE_PATH).json() == {"cookie_received": False}
-
-
-def test_cookie_check_keeps_no_server_state(client: TestClient, dist: Path) -> None:
-    client.get(COOKIE_PATH)
-    assert client.get(COOKIE_PATH).json() == {"cookie_received": True}
-
-    fresh = TestClient(
-        create_app(dist, app_origin=APP_ORIGIN), base_url="https://testserver"
-    )
-    response = fresh.get(COOKIE_PATH)
-    assert response.json() == {"cookie_received": False}
-    assert list(response.json()) == ["cookie_received"]
-    # Só o cookie técnico: nenhum JWT, sessão ou usuário.
-    cookie_names = [
-        _name_of(header) for header in response.headers.get_list("set-cookie")
-    ]
-    assert cookie_names == [COOKIE_NAME]
-
-
-def _name_of(set_cookie_header: str) -> str:
-    return parse_set_cookie(set_cookie_header)[0]
-
-
-@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
-def test_write_methods_on_cookie_check_are_json_errors(
-    client: TestClient, method: str
-) -> None:
-    response = getattr(client, method)(COOKIE_PATH, headers=JSON_HEADERS)
-
-    assert response.status_code == 405
-    assert response.headers["content-type"].startswith("application/json")
-    assert response.headers["allow"] == "GET"
-    assert response.json()["code"] == "method_not_allowed"
+    assert response.json()["code"] == "not_found"
     assert "set-cookie" not in response.headers
     assert "SPA de teste" not in response.text
 
 
-@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
-def test_write_methods_on_cookie_check_without_origin_are_403(
-    client: TestClient, method: str
-) -> None:
-    response = getattr(client, method)(COOKIE_PATH)
-
-    assert response.status_code == 403
-    assert response.json()["code"] == "csrf_origin_missing"
-    assert "set-cookie" not in response.headers
-    assert "SPA de teste" not in response.text
+def test_technical_cookie_route_is_gone_without_the_spa() -> None:
+    response = TestClient(
+        create_app(app_origin=APP_ORIGIN), base_url="https://testserver"
+    ).get(COOKIE_PATH)
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
 
 
 def test_infra_check_routes_stay_out_of_openapi(client: TestClient) -> None:

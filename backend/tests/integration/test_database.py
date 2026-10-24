@@ -1,9 +1,11 @@
+import uuid
 from datetime import datetime
 
 import pytest
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import create_db_engine, create_session_factory
@@ -36,7 +38,7 @@ def test_engine_uses_postgresql_dialect_with_psycopg_driver(
         engine.dispose()
 
 
-def test_test_database_is_at_head_with_no_domain_tables(
+def test_test_database_is_at_head_with_the_expected_tables(
     test_database_url: str,
 ) -> None:
     head = ScriptDirectory.from_config(
@@ -52,7 +54,41 @@ def test_test_database_is_at_head_with_no_domain_tables(
     finally:
         engine.dispose()
     assert version == head
-    assert tables == ["alembic_version"]
+    assert sorted(tables) == ["alembic_version", "users"]
+
+
+def test_engine_hides_statement_parameters(db_engine: Engine) -> None:
+    assert db_engine.hide_parameters is True
+
+
+def test_database_error_does_not_show_the_parameter_values(
+    db_engine: Engine, clean_users: None
+) -> None:
+    # O marcador vai num parâmetro que NÃO é a chave violada: o PostgreSQL
+    # mostra no DETAIL a chave duplicada (o e-mail), mas `hide_parameters`
+    # esconde os valores dos parâmetros do SQL.
+    marker = "marcador-secreto-do-hash"
+    insert = text(
+        "INSERT INTO users (id, email, password_hash, role) "
+        "VALUES (:id, :email, :hash, 'BIDDER')"
+    )
+    with db_engine.begin() as connection:
+        connection.execute(
+            insert,
+            {"id": uuid.uuid4(), "email": "duplicado@example.com", "hash": "h"},
+        )
+    with pytest.raises(IntegrityError) as error:
+        with db_engine.begin() as connection:
+            connection.execute(
+                insert,
+                {
+                    "id": uuid.uuid4(),
+                    "email": "duplicado@example.com",
+                    "hash": marker,
+                },
+            )
+    assert marker not in str(error.value)
+    assert "uq_users_email" in str(error.value)
 
 
 def test_reset_refuses_non_test_database_before_dropping(
