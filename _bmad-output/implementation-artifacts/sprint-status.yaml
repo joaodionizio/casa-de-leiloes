@@ -1,0 +1,84 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 10-23-2026 22:51
+last_updated: 10-23-2026 23:30
+project: casa-de-leiloes
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-1: in-progress
+  1-1-fundação-mínima-do-monorepo: done
+  1-2-postgresql-com-bancos-isolados-e-migrations: review
+  1-3-spa-na-mesma-origem-e-imagem-multi-stage: backlog
+  1-4-primeiro-deploy-no-render: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-formato-de-erro-e-validação-de-origem: backlog
+  2-2-login-papéis-e-política-de-acesso: backlog
+  2-3-busca-de-obras-no-art-institute-of-chicago: backlog
+  2-4-criação-de-lotes-pelo-leiloeiro-e-lote-demo-semeado: backlog
+  2-5-vitrine-pública-e-página-do-lote: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-carteira-e-depósito-simulado: backlog
+  3-2-regras-de-aceitação-do-lance-com-hora-injetada: backlog
+  3-3-fundamentos-de-integridade-do-histórico: backlog
+  3-4-lance-transacional-com-travas-e-anti-sniping: backlog
+  3-5-dar-lance-pela-sala-do-lote: backlog
+  3-6-leiloeiro-cancela-lote-sem-lances: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-sala-ao-vivo-por-websocket-snapshot-e-atualizações: backlog
+  4-2-heartbeat-e-reconexão-automática: backlog
+  4-3-fechamento-liquidação-idempotente-e-comprovante-base: backlog
+  4-4-gatilhos-do-fechamento-e-evento-de-encerramento: backlog
+  4-5-resultado-dos-lotes-no-painel-do-leiloeiro: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-verificação-pública-da-integridade-do-lote: backlog
+  5-2-comprovante-de-arremate-compartilhável-por-link: backlog
+  5-3-meus-arremates: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-revisão-de-segurança-e-de-erros: backlog
+  6-2-identidade-visual-e-responsividade: backlog
+  6-3-readme-completo-e-registro-de-uso-de-ia: backlog
+  6-4-validação-final-no-ambiente-publicado: backlog
+  6-5-busca-e-filtro-de-lotes: backlog
+  6-6-cancelamento-com-estorno-automático: backlog
+  6-7-dark-mode: backlog
+  epic-6-retrospective: optional

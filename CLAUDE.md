@@ -160,8 +160,9 @@ já é a especificação (registrar o motivo).
 8. Nome e cálculo do estado "Encerrado, apurando resultado" nas leituras.
 9. Tentativa de lance em lote vencido: fechar primeiro, depois responder.
 10. Nomes ainda não definidos: rota do WebSocket, rotas do comprovante e do
-    link, segredo do JWT, ferramenta de teste do front, local do compose,
-    versão do Python, versão do PostgreSQL (alinhar com a do Render).
+    link, segredo do JWT, ferramenta de teste do front. (Resolvidos na 1.2:
+    `compose.yaml` na raiz, Python 3.13, PostgreSQL 18, `DATABASE_URL` e
+    `TEST_DATABASE_URL`.)
 
 ## Armadilhas conhecidas
 (Cada problema que custar tempo vira uma linha aqui.)

@@ -48,6 +48,12 @@ Não fazer neste dia:
 - clock_timestamp();
 - concorrência;
 - anti-sniping;
+- pseudônimo determinístico por lote;
+- representação canônica v1;
+- cadeia SHA-256;
+- previous_hash/hash atual;
+- âncora HMAC;
+- atualização da cadeia e da âncora na mesma transação do lance;
 - testes críticos em PostgreSQL real.
 
 ## Dia 5 — 26/10 — Tempo real + encerramento
@@ -61,14 +67,12 @@ Não fazer neste dia:
 - idempotência.
 
 ## Dia 6 — 27/10 — Auditoria + fluxos finais
-- pseudônimos;
-- serialização canônica;
-- SHA-256 encadeado;
-- HMAC;
-- auditoria pública;
-- meus arremates;
+- verificação pública da integridade;
+- teste de adulteração direta no banco;
+- página/endpoint público de auditoria;
 - comprovante compartilhável;
-- integração visual.
+- meus arremates;
+- integração dos fluxos finais.
 
 ## Dia 7 — 28/10 — Hardening + UX + entrega
 - verify completo;

@@ -738,8 +738,12 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    fechamento (transação própria) e só então devolver "lote encerrado".
 10. **Nomes ainda não definidos.** Rota do WebSocket da sala; rotas do comprovante
     e do link compartilhável; nome do segredo do JWT; ferramenta de teste do
-    front-end; local do `docker-compose`; versão do Python; versão principal do
-    PostgreSQL (alinhar a do contêiner de dev/teste com a oferecida pelo Render).
+    front-end.
+    **Resolvidos na Story 1.2 (23/10/2026):** decidi `compose.yaml` na raiz do
+    repositório; Python 3.13; PostgreSQL 18 em dev, teste e produção (padrão do
+    Render para bancos novos; descartei 17 e 16); variáveis de banco
+    `DATABASE_URL` e `TEST_DATABASE_URL`. Detalhes e alternativas descartadas em
+    `_bmad-output/implementation-artifacts/1-2-postgresql-com-bancos-isolados-e-migrations.md`.
 
 ## Pontos de atenção (consequências, não decisões)
 
@@ -766,6 +770,9 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- Questão 10: local do Compose, versão do Python, versão do PostgreSQL e nomes
+  das variáveis de banco resolvidos na Story 1.2. Nenhuma AD alterada.
 
 - Fechamento dos bloqueadores: B1 (TypeScript confirmado), B2 (leituras nunca
   liquidam; AD-19 reescrito), B3 (papéis `AUCTIONEER` e `BIDDER`). Fase marcada

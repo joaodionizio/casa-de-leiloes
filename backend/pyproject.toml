@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Casa de Leilões — backend (FastAPI)"
 requires-python = ">=3.13"
 dependencies = [
+    "alembic>=1.20.1",
     "fastapi",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.1",
+    "sqlalchemy>=2.1.6",
     "uvicorn[standard]",
 ]
 

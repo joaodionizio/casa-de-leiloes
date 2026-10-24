@@ -1,0 +1,27 @@
+# PostgreSQL local para desenvolvimento e testes (AD-17, AD-27).
+# Um contêiner, dois bancos: casa_de_leiloes_dev e casa_de_leiloes_test.
+# Credenciais fictícias, só para uso local.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: casa
+      POSTGRES_PASSWORD: casa_local_dev
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18: o volume fica em /var/lib/postgresql, não em .../data.
+      - postgres_data:/var/lib/postgresql
+      # Só roda com o volume vazio (docker compose down -v para recriar).
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h força TCP: o servidor temporário da inicialização só escuta no socket.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U casa"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  postgres_data:
