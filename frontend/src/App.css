@@ -21,3 +21,22 @@
   color: #555;
   font-size: 1.125rem;
 }
+
+.health {
+  margin: 1.5rem 0 0;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.health-available {
+  border-color: #2e6b3f;
+  color: #2e6b3f;
+}
+
+.health-unavailable {
+  border-color: #9b2c2c;
+  color: #9b2c2c;
+}

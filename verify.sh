@@ -43,5 +43,9 @@ npm run typecheck
 echo "=== Frontend: build ==="
 npm run build
 
+echo "=== Imagem: docker build ==="
+cd "$REPO_ROOT"
+docker build -t casa-de-leiloes:verify .
+
 echo ""
 echo "verify.sh: todas as etapas passaram."

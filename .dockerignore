@@ -1,0 +1,23 @@
+# Segredos e estado local
+**/.env*
+
+# Controle de versão e ferramentas do projeto
+.git
+.claude
+_bmad
+_bmad-output
+docs
+
+# Dependências e builds locais (a imagem instala e builda por conta própria)
+**/node_modules
+**/.venv
+**/dist
+
+# Caches e testes
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+backend/tests
+
+.DS_Store
+**/.DS_Store

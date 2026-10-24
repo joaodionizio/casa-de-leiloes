@@ -1,6 +1,6 @@
 # Story 1.2: PostgreSQL com bancos isolados e migrations
 
-Status: review
+Status: done
 
 Chave do sprint: `1-2-postgresql-com-bancos-isolados-e-migrations`
 Épico: 1 (Fundação e aplicação publicada), Dia 2 (23/10) do cronograma.

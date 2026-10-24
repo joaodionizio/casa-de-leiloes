@@ -1,10 +1,14 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
 POSTGRES_DRIVER = "postgresql+psycopg"
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = BACKEND_DIR / ".env"
 
 
 def normalize_database_url(url: str) -> str:
@@ -29,7 +33,7 @@ def normalize_database_url(url: str) -> str:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         extra="ignore",
         hide_input_in_errors=True,
     )
@@ -48,3 +52,25 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]  # database_url vem do ambiente
+
+
+class SpaSettings(BaseSettings):
+    """Onde está o build da SPA. Separado de `Settings` para que importar a
+    aplicação não exija `DATABASE_URL`."""
+
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+
+    spa_dist_dir: Path | None = None
+
+    @field_validator("spa_dist_dir")
+    @classmethod
+    def _relative_to_backend_dir(cls, value: Path | None) -> Path | None:
+        # Caminho relativo vale a partir de backend/, nunca do cwd do processo.
+        if value is not None and not value.is_absolute():
+            return BACKEND_DIR / value
+        return value
+
+
+@lru_cache
+def get_spa_settings() -> SpaSettings:
+    return SpaSettings()
