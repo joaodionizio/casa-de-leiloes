@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
-from app.config import get_settings
+from app.config import get_origin_settings, get_settings
 from tests.db_guard import (
     UnsafeTestDatabaseError,
     assert_connected_to_test_database,
@@ -55,6 +55,13 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         pytest.exit(
             "Configuração inválida (DATABASE_URL / TEST_DATABASE_URL): "
             + "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in error.errors()),
+            returncode=3,
+        )
+    try:
+        get_origin_settings()
+    except ValidationError:
+        pytest.exit(
+            "APP_ORIGIN ausente ou inválida (ex.: http://localhost:5173)",
             returncode=3,
         )
     test_secret = settings.test_database_url

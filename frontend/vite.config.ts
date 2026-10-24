@@ -9,6 +9,10 @@ const API_TARGET = 'http://127.0.0.1:8000'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Porta fixa: o backend só aceita escritas da origem APP_ORIGIN (AD-29);
+    // se a 5173 estiver ocupada, falha em vez de subir em outra porta.
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/api': API_TARGET,
       '/health': API_TARGET,

@@ -5,6 +5,8 @@ from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from app.csrf import format_origin, parse_origin
+
 POSTGRES_DRIVER = "postgresql+psycopg"
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -74,3 +76,30 @@ class SpaSettings(BaseSettings):
 @lru_cache
 def get_spa_settings() -> SpaSettings:
     return SpaSettings()
+
+
+class OriginSettings(BaseSettings):
+    """A origem pública que aceita escritas (AD-29, Story 2.1 P3). Separado de
+    `Settings` para que importar a aplicação não exija `DATABASE_URL`."""
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, extra="ignore", hide_input_in_errors=True
+    )
+
+    app_origin: str
+
+    @field_validator("app_origin")
+    @classmethod
+    def _canonical_origin(cls, value: str) -> str:
+        origin = parse_origin(value) if value == value.strip() else None
+        if origin is None:
+            raise ValueError(
+                "APP_ORIGIN must be scheme://host[:port] (http or https), "
+                "with no path, query, fragment or credentials"
+            )
+        return format_origin(origin)
+
+
+@lru_cache
+def get_origin_settings() -> OriginSettings:
+    return OriginSettings()  # type: ignore[call-arg]  # app_origin vem do ambiente

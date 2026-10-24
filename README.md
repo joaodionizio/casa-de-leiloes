@@ -18,7 +18,12 @@ Variáveis (veja `backend/.env.example`, valores fictícios):
 ```bash
 export DATABASE_URL=postgresql://casa:casa_local_dev@127.0.0.1:5432/casa_de_leiloes_dev
 export TEST_DATABASE_URL=postgresql://casa:casa_local_dev@127.0.0.1:5432/casa_de_leiloes_test
+export APP_ORIGIN=http://localhost:5173
 ```
+
+`APP_ORIGIN` é a origem pública que a API aceita nas escritas (veja "Erros e
+proteção das escritas"). Sem ela, a aplicação não inicia e o `pytest` encerra com
+mensagem clara.
 
 Aplicar as migrations no banco de desenvolvimento:
 
@@ -33,9 +38,9 @@ cd backend && uv run pytest
 ./verify.sh
 ```
 
-O `./verify.sh` fornece URLs locais padrão para `DATABASE_URL` e
-`TEST_DATABASE_URL` quando elas não estão definidas no ambiente; valores já
-exportados no shell têm precedência. Por isso o verify não depende de
+O `./verify.sh` fornece valores locais padrão para `DATABASE_URL`,
+`TEST_DATABASE_URL` e `APP_ORIGIN` (`http://localhost:5173`) quando eles não estão
+definidos no ambiente; valores já exportados no shell têm precedência. Por isso o verify não depende de
 `backend/.env`.
 
 Recriar o volume do zero (apaga os dois bancos; o script de criação só roda com
@@ -51,9 +56,13 @@ API e front-end em dois terminais. O Vite faz proxy de `/api` e `/health` para
 `http://127.0.0.1:8000`, então o navegador vê uma só origem e não há CORS:
 
 ```bash
-cd backend && uv run uvicorn app.main:app --port 8000
+cd backend && APP_ORIGIN=http://localhost:5173 uv run uvicorn app.main:app --port 8000
 cd frontend && npm run dev
 ```
+
+O Vite roda na porta fixa 5173 (`strictPort`): se ela estiver ocupada, ele falha
+em vez de subir em outra porta, porque o backend só aceita escritas vindas de
+`APP_ORIGIN`. Abra o front em `http://localhost:5173`, não em `127.0.0.1`.
 
 A documentação da API fica em `/api/docs` e o esquema em `/api/openapi.json`.
 
@@ -66,7 +75,7 @@ atual do processo; na imagem, o valor é absoluto:
 
 ```bash
 cd frontend && npm run build
-cd ../backend && SPA_DIST_DIR=../frontend/dist uv run uvicorn app.main:app --port 8000
+cd ../backend && APP_ORIGIN=http://localhost:8000 SPA_DIST_DIR=../frontend/dist uv run uvicorn app.main:app --port 8000
 ```
 
 ## Imagem de produção
@@ -82,6 +91,7 @@ PostgreSQL do Compose:
 docker build -t casa-de-leiloes .
 docker run --rm --network casa-de-leiloes_default -p 127.0.0.1:9000:9000 \
   -e PORT=9000 \
+  -e APP_ORIGIN=http://localhost:9000 \
   -e DATABASE_URL=postgresql://casa:casa_local_dev@postgres:5432/casa_de_leiloes_dev \
   casa-de-leiloes
 ```
@@ -105,7 +115,12 @@ URL pública: <https://casa-de-leiloes-i1xr.onrender.com>
 | Branch | `epic-1` (trocar para `main` depois do merge do épico) |
 | Auto-Deploy | Off: todo deploy é manual (Manual Deploy → Deploy latest commit) |
 | Health Check Path | `/health` |
-| Variáveis de ambiente | só `DATABASE_URL` (Internal Database URL, colada no painel) |
+| Variáveis de ambiente | `DATABASE_URL` (Internal Database URL, colada no painel) |
+
+**Pré-requisito do próximo deploy (Story 2.1, ainda não feito):** adicionar no
+painel `APP_ORIGIN=https://casa-de-leiloes-i1xr.onrender.com`. Sem ela a criação
+da aplicação falha e o serviço não inicia. `APP_ORIGIN` não é segredo. A branch
+configurada no painel ainda é `epic-1`.
 
 O valor de `DATABASE_URL` existe apenas no painel do Render. `PORT` é injetada
 pelo Render e `SPA_DIST_DIR` já vem da imagem. Não há CORS (API, SPA e WebSocket
@@ -179,8 +194,67 @@ a trato como comportamento garantido do Render.
 
 As duas rotas técnicas ficam fora do OpenAPI e não leem nem gravam dados.
 
+**Proteção das escritas** (Story 2.1; a validar depois do próximo deploy, ainda
+não executado no Render). Respostas esperadas, pela seção "Erros e proteção das
+escritas":
+
+```bash
+curl -sS -i -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -d '{}' "$URL/api/nao-existe"  # 403 csrf_origin_mismatch
+curl -sS -i -X POST "$URL/api/nao-existe"                                                                  # 403 csrf_origin_missing
+curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: text/plain' -d x "$URL/api/nao-existe"             # 415 unsupported_media_type
+curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: application/json' -d '{}' "$URL/api/nao-existe"    # 405 method_not_allowed (SPA montada)
+```
+
 ### Limitações observadas
 
 - **O PostgreSQL gratuito expira em 23/11/2026**, data mostrada pelo painel do
   Render.
 - Cold start não observado nesta validação. Não houve espera artificial.
+
+## Erros e proteção das escritas
+
+Todo erro da API tem o mesmo formato JSON: `status` (igual ao status HTTP),
+`code` (técnico, estável, em inglês) e `message` (em português). Quando há o que
+detalhar (hoje, só no 422), há também `details`, uma lista de `{"loc", "type"}`;
+sem detalhes, o campo é omitido. A mensagem vem sempre de um catálogo: o texto de
+uma exceção nunca é devolvido. O 500 é genérico e o traceback fica só no log do
+servidor.
+
+```json
+{"status": 403, "code": "csrf_origin_mismatch", "message": "Origem da requisição não permitida."}
+```
+
+Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamento:
+
+1. `Origin` ou `Referer` tem de ser a origem configurada em `APP_ORIGIN` (esquema,
+   host e porta; nunca `Host` nem `X-Forwarded-*`). `Origin` presente tem
+   precedência; só sem ele o `Referer` é considerado. Sem os dois, 403
+   `csrf_origin_missing`. Outra origem, `null` ou valor malformado, 403
+   `csrf_origin_mismatch`.
+2. `Content-Type` tem de ser `application/json` (aceita `charset`); senão, 415
+   `unsupported_media_type`.
+
+`GET`, `HEAD` e `OPTIONS` nunca passam por essa checagem. Não há CORS.
+
+### Comportamentos que podem surpreender
+
+- Toda escrita exige `Content-Type: application/json`, mesmo sem corpo (um futuro
+  logout ou `DELETE`). Um `curl -X POST` sem `-H 'Content-Type: application/json'`
+  e sem `Origin` recebe 403.
+- Em desenvolvimento, escritas só funcionam pela origem do Vite
+  (`http://localhost:5173`, não `127.0.0.1`). O Swagger pelo mesmo caminho,
+  `http://localhost:5173/api/docs`, também; direto na porta 8000 as escritas dão 403.
+- A proteção vem antes do roteamento. Uma escrita de outra origem em rota
+  inexistente recebe 403. Uma escrita da mesma origem sem `Content-Type:
+  application/json` em rota inexistente recebe 415. Nos dois casos, a resposta
+  vem antes do 404/405.
+- Com a SPA montada (imagem/produção), uma escrita válida em rota `/api`
+  inexistente recebe 405 `method_not_allowed`, com `Allow` contendo `GET` e `HEAD`,
+  e não 404. Isso acontece porque o fallback da SPA (só GET/HEAD) casa com qualquer
+  caminho. O `GET` do mesmo caminho continua 404. Sem a SPA (desenvolvimento com o
+  Vite), a mesma escrita recebe 404.
+- A validação 422 do OpenAPI (`HTTPValidationError`) ainda mostra o formato padrão
+  do FastAPI, não o contrato acima. Quando a primeira rota com parâmetros aparecer,
+  o schema divergirá da resposta real.
+- O traceback de um 500 pode conter texto de exceções do SQLAlchemy, incluindo
+  parâmetros da consulta; ele fica apenas no log do servidor.

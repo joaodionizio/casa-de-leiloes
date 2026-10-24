@@ -18,6 +18,8 @@ from app.spa import (
 )
 
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
+APP_ORIGIN = "https://casa.example"
+JSON_HEADERS = {"Origin": APP_ORIGIN, "Content-Type": "application/json"}
 SECRET = "conteudo-fora-do-dist"
 
 
@@ -36,14 +38,14 @@ def dist(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def client(dist: Path) -> TestClient:
-    return TestClient(create_app(dist))
+    return TestClient(create_app(dist, app_origin=APP_ORIGIN))
 
 
 @pytest.fixture
 def no_spa_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("SPA_DIST_DIR", raising=False)
     monkeypatch.setattr(main, "get_spa_settings", lambda: SpaSettings(_env_file=None))
-    return TestClient(create_app())
+    return TestClient(create_app(app_origin=APP_ORIGIN))
 
 
 @pytest.fixture
@@ -53,9 +55,19 @@ def fresh_spa_settings() -> Iterator[None]:
     get_spa_settings.cache_clear()
 
 
-def assert_json_error(response) -> None:
+def assert_spa_405(response) -> None:
+    """Escrita que cai no fallback (só GET/HEAD): 405 do roteador no contrato único.
+
+    O `Allow` vem de um `set` no Starlette, então a ordem não é garantida.
+    """
+    assert response.status_code == 405
     assert response.headers["content-type"].startswith("application/json")
-    assert "detail" in response.json()
+    body = response.json()
+    assert set(body) == {"status", "code", "message"}
+    assert body["status"] == 405
+    assert body["code"] == "method_not_allowed"
+    allowed = {method.strip() for method in response.headers["allow"].split(",")}
+    assert allowed == {"GET", "HEAD"}
 
 
 # --- entrega da SPA (CA1, CA2) ---
@@ -97,10 +109,26 @@ def test_unknown_api_path_is_json_404(
     assert "<html" not in response.text.lower()
 
 
-def test_post_on_unknown_api_path_is_json_error(client: TestClient) -> None:
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+def test_valid_write_on_unknown_api_path_with_spa_is_405_json(
+    client: TestClient, method: str
+) -> None:
+    # Com a SPA montada (produção), o fallback GET/HEAD casa parcialmente com
+    # qualquer caminho: o roteador responde 405, não 404 (decisão da 1.3 mantida).
+    response = client.request(
+        method, "/api/nao-existe", headers=JSON_HEADERS, content=b"{}"
+    )
+    assert_spa_405(response)
+    assert INDEX_HTML not in response.text
+
+
+def test_post_on_unknown_api_path_without_origin_is_403_json(
+    client: TestClient,
+) -> None:
     response = client.post("/api/nao-existe")
-    assert response.status_code in (404, 405)
-    assert_json_error(response)
+    assert response.status_code == 403
+    assert response.json()["code"] == "csrf_origin_missing"
+    assert INDEX_HTML not in response.text
 
 
 def test_health_is_untouched_with_and_without_spa(
@@ -128,9 +156,8 @@ def test_head_health_is_405_json_with_allow_get(
 
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
 def test_write_methods_never_get_index_html(client: TestClient, method: str) -> None:
-    response = getattr(client, method)("/lots/x")
-    assert response.status_code in (404, 405)
-    assert_json_error(response)
+    response = getattr(client, method)("/lots/x", headers=JSON_HEADERS)
+    assert_spa_405(response)
     assert INDEX_HTML not in response.text
 
 
@@ -266,7 +293,7 @@ def test_spa_dist_dir_is_read_from_the_environment(
     dist: Path, monkeypatch: pytest.MonkeyPatch, fresh_spa_settings: None
 ) -> None:
     monkeypatch.setenv("SPA_DIST_DIR", str(dist))
-    response = TestClient(create_app()).get("/")
+    response = TestClient(create_app(app_origin=APP_ORIGIN)).get("/")
     assert response.status_code == 200
     assert response.text == INDEX_HTML
 
@@ -287,7 +314,7 @@ def test_relative_spa_dist_dir_is_resolved_against_backend_dir(
     settings = SpaSettings(_env_file=None)
     assert settings.spa_dist_dir == BACKEND_DIR / relative
 
-    response = TestClient(create_app()).get("/")
+    response = TestClient(create_app(app_origin=APP_ORIGIN)).get("/")
     assert response.status_code == 200
     assert response.text == INDEX_HTML
 
@@ -305,30 +332,44 @@ def test_invalid_spa_dist_dir_fails_on_creation(tmp_path: Path, case: str) -> No
     elif case == "no_index":
         path.mkdir()
     with pytest.raises(SpaConfigError) as error:
-        create_app(path)
+        create_app(path, app_origin=APP_ORIGIN)
     assert "SPA_DIST_DIR" in str(error.value)
 
 
-def test_importing_app_main_needs_neither_spa_nor_database() -> None:
+IMPORT_APP_MAIN = (
+    "from app.config import OriginSettings, SpaSettings; "
+    "SpaSettings.model_config['env_file'] = None; "
+    "OriginSettings.model_config['env_file'] = None; "
+    "import app.main"
+)
+
+
+def import_app_main(extra_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in ("SPA_DIST_DIR", "DATABASE_URL", "TEST_DATABASE_URL")
+        if key
+        not in ("SPA_DIST_DIR", "DATABASE_URL", "TEST_DATABASE_URL", "APP_ORIGIN")
     }
     # Sem ler o .env do desenvolvedor: o objetivo é só o ambiente.
-    code = (
-        "from app.config import SpaSettings; "
-        "SpaSettings.model_config['env_file'] = None; "
-        "import app.main"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", code],
+    return subprocess.run(
+        [sys.executable, "-c", IMPORT_APP_MAIN],
         cwd=BACKEND_DIR,
-        env=env,
+        env={**env, **extra_env},
         capture_output=True,
         text=True,
     )
+
+
+def test_importing_app_main_needs_neither_spa_nor_database() -> None:
+    result = import_app_main({"APP_ORIGIN": APP_ORIGIN})
     assert result.returncode == 0, result.stderr
+
+
+def test_importing_app_main_without_app_origin_fails_clearly() -> None:
+    result = import_app_main({})
+    assert result.returncode != 0
+    assert "app_origin" in result.stderr.lower()
 
 
 # --- o fallback é sempre a última rota (Story 1.3, T2.2) ---

@@ -4,15 +4,25 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app import infra_check
-from app.config import get_spa_settings
+from app.config import OriginSettings, get_origin_settings, get_spa_settings
+from app.csrf import ApiWriteGuardMiddleware
+from app.errors import register_error_handlers
 from app.spa import register_spa_routes, validate_spa_dist_dir
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
 
 
-def create_app(spa_dist_dir: Path | None = None) -> FastAPI:
-    """Monta a aplicação. Sem argumento, lê `SPA_DIST_DIR` da configuração."""
+def create_app(
+    spa_dist_dir: Path | None = None, app_origin: str | None = None
+) -> FastAPI:
+    """Monta a aplicação. Sem argumentos, lê `SPA_DIST_DIR` e `APP_ORIGIN` da
+    configuração; sem `APP_ORIGIN` a criação falha (Story 2.1, D2)."""
+    if app_origin is None:
+        app_origin = get_origin_settings().app_origin
+    else:
+        app_origin = OriginSettings(_env_file=None, app_origin=app_origin).app_origin
+
     app = FastAPI(
         title="Casa de Leilões",
         docs_url="/api/docs",
@@ -20,6 +30,9 @@ def create_app(spa_dist_dir: Path | None = None) -> FastAPI:
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
     )
+
+    register_error_handlers(app)
+    app.add_middleware(ApiWriteGuardMiddleware, allowed_origin=app_origin)
 
     @app.get("/health")
     def health() -> dict[str, str]:

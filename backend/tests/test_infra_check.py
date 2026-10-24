@@ -16,6 +16,8 @@ from app.main import create_app
 COOKIE_PATH = "/api/infra-check/cookie"
 WS_PATH = "/api/infra-check/ws"
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
+APP_ORIGIN = "https://testserver"
+JSON_HEADERS = {"Origin": APP_ORIGIN, "Content-Type": "application/json"}
 
 # Fecha o handshake antes do accept: o servidor responde 403 e o TestClient
 # levanta WebSocketDisconnect com o código usado em `close()`.
@@ -36,7 +38,9 @@ def dist(tmp_path: Path) -> Path:
 @pytest.fixture
 def client(dist: Path) -> TestClient:
     # A SPA montada prova que o fallback não sombreia as rotas técnicas.
-    return TestClient(create_app(dist), base_url="https://testserver")
+    return TestClient(
+        create_app(dist, app_origin=APP_ORIGIN), base_url="https://testserver"
+    )
 
 
 def parse_set_cookie(header: str) -> tuple[str, str, dict[str, str]]:
@@ -93,7 +97,9 @@ def test_cookie_check_keeps_no_server_state(client: TestClient, dist: Path) -> N
     client.get(COOKIE_PATH)
     assert client.get(COOKIE_PATH).json() == {"cookie_received": True}
 
-    fresh = TestClient(create_app(dist), base_url="https://testserver")
+    fresh = TestClient(
+        create_app(dist, app_origin=APP_ORIGIN), base_url="https://testserver"
+    )
     response = fresh.get(COOKIE_PATH)
     assert response.json() == {"cookie_received": False}
     assert list(response.json()) == ["cookie_received"]
@@ -112,11 +118,24 @@ def _name_of(set_cookie_header: str) -> str:
 def test_write_methods_on_cookie_check_are_json_errors(
     client: TestClient, method: str
 ) -> None:
-    response = getattr(client, method)(COOKIE_PATH)
+    response = getattr(client, method)(COOKIE_PATH, headers=JSON_HEADERS)
 
     assert response.status_code == 405
     assert response.headers["content-type"].startswith("application/json")
-    assert "detail" in response.json()
+    assert response.headers["allow"] == "GET"
+    assert response.json()["code"] == "method_not_allowed"
+    assert "set-cookie" not in response.headers
+    assert "SPA de teste" not in response.text
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
+def test_write_methods_on_cookie_check_without_origin_are_403(
+    client: TestClient, method: str
+) -> None:
+    response = getattr(client, method)(COOKIE_PATH)
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "csrf_origin_missing"
     assert "set-cookie" not in response.headers
     assert "SPA de teste" not in response.text
 

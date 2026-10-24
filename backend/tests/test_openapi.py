@@ -10,7 +10,7 @@ from app.main import create_app
 def api_only(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("SPA_DIST_DIR", raising=False)
     monkeypatch.setattr(main, "get_spa_settings", lambda: SpaSettings(_env_file=None))
-    return TestClient(create_app())
+    return TestClient(create_app(app_origin="https://casa.example"))
 
 
 def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:

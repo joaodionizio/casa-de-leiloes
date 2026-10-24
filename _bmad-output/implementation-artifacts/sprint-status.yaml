@@ -42,8 +42,8 @@ development_status:
   1-4-primeiro-deploy-no-render: review
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-formato-de-erro-e-validação-de-origem: backlog
+  epic-2: in-progress
+  2-1-formato-de-erros-e-validacao-de-origin: review
   2-2-login-papéis-e-política-de-acesso: backlog
   2-3-busca-de-obras-no-art-institute-of-chicago: backlog
   2-4-criação-de-lotes-pelo-leiloeiro-e-lote-demo-semeado: backlog

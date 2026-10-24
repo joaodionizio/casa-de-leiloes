@@ -28,6 +28,8 @@ fi
 # Defaults locais fictícios (compose.yaml); valores já definidos no ambiente vencem.
 export DATABASE_URL="${DATABASE_URL:-postgresql://casa:casa_local_dev@127.0.0.1:5432/casa_de_leiloes_dev}"
 export TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgresql://casa:casa_local_dev@127.0.0.1:5432/casa_de_leiloes_test}"
+# Origem do Vite local (valor fictício, não é segredo); a aplicação exige APP_ORIGIN.
+export APP_ORIGIN="${APP_ORIGIN:-http://localhost:5173}"
 
 echo "=== Backend: pytest ==="
 cd "$REPO_ROOT/backend"
