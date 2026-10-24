@@ -39,11 +39,11 @@ development_status:
   1-1-fundação-mínima-do-monorepo: done
   1-2-postgresql-com-bancos-isolados-e-migrations: done
   1-3-spa-na-mesma-origem-e-imagem-multi-stage: done
-  1-4-primeiro-deploy-no-render: review
+  1-4-primeiro-deploy-no-render: done
   epic-1-retrospective: optional
 
   epic-2: in-progress
-  2-1-formato-de-erros-e-validacao-de-origin: review
+  2-1-formato-de-erros-e-validacao-de-origin: done
   2-2-login-papéis-e-política-de-acesso: backlog
   2-3-busca-de-obras-no-art-institute-of-chicago: backlog
   2-4-criação-de-lotes-pelo-leiloeiro-e-lote-demo-semeado: backlog

@@ -1,6 +1,6 @@
 # Story 2.1 — Formato de erros + validação de Origin
 
-Status: review
+Status: done
 
 Chave do sprint: `2-1-formato-de-erros-e-validacao-de-origin`
 Épico: 2. Data de criação: 24/10/2026.
@@ -324,7 +324,7 @@ do WebSocket técnico. Não crio a Story 2.2 e não uso git.
 
 ## Registro e status
 
-Status: **review**. Implementei só a 2.1; a 2.2 não foi iniciada.
+Status: **done**. Implementei só a 2.1; a 2.2 não foi iniciada.
 
 ### Evidências (saídas reais)
 
