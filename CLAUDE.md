@@ -8,8 +8,9 @@ solo, de portfólio. Enunciado em `docs/desafio-elite-dev.md`.
 
 ## Estado atual
 **ARQUITETURA CONCLUÍDA. IMPLEMENTAÇÃO LIBERADA.** AD-1 a AD-30 vinculantes.
-Épico em andamento: 1. Story em andamento: 1.1. Restam só as
-questões de implementação (abaixo), que não mudam a arquitetura.
+A story atual é sempre definida pelo artefato/prompt da sessão. Trabalhe em
+exatamente uma story por vez. Restam só as questões de implementação (abaixo),
+que não mudam a arquitetura.
 
 ## Regras de trabalho
 - **Git é meu.** Nunca execute git (add, commit, branch, merge, push, status,
