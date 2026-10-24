@@ -14,7 +14,7 @@ origem alterem estado, para ter uma base de segurança HTTP antes da autenticaç
 Nesta story delimito somente o contrato de erros e a proteção HTTP por
 Origin/Referer e conteúdo JSON. Não antecipo autenticação. O status
 `ready-for-dev` indicava o artefato criado; as escolhas foram resolvidas comigo
-no Plan Mode antes da implementação (seção “Decisões”). A story está em `review`.
+no Plan Mode antes da implementação (seção “Decisões”). A story está em `done`.
 
 ## Fontes e base real
 
