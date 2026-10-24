@@ -1,6 +1,6 @@
 # Story 1.3: SPA na mesma origem e imagem multi-stage
 
-Status: review
+Status: done
 
 Chave do sprint: `1-3-spa-na-mesma-origem-e-imagem-multi-stage`
 Épico: 1 (Fundação e aplicação publicada), Dia 2 (23/10) do cronograma

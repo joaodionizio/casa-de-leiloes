@@ -1146,7 +1146,13 @@ Decididas na criação da story indicada, não aqui:
 - 1.2: fechada em 23/10/2026 (D1 a D8 e Python 3.13); as decisões ficam no
   arquivo da própria story,
   `_bmad-output/implementation-artifacts/1-2-postgresql-com-bancos-isolados-e-migrations.md`.
-- 1.4: rotas e nomes das verificações de WebSocket e cookie, e o destino delas depois.
+- 1.4: resolvida em 24/10/2026; decisões P1 a P14 no arquivo da própria story,
+  `_bmad-output/implementation-artifacts/1-4-primeiro-deploy-no-render.md`.
+  Rotas técnicas: `GET /api/infra-check/cookie` (cookie `__Host-infra_check`) e
+  `/api/infra-check/ws` (WebSocket), ambas fora do OpenAPI. O cookie técnico será
+  removido na 2.2 (cookie real do JWT). Depois da 2.2, só o WebSocket técnico continua
+  temporariamente; a 2.2 o classifica como rota pública na política de acesso até ele
+  ser removido ou substituído na 4.1 (sala ao vivo).
 - 3.3: Q3 (`bidder_alias` persistido ou recalculado), agora necessária até 25/10.
 - 4.1: significado exato de "posição do usuário nos lances".
 - Demais Q1 a Q10: indicadas em cada story.

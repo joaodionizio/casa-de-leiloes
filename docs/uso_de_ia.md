@@ -79,3 +79,28 @@ Usei o Claude Code com Sonnet para implementar, a partir de uma story e de decis
 - O front-end ainda não tem ferramenta de teste (Q10); a página de saúde foi verificada por lint, typecheck, build e pelo smoke da imagem.
 - O deploy no Render é da Story 1.4.
 
+
+## Story 1.4 — Primeiro deploy no Render (fase local, antes do deploy)
+
+Usei o Claude Code com Sonnet para implementar, a partir de um plano (P1 a P14) que eu já tinha fechado com Opus. Esta seção cobre só a fase local; deploy e validação pública serão registrados depois de acontecerem.
+
+### O que a IA fez
+
+- Corrigiu o `sprint-status.yaml` (Story 1.3 para `done`) antes de qualquer código e marcou a 1.4 como `in-progress` ao começar.
+- Escreveu primeiro `tests/test_infra_check.py` e rodou só esse arquivo antes de implementar: a coleta falhou com `ImportError`, porque o módulo `app.infra_check` ainda não existia (não houve falhas por teste, e sim um erro de coleta).
+- Criou `app/infra_check.py` (cookie técnico `__Host-infra_check`, WebSocket técnico de eco com checagem de `Origin` por host, função pura `origin_host`) e registrou o router em `main.py`, antes do fallback da SPA. Nenhum arquivo fora da lista combinada foi alterado; `verify.sh`, `Dockerfile`, `start.sh`, `config.py`, `spa.py` e os testes existentes ficaram intactos.
+- Na primeira passada, o Ruff reprovou uma linha longa e a formatação de dois arquivos novos; a IA ajustou só esses dois arquivos.
+- Escreveu o procedimento de deploy no README, as decisões P1 a P14 na story e a linha de pendência do `epics.md`.
+
+### O que eu decidi
+
+- P1 a P14 e a exceção de dois commits para esta story (A antes do deploy, B depois da validação pública).
+
+### Alternativas descartadas
+
+- As listadas em cada decisão da story (por exemplo `render.yaml`, `--forwarded-allow-ips='*'`, `APP_ENV` para o cookie e eco contínuo no WebSocket).
+
+### Limitações e observações
+
+- A IA não acessa o painel do Render, não vê a `DATABASE_URL` e não faz commit nem deploy.
+- O `StarletteDeprecationWarning` do `httpx` continua aparecendo no `pytest`; fora do escopo.

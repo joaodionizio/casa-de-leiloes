@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app import infra_check
 from app.config import get_spa_settings
 from app.spa import register_spa_routes, validate_spa_dist_dir
 
@@ -23,6 +24,8 @@ def create_app(spa_dist_dir: Path | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    app.include_router(infra_check.router)
 
     if spa_dist_dir is None:
         spa_dist_dir = get_spa_settings().spa_dist_dir
