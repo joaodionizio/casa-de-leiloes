@@ -90,68 +90,67 @@ O `./verify.sh` constrói a imagem (`docker build`), mas não a executa.
 
 ## Deploy no Render
 
-Procedimento planejado para o primeiro deploy (Story 1.4). A URL pública, as
-limitações do plano gratuito e o cold start serão registrados aqui só depois de
-observados na validação pública. A configuração é manual, pelo painel, sem
-`render.yaml`, e o Render nunca recebe segredos pelo repositório.
+O primeiro deploy foi feito na Story 1.4, pelo painel do Render
+(sem `render.yaml`): um Web Service Docker e um PostgreSQL, ambos no plano
+gratuito e na região Virginia (US East).
 
-### 1. PostgreSQL
+URL pública: <https://casa-de-leiloes-i1xr.onrender.com>
 
-No painel: New → PostgreSQL, nome `casa-de-leiloes-db`, versão 18, plano Free,
-região Virginia (US East). Deixar database e usuário em branco (o Render gera).
-A região precisa ser a mesma do Web Service para usar a URL interna do banco.
+### Configuração usada
 
-### 2. Web Service
+| Item | Valor |
+| --- | --- |
+| Banco | PostgreSQL 18, `casa-de-leiloes-db`, plano Free |
+| Web Service | runtime Docker, `Dockerfile` da raiz, plano Free |
+| Branch | `epic-1` (trocar para `main` depois do merge do épico) |
+| Auto-Deploy | Off: todo deploy é manual (Manual Deploy → Deploy latest commit) |
+| Health Check Path | `/health` |
+| Variáveis de ambiente | só `DATABASE_URL` (Internal Database URL, colada no painel) |
 
-No painel: New → Web Service, repositório `casa-de-leiloes`:
+O valor de `DATABASE_URL` existe apenas no painel do Render. `PORT` é injetada
+pelo Render e `SPA_DIST_DIR` já vem da imagem. Não há CORS (API, SPA e WebSocket
+usam a mesma origem), disco persistente, Pre-Deploy Command nem Docker Command:
+vale o `CMD` da imagem, que roda `alembic upgrade head` e só depois o uvicorn.
 
-- branch `epic-1`; Root Directory vazio;
-- runtime Docker, com o `Dockerfile` da raiz e o contexto de build padrão;
-- região Virginia (US East); plano Free; sem disco;
-- Docker Command e Pre-Deploy Command vazios (vale o `CMD` da imagem, que roda
-  `alembic upgrade head` antes do uvicorn);
-- Health Check Path `/health`;
-- Auto-Deploy **Off**: todo deploy é manual (Manual Deploy → Deploy latest commit).
+No primeiro deploy, o log mostrou o build da imagem, o Alembic conectando ao
+PostgreSQL e aplicando `0001` (baseline) antes de o uvicorn subir em
+`0.0.0.0:10000`; o serviço ficou `Live` e `/health` respondeu 200. Em um
+redeploy manual do mesmo commit, o Alembic rodou de novo sem reaplicar a `0001`.
 
-### 3. Variáveis de ambiente
+### Como validar
 
-Uma só: `DATABASE_URL`, com a Internal Database URL do banco copiada no painel.
-O valor existe apenas no painel do Render. `PORT` é injetada pelo Render e
-`SPA_DIST_DIR` já vem da imagem. Não há CORS para configurar: API, SPA e
-WebSocket usam a mesma origem.
-
-### 4. Validar o deploy
-
-Com `URL=https://<serviço>.onrender.com`:
+Com `URL=https://casa-de-leiloes-i1xr.onrender.com`:
 
 ```bash
 curl -sS -i "$URL/health"                 # 200, {"status":"ok"}
 curl -sS -i "$URL/"                       # 200, text/html (SPA)
 curl -sS -i "$URL/lots/qualquer-coisa"    # 200, text/html (index.html)
 curl -sS -i "$URL/api/docs"               # 200, Swagger
-curl -sS -i "$URL/api/openapi.json"       # 200, JSON
-curl -sS -i "$URL/api/nao-existe"         # 404, JSON
+curl -sS -i "$URL/api/openapi.json"       # 200, JSON, só /health no schema
+curl -sS -i "$URL/api/nao-existe"         # 404, JSON (nunca HTML)
 ```
 
-No navegador, a página inicial deve mostrar "Serviço no ar".
+No navegador, a página inicial mostra "Serviço no ar". Um asset real de
+`/assets/` (nome lido do `index.html`) responde 200 com `text/javascript` (JS) e
+`text/css` (CSS).
 
 **Cookie técnico** (`__Host-infra_check`, removido na Story 2.2). A primeira
-chamada responde `{"cookie_received": false}` com o `Set-Cookie`; a segunda,
-no mesmo cliente, responde `true`:
+chamada responde `{"cookie_received": false}` com o `Set-Cookie`; a segunda, no
+mesmo cliente, responde `true`:
 
 ```bash
-curl -sS -i -c /tmp/infra-cookies.txt "$URL/api/infra-check/cookie"
-curl -sS -i -b /tmp/infra-cookies.txt "$URL/api/infra-check/cookie"
+curl -sS -i -c cookies.txt "$URL/api/infra-check/cookie"
+curl -sS -i -b cookies.txt "$URL/api/infra-check/cookie"
 ```
 
-O `Set-Cookie` deve trazer `HttpOnly`, `Secure`, `SameSite=lax`, `Path=/`,
-`Max-Age=600` e nenhum `Domain`. O cabeçalho real emitido pelo Starlette é
-`SameSite=lax`, em minúsculas; para o navegador o atributo não diferencia
-maiúsculas de minúsculas, então equivale a `Lax`.
+O cookie vem com `HttpOnly`, `Secure`, `SameSite=lax`, `Path=/`, `Max-Age=600`
+e sem `Domain`. O cabeçalho real emitido pelo Starlette é `SameSite=lax`, em
+minúsculas; para o navegador o atributo não diferencia maiúsculas de
+minúsculas, então equivale a `Lax`. Por ser `HttpOnly`,
+`document.cookie.includes('__Host-infra_check')` dá `false`.
 
 **WebSocket técnico** (`/api/infra-check/ws`, removido na Story 4.1). No
-console do navegador, na própria URL pública (deve imprimir `recebido: echo:ping`
-e `fechado: 1000`):
+console do navegador, na própria URL pública:
 
 ```js
 const ws = new WebSocket(`wss://${location.host}/api/infra-check/ws`)
@@ -160,9 +159,7 @@ ws.onmessage = (e) => console.log('recebido:', e.data)
 ws.onclose = (e) => console.log('fechado:', e.code)
 ```
 
-Ou pelo terminal, com o pacote `websockets` que já vem com o `uvicorn[standard]`
-(deve imprimir `echo:ping`); com `origin='https://evil.example'` em
-`websockets.connect(...)` o handshake deve ser recusado:
+Ou pelo terminal, com o pacote `websockets` que já vem com o `uvicorn[standard]`:
 
 ```bash
 cd backend && uv run python -c "
@@ -170,7 +167,20 @@ import asyncio, websockets
 async def main(url):
     async with websockets.connect(url) as ws:
         await ws.send('ping'); print(await ws.recv())
-asyncio.run(main('wss://<serviço>.onrender.com/api/infra-check/ws'))"
+asyncio.run(main('wss://casa-de-leiloes-i1xr.onrender.com/api/infra-check/ws'))"
 ```
 
+Os dois imprimem `echo:ping`. Na validação pública, o handshake `wss://` abriu
+(HTTP 101) e o tráfego funcionou nos dois sentidos. Nos dois clientes
+(console do Edge e `websockets`), o encerramento foi observado como `1006`,
+sem motivo, embora o código envie `close(1000)` depois do eco e, nos testes
+locais, o fechamento seja `1000`. Não determinei a causa dessa diferença e não
+a trato como comportamento garantido do Render.
+
 As duas rotas técnicas ficam fora do OpenAPI e não leem nem gravam dados.
+
+### Limitações observadas
+
+- **O PostgreSQL gratuito expira em 23/11/2026**, data mostrada pelo painel do
+  Render.
+- Cold start não observado nesta validação. Não houve espera artificial.

@@ -82,7 +82,7 @@ Usei o Claude Code com Sonnet para implementar, a partir de uma story e de decis
 
 ## Story 1.4 — Primeiro deploy no Render (fase local, antes do deploy)
 
-Usei o Claude Code com Sonnet para implementar, a partir de um plano (P1 a P14) que eu já tinha fechado com Opus. Esta seção cobre só a fase local; deploy e validação pública serão registrados depois de acontecerem.
+Usei o Claude Code com Sonnet para implementar, a partir de um plano (P1 a P14) que eu já tinha fechado com Opus. A primeira parte cobre a fase local; a segunda, o deploy e a validação pública.
 
 ### O que a IA fez
 
@@ -104,3 +104,13 @@ Usei o Claude Code com Sonnet para implementar, a partir de um plano (P1 a P14) 
 
 - A IA não acessa o painel do Render, não vê a `DATABASE_URL` e não faz commit nem deploy.
 - O `StarletteDeprecationWarning` do `httpx` continua aparecendo no `pytest`; fora do escopo.
+
+### Deploy e validação pública
+
+- Usei IA para planejar e implementar as duas verificações técnicas (cookie e WebSocket) e para redigir a documentação. Revisei o código antes do commit A e corrigi os findings LOW que aprovei no review (testes e documentação, sem código de produção).
+- Configurei o Render manualmente, pelo painel: o PostgreSQL, o Web Service, a região, a branch, o Auto-Deploy Off e a variável `DATABASE_URL`. A IA nunca recebeu a `DATABASE_URL` nem credenciais, e não acessou o painel.
+- Revisei pessoalmente o primeiro deploy (build, Alembic antes do uvicorn, serviço `Live`) e validei HTTP, cookie e WebSocket na URL pública. A IA só fez `GET` do `index.html` e dos assets para registrar o `Content-Type` real.
+- O fechamento do WebSocket público resultou em `1006` nos dois clientes que testei (console do Edge e `websockets`), embora o código envie `close(1000)` e, localmente, o fechamento tenha sido `1000`. Optei por documentar o resultado real em vez de alterar o código sem evidência da causa. A causa continua não determinada.
+- O redeploy manual do mesmo commit confirmou que a migration é idempotente: o Alembic rodou de novo sem reaplicar a `0001`.
+- O cold start não foi observado nesta validação, e não fiz espera artificial; não há tempo registrado.
+- O banco gratuito expira em 23/11/2026, data mostrada pelo painel.

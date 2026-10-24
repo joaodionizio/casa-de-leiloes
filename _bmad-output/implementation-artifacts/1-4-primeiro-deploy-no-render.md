@@ -1,6 +1,6 @@
 # Story 1.4: Primeiro deploy no Render
 
-Status: in-progress
+Status: review
 
 Chave do sprint: `1-4-primeiro-deploy-no-render`
 Épico: 1 (Fundação e aplicação publicada), Dia 2 (23/10) do cronograma
@@ -276,32 +276,32 @@ Marcadas com **[eu]** as que dependem do painel do Render ou de segredos, e
 - [x] **T3 – Testes (CA11) [agente]** — ver "Testes esperados".
 - [x] **T4 – `verify` local (CA11) [agente]:** `./verify.sh` completo, com a
       saída real e o código de saída capturado.
-- [ ] **T5 – PostgreSQL no Render (CA3) [eu]:** criar a instância gratuita,
+- [x] **T5 – PostgreSQL no Render (CA3) [eu]:** criar a instância gratuita,
       PostgreSQL 18, nomes e região de P2/P3; anotar a data de expiração que o
       painel mostrar (ponto de atenção do `ARQUITETURA.md`), sem copiar
       credenciais para nenhum arquivo.
-- [ ] **T6 – Web Service no Render (CA1, CA2, CA8) [eu]:** runtime Docker,
+- [x] **T6 – Web Service no Render (CA1, CA2, CA8) [eu]:** runtime Docker,
       repositório e branch conforme P7, `Dockerfile` da raiz, plano gratuito,
       sem disco, sem Pre-Deploy Command, sem Docker Command próprio; variável
       `DATABASE_URL` conforme P4; Health Check Path conforme P6. Nenhuma outra
       variável é necessária nesta story (`PORT` vem do Render; `SPA_DIST_DIR`
       vem da imagem).
-- [ ] **T7 – Primeiro deploy (CA1, CA2, CA3) [eu + agente]:** acompanhar o
+- [x] **T7 – Primeiro deploy (CA1, CA2, CA3) [eu + agente]:** acompanhar o
       build e a inicialização; registrar na story o trecho do log com a ordem
       Alembic → uvicorn e a porta, com qualquer valor sensível mascarado.
-- [ ] **T8 – Validação pública (CA4 a CA7) [agente]:** roteiro de "Validação
+- [x] **T8 – Validação pública (CA4 a CA7) [agente]:** roteiro de "Validação
       pública", com a saída real.
-- [ ] **T9 – Redeploy (CA9) [eu + agente]:** novo deploy ou reinício; log do
+- [x] **T9 – Redeploy (CA9) [eu + agente]:** novo deploy ou reinício; log do
       Alembic sem revisão aplicada; repetir as chamadas do CA4.
-- [ ] **T10 – Cold start (CA10) [eu + agente]:** conforme P14.
-- [ ] **T11 – Documentação (CA12) [agente]**
-  - [ ] T11.1 `README.md`: seção de deploy (serviço, banco, nomes das
+- [x] **T10 – Cold start (CA10) [eu + agente]:** conforme P14.
+- [x] **T11 – Documentação (CA12) [agente]**
+  - [x] T11.1 `README.md`: seção de deploy (serviço, banco, nomes das
         variáveis, passos, como validar, limitações observadas); conferir que
         banco local, migrations, `verify` e execução local continuam descritos.
-  - [ ] T11.2 `docs/uso_de_ia.md`: Story 1.4.
-  - [ ] T11.3 Conferência de segredos: nenhuma URL de banco, senha ou valor de
+  - [x] T11.2 `docs/uso_de_ia.md`: Story 1.4.
+  - [x] T11.3 Conferência de segredos: nenhuma URL de banco, senha ou valor de
         variável no diff, na story ou no README.
-- [ ] **T12 – Fechamento:** status da story e do `sprint-status.yaml` para
+- [x] **T12 – Fechamento:** status da story e do `sprint-status.yaml` para
       `review`; parar e avisar. Sem git.
 
 ## Arquivos que provavelmente serão alterados
@@ -463,6 +463,10 @@ de imagens, que aumentariam risco e complexidade sem benefício. O B não exige 
 o `Dockerfile` não copia README, `docs/` nem `_bmad-output/`. As próximas stories voltam
 ao processo padrão.
 
+O commit A publicado no Render foi `0736ec1c536bef0fee3fe1072778fc859dc9de1a`. O commit B
+(este fechamento) é só documentação e status; como o Auto-Deploy está Off, ele não
+republica nada.
+
 ## Evidências da fase local (24/10/2026)
 
 - `uv run pytest tests/test_infra_check.py` antes de existir `app/infra_check.py`: erro de coleta
@@ -472,7 +476,103 @@ ao processo padrão.
 - `ruff check .`: All checks passed. `ruff format --check .`: 19 files already formatted.
 - `./verify.sh` (uma execução): código de saída 0; `pytest` com 136 passed e 1 warning (o
   `StarletteDeprecationWarning` do `httpx`); lint, typecheck, build do Vite e `docker build` passaram.
-- Pendente: T5 a T12 (fase pública no Render). A story continua `in-progress`.
+- Depois das correções LOW do review pré-deploy (só testes e documentação),
+  `uv run pytest tests/test_infra_check.py`: 52 passed e 1 warning; `ruff check .` e
+  `ruff format --check .` limpos. O `./verify.sh` não foi repetido porque nenhum código de
+  aplicação mudou.
+
+## Evidências da fase pública
+
+Registradas a partir do que eu observei no painel, no navegador e no terminal. Não colei os
+logs brutos do Render: o resumo abaixo é o que conferi neles. Nenhuma credencial, usuário,
+host interno do banco, IP interno nem a `DATABASE_URL` aparece aqui.
+
+### Banco e Web Service (T5, T6)
+
+- PostgreSQL `casa-de-leiloes-db`: plano Free, PostgreSQL 18, Virginia (US East), status
+  `Available`. **Data de expiração mostrada pelo painel: 23/11/2026.**
+- Web Service: URL pública `https://casa-de-leiloes-i1xr.onrender.com`, runtime Docker,
+  branch `epic-1`, Virginia, plano Free, Auto-Deploy Off, Health Check Path `/health`.
+- `DATABASE_URL` configurada só no painel. Sem `PORT` nem `SPA_DIST_DIR` manuais, sem CORS,
+  sem disco, sem Pre-Deploy Command e sem Docker Command próprio (CA1, CA8).
+- Commit publicado (A): `0736ec1c536bef0fee3fe1072778fc859dc9de1a`.
+
+### Primeiro deploy (T7; CA1 a CA3)
+
+- O build Docker terminou; o Alembic conectou com `PostgresqlImpl` e aplicou
+  `Running upgrade -> 0001, baseline`, antes do uvicorn (CA3).
+- O uvicorn subiu em `0.0.0.0:10000`; o serviço ficou `Live` e `/health` respondeu 200 (CA2).
+- Usuário não root e ausência de disco: o plano Free não oferece shell, então não os
+  inspecionei no Render. Ficam garantidos por `USER app` no `Dockerfile` e pelo smoke da 1.3.
+- Tempo de inicialização (Q4): não medi.
+
+### Validação HTTP pública (T8; CA4, CA5)
+
+Conferidas por mim no navegador e no terminal:
+
+- `/health` → 200 JSON `{"status":"ok"}`.
+- `/` e `/lots/qualquer-coisa` → SPA; a página mostrou "Serviço no ar".
+- `/api/docs` → Swagger funcional; `/api/openapi.json` → JSON, só `/health` no schema.
+- `/api/nao-existe` → 404 JSON, não a SPA.
+- O navegador carregou os assets JS e CSS com sucesso. Depois, o agente fez `GET` do
+  `index.html` e dos dois assets citados nele (sem efeito colateral):
+
+  ```
+  / ........................... status=200 content-type=text/html; charset=utf-8
+  /assets/index-Du5uwTvN.js ... status=200 content-type=text/javascript; charset=utf-8
+  /assets/index-Bd_ia25c.css .. status=200 content-type=text/css; charset=utf-8
+  ```
+
+- Não capturei, nesta etapa, uma checagem de cabeçalhos `Access-Control-*` por `curl`. Não
+  há `CORSMiddleware` no código nem configuração de CORS no Render, e a SPA, a API e o
+  WebSocket usam o mesmo host.
+
+### Cookie público (CA7)
+
+- 1ª chamada em `/api/infra-check/cookie`, no navegador: `{"cookie_received": false}`.
+- 2ª chamada no mesmo navegador: `{"cookie_received": true}`. O round-trip funcionou.
+- `document.cookie.includes('__Host-infra_check')` → `false`, coerente com `HttpOnly`.
+- Conferi visualmente no navegador: `__Host-infra_check`, `Secure`, `HttpOnly`,
+  `SameSite=lax` (o Starlette emite em minúsculas; equivale a `Lax`), `Path=/`, sem `Domain`
+  e `Max-Age=600`.
+- Nenhum JWT nem usuário; o servidor não guarda nada. Não capturei o `Set-Cookie` por
+  `curl` nesta etapa.
+
+### WebSocket público (CA5, CA6)
+
+Endpoint `wss://casa-de-leiloes-i1xr.onrender.com/api/infra-check/ws`.
+
+- **Console do Edge:** a conexão abriu, o handshake apareceu como HTTP 101, enviei `ping`,
+  recebi `echo:ping` e o cliente observou o fechamento com código `1006`.
+- **Terminal, com a biblioteca `websockets`** (segundo teste independente): recebi
+  `echo:ping`; código de fechamento observado `1006`, motivo vazio.
+- **Comprovado:** o handshake `wss://` funciona atrás do proxy do Render, e o tráfego
+  funciona nos dois sentidos (cliente → servidor e servidor → cliente).
+- **Ponto em aberto:** o código publicado envia `close(1000)` logo depois do eco, e nos
+  testes locais o fechamento foi `1000`; no caminho público, dois clientes independentes
+  observaram `1006`. **Não determinei a causa** dessa diferença e não a apresento como
+  comportamento garantido do Render. Decidi documentar o resultado real em vez de alterar
+  o código sem evidência da causa; nada foi alterado para esconder o resultado.
+- Não executei, nesta etapa, o teste público com `Origin` estrangeiro; a recusa de `Origin`
+  é coberta pelos testes locais.
+
+### Redeploy (T9; CA9)
+
+Validação confirmada por mim, com um redeploy manual do mesmo commit: o serviço voltou
+normalmente, o Alembic executou de novo, a migration `0001` não foi reaplicada, o uvicorn
+voltou a subir e o serviço continuou funcional. Isso mostra que a migration é idempotente
+no redeploy. Não colei as linhas de log nesta story.
+
+### Cold start (T10; CA10)
+
+Cold start não observado nesta validação. Não houve espera artificial (P14), então não há
+tempo medido. A medição fica para a Story 6.4.
+
+### Limitações observadas
+
+- O PostgreSQL gratuito expira em 23/11/2026 (data do painel).
+- O encerramento do WebSocket público foi observado como `1006` (ponto em aberto acima).
+- Cold start não observado.
 
 ## Notas para o desenvolvedor
 
