@@ -1,51 +1,86 @@
 import { roleLabel, type CurrentUser } from './api/auth'
-
-export type AuctioneerView = 'create' | 'mine'
+import AppLink from './AppLink'
+import AtrioMark from './AtrioMark'
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from './brand'
+import { routePath, type Route } from './route'
 
 interface SiteHeaderProps {
+  // `null` = anônimo (ou ainda verificando a sessão, quando `checking`).
   user: CurrentUser | null
-  // Navegação do leiloeiro (Story 2.4): só aparece para o papel AUCTIONEER.
-  view: AuctioneerView
-  onNavigate: (view: AuctioneerView) => void
+  checking: boolean
+  route: Route
   loggingOut: boolean
   logoutError: string | null
   onLogout: () => void
 }
 
+function current(active: boolean): 'page' | undefined {
+  return active ? 'page' : undefined
+}
+
+// Cabeçalho por papel (CAP-8): só há link para destino que existe. Anônimo: Vitrine e
+// Entrar. `BIDDER`: Vitrine. `AUCTIONEER`: Vitrine, Criar lote, Meus lotes. Nada de
+// carteira, lances ou sala (stories futuras).
 function SiteHeader({
   user,
-  view,
-  onNavigate,
+  checking,
+  route,
   loggingOut,
   logoutError,
   onLogout,
 }: SiteHeaderProps) {
+  const here = routePath(route.kind === 'not-found' ? { kind: 'vitrine' } : route)
   return (
     <header className="site-header">
       <div className="page-container site-header-inner">
-        <div className="site-brand">
-          <img src="/favicon.svg" alt="" width={24} height={24} />
-          <span className="site-brand-name">Casa de Leilões</span>
-        </div>
-        {user !== null && user.role === 'AUCTIONEER' && (
-          <nav className="site-nav" aria-label="Painel do leiloeiro">
-            <button
-              type="button"
-              className="site-nav-item"
-              aria-current={view === 'create' ? 'page' : undefined}
-              onClick={() => onNavigate('create')}
-            >
-              Criar lote
-            </button>
-            <button
-              type="button"
-              className="site-nav-item"
-              aria-current={view === 'mine' ? 'page' : undefined}
-              onClick={() => onNavigate('mine')}
-            >
-              Meus lotes
-            </button>
-          </nav>
+        {/* Label in Name (WCAG 2.5.3): o nome acessível começa pelo texto visível do link
+            ("ÁTRIO" e, no desktop, "Leilões de Arte") e só acrescenta o destino. */}
+        <AppLink
+          to="/"
+          className="site-brand"
+          aria-label={`${PRODUCT_NAME} — ${PRODUCT_TAGLINE} — ir para a vitrine`}
+        >
+          <AtrioMark />
+          <span className="site-brand-text">
+            <span className="site-brand-name">{PRODUCT_NAME}</span>
+            <span className="site-brand-tagline">{PRODUCT_TAGLINE}</span>
+          </span>
+        </AppLink>
+        <nav className="site-nav" aria-label="Principal">
+          <AppLink
+            to="/"
+            className="site-nav-item"
+            aria-current={current(route.kind === 'vitrine')}
+          >
+            Vitrine
+          </AppLink>
+          {user !== null && user.role === 'AUCTIONEER' && (
+            <>
+              <AppLink
+                to="/auctioneer/lots/new"
+                className="site-nav-item"
+                aria-current={current(route.kind === 'create-lot')}
+              >
+                Criar lote
+              </AppLink>
+              <AppLink
+                to="/auctioneer/lots"
+                className="site-nav-item"
+                aria-current={current(route.kind === 'my-lots')}
+              >
+                Meus lotes
+              </AppLink>
+            </>
+          )}
+        </nav>
+        {user === null && !checking && route.kind !== 'login' && (
+          <AppLink
+            to="/login"
+            state={{ returnTo: here }}
+            className="button button-secondary site-login-link"
+          >
+            Entrar
+          </AppLink>
         )}
         {user !== null && (
           <div className="account">

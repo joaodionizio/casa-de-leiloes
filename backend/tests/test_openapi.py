@@ -21,7 +21,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
 
     schema = api_only.get("/api/openapi.json")
     assert schema.status_code == 200
-    assert schema.json()["info"]["title"] == "Casa de Leilões"
+    assert schema.json()["info"]["title"] == "ÁTRIO"
     assert list(schema.json()["paths"]) == [
         "/health",
         "/api/auth/login",
@@ -32,6 +32,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/catalog/images/{image_id}",
         "/api/lots",
         "/api/lots/mine",
+        "/api/lots/{lot_id}",
     ]
 
 
@@ -169,6 +170,7 @@ def test_image_route_documents_a_jpeg_and_the_real_error_envelope(
 
 LOTS_PATH = "/api/lots"
 MINE_PATH = "/api/lots/mine"
+LOT_DETAIL_PATH = "/api/lots/{lot_id}"
 LOT_FIELDS = sorted(
     [
         "id",
@@ -196,7 +198,7 @@ LOT_FIELDS = sorted(
 def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     paths = list(api_only.get("/api/openapi.json").json()["paths"])
 
-    assert paths[-2:] == [LOTS_PATH, MINE_PATH]
+    assert paths[-3:] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
 
@@ -225,8 +227,10 @@ def test_my_lots_documents_200_and_the_auth_errors(api_only: TestClient) -> None
     for status in ("401", "403"):
         assert response_ref(operation, status) == ERROR_REF
     assert "parameters" not in operation  # o dono vem só da sessão
-    assert set(paths[LOTS_PATH]) == {"post"}
+    # Story 2.5: `GET /api/lots` (vitrine) divide o caminho com o `POST` da 2.4.
+    assert set(paths[LOTS_PATH]) == {"get", "post"}
     assert set(paths[MINE_PATH]) == {"get"}
+    assert set(paths[LOT_DETAIL_PATH]) == {"get"}
 
 
 def test_lot_schemas_have_exactly_the_contract_fields(api_only: TestClient) -> None:
@@ -261,3 +265,103 @@ def test_no_lot_schema_exposes_the_owner_or_the_demo_flag(
         assert {"is_demo", "auctioneer_id", "is_public_domain", "status"}.isdisjoint(
             properties
         )
+
+
+# --- Story 2.5: vitrine e página do lote ---
+
+PUBLIC_SUMMARY_FIELDS = [
+    "ends_at",
+    "artist_display",
+    "date_display",
+    "id",
+    "image_url",
+    "phase",
+    "starting_bid_cents",
+    "starts_at",
+    "title",
+]
+PUBLIC_DETAIL_FIELDS = PUBLIC_SUMMARY_FIELDS + [
+    "credit_line",
+    "dimensions",
+    "department_title",
+    "artwork_type_title",
+    "external_id",
+    "medium_display",
+    "min_increment_cents",
+    "source_url",
+]
+INTERNAL_FIELDS = {
+    "is_demo",
+    "auctioneer_id",
+    "created_at",
+    "image_id",
+    "status",
+    "settlement_status",
+}
+
+
+def test_public_vitrine_documents_200_without_errors(api_only: TestClient) -> None:
+    operation = api_only.get("/api/openapi.json").json()["paths"][LOTS_PATH]["get"]
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PublicLotsResponse")
+    # Rota pública sem parâmetros: nada de 401, 403 nem 422.
+    assert set(operation["responses"]) == {"200"}
+    assert "parameters" not in operation
+
+
+def test_public_detail_documents_the_uuid_parameter_and_the_real_errors(
+    api_only: TestClient,
+) -> None:
+    operation = api_only.get("/api/openapi.json").json()["paths"][LOT_DETAIL_PATH][
+        "get"
+    ]
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PublicLotDetailResponse")
+    for status in ("404", "422"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert "401" not in operation["responses"]
+    assert "403" not in operation["responses"]
+    (parameter,) = operation["parameters"]
+    assert parameter["name"] == "lot_id"
+    assert parameter["in"] == "path"
+    assert parameter["schema"]["format"] == "uuid"
+
+
+def test_public_lot_schemas_have_exactly_the_contract_fields(
+    api_only: TestClient,
+) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    assert sorted(schemas["PublicLotSummary"]["properties"]) == sorted(
+        PUBLIC_SUMMARY_FIELDS
+    )
+    assert sorted(schemas["PublicLotDetail"]["properties"]) == sorted(
+        PUBLIC_DETAIL_FIELDS
+    )
+    assert sorted(schemas["PublicLotsResponse"]["properties"]) == [
+        "as_of",
+        "ended",
+        "live",
+        "scheduled",
+    ]
+    assert sorted(schemas["PublicLotDetailResponse"]["properties"]) == ["as_of", "lot"]
+    assert schemas["LotPhase"]["enum"] == ["scheduled", "live", "ended"]
+    assert "HTTPValidationError" not in schemas
+
+
+def test_no_public_lot_schema_exposes_internal_fields(api_only: TestClient) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    for name in (
+        "PublicLotSummary",
+        "PublicLotDetail",
+        "PublicLotsResponse",
+        "PublicLotDetailResponse",
+    ):
+        assert INTERNAL_FIELDS.isdisjoint(schemas[name]["properties"])
+    # O `LotResponse` privado continua como era (com `created_at` e `image_id`).
+    assert sorted(schemas["LotResponse"]["properties"]) == LOT_FIELDS

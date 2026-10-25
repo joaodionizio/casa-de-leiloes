@@ -1,12 +1,14 @@
 """Apoio dos testes de lotes (Story 2.4): corpo válido, leitura direta da tabela e
 um gravador de statements."""
 
+import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -131,3 +133,54 @@ def statement_recorder(engine: Engine) -> Iterator[StatementRecorder]:
         yield recorder
     finally:
         event.remove(engine, "before_cursor_execute", recorder)
+
+
+# --- leituras públicas (Story 2.5) ---
+
+PUBLIC_READ_MARKER = "WITH clock AS MATERIALIZED"
+
+
+def normalized(statement: str) -> str:
+    """O SQLAlchemy quebra linhas no meio do statement; colapsa os espaços."""
+    return re.sub(r"\s+", " ", statement).strip()
+
+
+def fixed_as_of(monkeypatch: pytest.MonkeyPatch, moment: datetime) -> None:
+    """Envolve as leituras públicas reais e troca só o `as_of` devolvido: as linhas
+    continuam vindo do banco pelo statement real. Os handlers chamam as funções pelo
+    nome global do módulo `app.lots`."""
+    from app import lots
+
+    real_snapshot = lots.read_public_snapshot
+    real_lot_snapshot = lots.read_public_lot_snapshot
+
+    def snapshot(session):  # type: ignore[no-untyped-def]
+        _, rows = real_snapshot(session)
+        return moment, rows
+
+    def lot_snapshot(session, lot_id):  # type: ignore[no-untyped-def]
+        _, row = real_lot_snapshot(session, lot_id)
+        return moment, row
+
+    monkeypatch.setattr(lots, "read_public_snapshot", snapshot)
+    monkeypatch.setattr(lots, "read_public_lot_snapshot", lot_snapshot)
+
+
+@contextmanager
+def before_public_read(engine: Engine, action: Callable[[], None]) -> Iterator[None]:
+    """Roda `action()` uma única vez, imediatamente antes do statement público
+    (`WITH clock AS MATERIALIZED`). Ponto de injeção determinístico: sem `sleep` e
+    sem corrida. `action` usa uma conexão própria."""
+    fired: list[bool] = []
+
+    def listener(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        if not fired and PUBLIC_READ_MARKER in normalized(statement):
+            fired.append(True)
+            action()
+
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        yield
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+    assert fired, "a leitura pública não chegou a ser executada"

@@ -48,6 +48,15 @@ npm test
 echo "=== Frontend: build ==="
 npm run build
 
+# Testes de navegador (Playwright): opt-in. Exigem o Chromium do Playwright
+# (`npx playwright install chromium`, ~100 MB) e sobem o `vite preview`; por isso não
+# entram no verify padrão, que só precisa de Docker e Node. Rode antes de mexer em
+# navegação, foco ou layout: VERIFY_E2E=1 ./verify.sh (ou `npm run test:e2e`).
+if [ "${VERIFY_E2E:-0}" = "1" ]; then
+  echo "=== Frontend: e2e (Playwright) ==="
+  npm run test:e2e
+fi
+
 echo "=== Imagem: docker build ==="
 cd "$REPO_ROOT"
 docker build -t casa-de-leiloes:verify .

@@ -5,7 +5,7 @@ const PLACEHOLDER_SRC = '/artwork-placeholder.svg'
 interface ArtworkImageProps {
   src: string
   alt: string
-  variant: 'thumb' | 'large'
+  variant: 'thumb' | 'card' | 'large'
 }
 
 // Imagem da obra (AD-22). `src` é a URL same-origin do nosso proxy de mídia
@@ -16,7 +16,10 @@ interface ArtworkImageProps {
 // renderizar, para o estado de falha reiniciar quando a obra muda. Só `span`: a
 // miniatura vive dentro de um `button`. Na miniatura a falha é só visual (placeholder
 // com `alt=""`): um aviso oculto aqui viria antes do título no nome acessível do
-// botão, e o título é o que o botão deve anunciar primeiro.
+// botão, e o título é o que o botão deve anunciar primeiro. A variante `card` (Story
+// 2.5, D17) é a miniatura dos rails da vitrine: `lazy`, proporção reservada de 4:3,
+// sem cortar a obra, e a falha também só visual (vive dentro de um link cujo nome vem
+// do título). `large` (destaque e página do lote) carrega de imediato.
 function ArtworkImage({ src, alt, variant }: ArtworkImageProps) {
   const [failed, setFailed] = useState(false)
   const large = variant === 'large'
@@ -27,8 +30,8 @@ function ArtworkImage({ src, alt, variant }: ArtworkImageProps) {
         <img
           src={failed ? PLACEHOLDER_SRC : src}
           alt={failed ? '' : alt}
-          width={large ? 843 : 72}
-          height={large ? 632 : 72}
+          width={variant === 'thumb' ? 72 : 843}
+          height={variant === 'thumb' ? 72 : 632}
           decoding="async"
           loading={large ? 'eager' : 'lazy'}
           referrerPolicy="no-referrer"

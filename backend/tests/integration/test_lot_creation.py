@@ -783,6 +783,7 @@ def test_other_methods_on_the_collection_are_not_allowed(
 
     assert auctioneer.put(URL, json={}, headers=headers).status_code == 405
     assert auctioneer.delete(URL, headers=headers).status_code == 405
-    # `GET /api/lots` (público) é da 2.5 e não existe aqui.
-    assert auctioneer.get(URL).status_code == 405
+    # Story 2.5: `GET /api/lots` virou a vitrine pública. Era 405 na 2.4, que
+    # previa a troca; a forma da resposta é testada em `test_public_lots.py`.
+    assert auctioneer.get(URL).status_code == 200
     assert fake.requests == []

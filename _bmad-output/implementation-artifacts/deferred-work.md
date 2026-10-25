@@ -27,3 +27,27 @@
 
 - `frontend-lot-creation.md` §1 (linha AD-6) ainda diz "nenhuma comparação com o relógio do navegador", contradizendo a revisão de 25/10/2026 no §5 (validação preventiva com `now` injetado). Corrigir na spec quando eu decidir. **Resolvido em 25/10/2026**, antes do fechamento da 2.4: decidi corrigir, a spec foi sincronizada (§1 e §5, `SPEC.md`, `decisions.md`) e o re-review final validou. Mantido aqui só como histórico.
 
+## Deferred from: implementation of 2-5-vitrine-pública-e-página-do-lote.md (25/10/2026)
+
+- Lista pública sem paginação (P7): `GET /api/lots` devolve todos os lotes, e os demos encerrados se acumulam (um novo a cada boot depois de 72 h). A tela limita a renderização a 6 encerrados com "Mostrar mais", mas a resposta JSON cresce com o tempo. O OPT1 (6.5), com busca e filtro, pode trazer paginação.
+- Imagens sem cache e risco de volume/429 (D1 da 2.3, mantido pela P9): a vitrine multiplica as chamadas ao proxy público de imagem (843 px, `no-store`) contra o limite de 60 req/min por IP da AIC. Cada rail renderiza todas as miniaturas (`lazy`), então um 429 real pode mostrar placeholders. Registrar a evidência do teste manual (429/503 observado ou não), sem mudar a estratégia. **Registro (25/10/2026, review L4):** no teste manual da Story 2.5 *não* foi observado novo 429 da AIC nem novo 503 de imagem nesta rodada. A observação manual de 503 de imagem com placeholder funcionando é da Story 2.3 e **não** é evidência manual da 2.5.
+- Para a Story 3.6: o filtro de cancelados (`cancelled_at IS NULL`) entra em `read_public_snapshot` e `read_public_lot_snapshot` **na condição do `LEFT OUTER JOIN`**, nunca num `WHERE` (o `WHERE` apagaria a linha do `as_of` quando não sobra lote), além do predicado do seed já registrado acima.
+- Componentes do front sem teste unitário de DOM: a 2.5 testa lógica pura com `node --test` e, depois do teste manual (25/10/2026), tem testes de navegador com Playwright (`frontend/e2e/`, API simulada, só Chromium) para navegação, foco, layout e imagem quebrada. Continua sem teste de componente isolado (React Testing Library) e sem Firefox/WebKit; o visual real depende do meu olhar e do code review. A 2.4 (formulário de criação, revisão, "Meus lotes") segue sem cobertura de navegador.
+- Testes de navegador fora do `./verify.sh` padrão (decisão de 25/10/2026): exigem o Chromium do Playwright e sobem um servidor; entram com `VERIFY_E2E=1`. Revisitar se as stories seguintes os tornarem indispensáveis ao fluxo de CI.
+- A resolução de `Para a Story 2.5` (registrar `GET /api/lots/{lot_id}` depois de `/mine` e criar o `GET /api/lots` público) foi cumprida: a ordem é fixada por teste em `app.routes`.
+
+A P3 (a fase não muda sozinha com a página aberta) é comportamento deliberado, documentado no README em "Comportamentos que podem surpreender", e não é dívida.
+
+## Deferred from: rebranding ÁTRIO (25/10/2026)
+
+- Refinamento visual final do logotipo e da identidade (Story 6.2): o símbolo e a palavra
+  de hoje são uma interpretação vetorial inicial e fiel à direção da referência, feita sem
+  intenção de arte final (proporções do arco, peso e espaçamento do wordmark, versão
+  monocromática, favicon em tamanhos pequenos, `apple-touch-icon`/manifest, versão para
+  fundo escuro com o dark mode). Hoje o favicon é só SVG.
+- A marca usa fonte de UI do sistema (`system-ui`) no wordmark; uma fonte própria exigiria
+  decidir hospedagem/licença de fonte (fora desta rodada).
+- Texto "Casa de Leilões" que permanece de propósito: enunciado do desafio
+  (`docs/desafio-elite-dev.md`), `docs/CRONOGRAMA.md` (plano feito com o nome anterior),
+  `backend/pyproject.toml` (descrição do pacote, nome técnico), specs/stories históricas
+  e o genérico "casa de leilões" (tipo de negócio) em DESIGN/EXPERIENCE/BLUEPRINT/ARQUITETURA.

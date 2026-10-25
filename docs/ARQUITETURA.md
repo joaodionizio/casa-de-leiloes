@@ -1,4 +1,9 @@
-# Registro de arquitetura: Casa de Leilões
+# Registro de arquitetura: ÁTRIO (nome de trabalho anterior: Casa de Leilões)
+
+> Nome do produto desde 25/10/2026: **ÁTRIO — Leilões de Arte**. Mudança só de
+> interface e documentação; nenhuma AD muda (AD-30 mantém repositório, banco, módulos
+> e `/api/*` como estão). O texto abaixo, escrito antes do rebranding, preserva
+> "Casa de Leilões" onde descreve decisões anteriores.
 
 Fase: **ARQUITETURA CONCLUÍDA**. Nenhum bloqueador aberto. As questões que
 restam são de implementação e não mudam a arquitetura. Nenhuma linha de código
@@ -413,6 +418,16 @@ componentes.
 **Descartei:** a identidade "mesa de pregão"; UI kit genérico como identidade
 principal.
 
+**Atualização de 25/10/2026 (identidade ÁTRIO, sem mudar a AD).** O produto passou a se
+chamar **ÁTRIO — Leilões de Arte**, com símbolo próprio em forma de arco/portal e
+palavra "ÁTRIO". Segue a direção desta AD (catálogo/galeria, obra protagonista, muito
+branco, roxo como marca e ação, títulos serifados, respiro): referência principal é a
+identidade ÁTRIO que escolhi; a AURA é referência complementar de densidade, cards e
+acabamento, sem copiar nome, logo, textos ou imagens. Não antecipo funcionalidade das
+referências (lance, contagem regressiva, favoritos, busca pública, carteira). O
+refinamento visual final continua previsto depois das funcionalidades críticas
+(Story 6.2). Detalhes em `DESIGN.md` §2.
+
 ### AD-16. Prioridade de implementação: fluxo vertical primeiro
 **Decidi** que a arquitetura favorece este fluxo vertical, entregue completo
 antes de qualquer outra coisa:
@@ -774,6 +789,16 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
 8. **Estado transitório nas leituras.** Nome do valor e do campo que representa
    "Encerrado, apurando resultado", e como a leitura o calcula sem alterar estado
    e sem travar o lote (com a hora do banco, coerente com o AD-6).
+   **Resolvida na Story 2.5 (25/10/2026):** a leitura expõe só `phase`
+   (`scheduled`, `live` ou `ended`), calculada no servidor com um `clock_timestamp()`
+   avaliado uma vez por leitura, no mesmo statement que lê os lotes (CTE `MATERIALIZED` e
+   `LEFT OUTER JOIN`, para `as_of` e linhas pertencerem ao mesmo snapshot), sem trava e
+   sem escrita. Para `ended`, a interface mostra "Encerrado, apurando resultado". Não
+   criei `settlement_status` nem coluna de estado: a Story 4.3 acrescenta um segundo eixo
+   real quando a liquidação existir. Descartei `settlement_status = pending` sempre, um
+   campo único com `closing`/`closed` e duas consultas independentes em `READ COMMITTED`
+   (snapshots diferentes). Detalhes em
+   `_bmad-output/implementation-artifacts/2-5-vitrine-pública-e-página-do-lote.md`.
 9. **Tentativa de lance em lote vencido.** Ordem dentro da requisição: executar o
    fechamento (transação própria) e só então devolver "lote encerrado".
 10. **Nomes ainda não definidos.** Rota do WebSocket da sala; rotas do comprovante
@@ -798,6 +823,21 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
     horários em `lotTime.ts` e a checagem do rascunho do lote em `lotDraft.ts`). Descartei Vitest com Testing Library: dependência nova para um
     arquivo pequeno. Componentes seguem sem teste automatizado. Continuam abertos: a
     rota do WebSocket da sala e as rotas do comprovante e do link compartilhável.
+    **Atualização na Story 2.5 (25/10/2026), testes de navegador:** o `verify` padrão
+    continua sendo o do AD-27 (`pytest`, Ruff, `ruff format --check`, integração em
+    PostgreSQL real; ESLint, `tsc --noEmit` — que inclui os `tsconfig` do app, do Node e
+    de `e2e/` —, `node --test`, build do Vite e `docker build`). Depois do teste manual
+    da 2.5 adicionei o **Playwright** (`@playwright/test`, só Chromium, API simulada por
+    interceptação de rede) como **camada adicional de navegador**, em `frontend/e2e/`
+    (`npm run test:e2e`). Ele **não roda no `verify` padrão**: é opt-in com
+    `VERIFY_E2E=1 ./verify.sh`, porque exige o Chromium instalado (`npx playwright
+    install chromium`, ~100 MB) e não quero um browser como pré-requisito silencioso do
+    `verify` básico. Os 5 testes de `real-stack.spec.ts` (FastAPI real + build + banco de
+    teste) ficam ainda mais à parte: só rodam com `E2E_REAL_BASE_URL` e não fazem parte
+    nem do `verify` padrão nem do `VERIFY_E2E=1`. Descartei incluir o Playwright sempre
+    (quebraria o `verify` de quem não baixou o browser) e rodá-lo só em CI. O AD-27
+    não foi alterado: "testes automatizados existentes" continua valendo; o Playwright é
+    um acréscimo opcional, não uma etapa obrigatória.
 
 ## Pontos de atenção (consequências, não decisões)
 
@@ -824,6 +864,20 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- Story 2.5, testes de navegador (25/10/2026): Questão 10 atualizada (ferramenta de teste
+  do front-end). `node --test` segue no `verify` padrão para lógica pura; o Playwright
+  entrou como camada de navegador **opt-in** (`VERIFY_E2E=1 ./verify.sh`), fora do
+  `verify` padrão. Nenhuma AD alterada; o AD-27 permanece como está.
+
+- Story 2.5, identidade ÁTRIO (25/10/2026): o produto passou a se chamar ÁTRIO — Leilões de
+  Arte (adendo sob a AD-15). Nenhuma AD alterada.
+
+- Story 2.5 (25/10/2026): Questão 8 resolvida (só `phase`; leitura em um statement com a
+  hora do banco; "Encerrado, apurando resultado" como texto de interface). Nenhuma AD
+  alterada; o AD-22 segue intacto (a P9 manteve o proxy de imagem da 2.3). As decisões da
+  story (P1 a P9 e D1 a D20) ficam em
+  `_bmad-output/implementation-artifacts/2-5-vitrine-pública-e-página-do-lote.md`.
 
 - Story 2.4 (24/10/2026): Questão 4 resolvida em parte (demo realmente aberto, trava
   consultiva, ordem na inicialização) e Questão 10 resolvida em parte (ferramenta de

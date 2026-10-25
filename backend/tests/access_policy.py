@@ -69,16 +69,31 @@ def policy_problems(routes: Sequence[object], prefix: str = "") -> list[str]:
 
 def policy_by_route(
     routes: Sequence[object], prefix: str = ""
-) -> dict[tuple[str, str], AccessPolicy]:
-    """`(caminho, "http" | "websocket") -> política` das rotas que a declaram e
-    de fato a aplicam; uma rota sem a dependência fica de fora."""
-    table: dict[tuple[str, str], AccessPolicy] = {}
+) -> dict[tuple[str, str | None, str], AccessPolicy]:
+    """`(caminho, método, "http" | "websocket") -> política` das rotas que a declaram
+    e de fato a aplicam; uma rota sem a dependência fica de fora.
+
+    Uma entrada por método de cada rota HTTP (`GET` e `POST` no mesmo caminho não se
+    sobrescrevem, D20); WebSocket não tem método (`None`). Duas rotas com a mesma
+    chave levantam `ValueError`: o mapa nunca descarta uma política em silêncio."""
+    table: dict[tuple[str, str | None, str], AccessPolicy] = {}
     for route in routes:
         if isinstance(route, Mount):
-            table.update(policy_by_route(list(route.routes), prefix + route.path))
+            entries = policy_by_route(list(route.routes), prefix + route.path)
         elif isinstance(route, HTTP_ROUTE_TYPES + WEBSOCKET_ROUTE_TYPES):
+            entries = {}
             policy = _declared_policy(route)
             if policy is not None and _applies_policy(route, policy):
-                kind = "http" if isinstance(route, HTTP_ROUTE_TYPES) else "websocket"
-                table[(prefix + route.path, kind)] = policy
+                path = prefix + route.path
+                if isinstance(route, HTTP_ROUTE_TYPES):
+                    for method in sorted(route.methods or ()):
+                        entries[(path, method, "http")] = policy
+                else:
+                    entries[(path, None, "websocket")] = policy
+        else:
+            continue
+        for key, policy in entries.items():
+            if key in table:
+                raise ValueError(f"rota duplicada no mapa de política: {key}")
+            table[key] = policy
     return table

@@ -88,6 +88,56 @@ def test_client_routes_serve_index_html(client: TestClient, path: str) -> None:
     assert response.text == INDEX_HTML
 
 
+LOT_UUID = "2d484387-2509-5e8e-2c43-22f9981972eb"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [f"/lots/{LOT_UUID}", "/login", "/auctioneer/lots", "/auctioneer/lots/new"],
+)
+def test_story_2_5_frontend_routes_serve_index_html(
+    client: TestClient, path: str
+) -> None:
+    """Deep-link da vitrine (Story 2.5): o servidor devolve a SPA e o front decide."""
+    response = client.get(path)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.text == INDEX_HTML
+
+
+def test_public_lot_api_paths_are_json_never_the_spa(
+    dist: Path, db_session_factory
+) -> None:
+    from app.db import get_session
+
+    app = create_app(dist, app_origin=APP_ORIGIN)
+
+    def override_session():
+        with db_session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    client = TestClient(app)
+
+    listing = client.get("/api/lots")
+    missing = client.get(f"/api/lots/{LOT_UUID}")
+    malformed = client.get("/api/lots/abc")
+
+    assert listing.status_code == 200
+    assert listing.headers["content-type"].startswith("application/json")
+    assert sorted(listing.json()) == ["as_of", "ended", "live", "scheduled"]
+    assert missing.status_code == 404
+    assert missing.headers["content-type"].startswith("application/json")
+    assert missing.json()["code"] == "not_found"
+    assert malformed.status_code == 422
+    assert malformed.headers["content-type"].startswith("application/json")
+    assert INDEX_HTML not in listing.text + missing.text + malformed.text
+
+
+def test_lot_client_route_without_spa_is_404(no_spa_client: TestClient) -> None:
+    assert no_spa_client.get(f"/lots/{LOT_UUID}").status_code == 404
+
+
 def test_head_on_client_route_has_no_body(client: TestClient) -> None:
     response = client.head("/lots/qualquer-coisa")
     assert response.status_code == 200

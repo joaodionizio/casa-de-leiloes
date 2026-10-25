@@ -13,6 +13,12 @@ docs
 **/.venv
 **/dist
 
+# Testes de navegador (Story 2.5): não vão para a imagem
+frontend/e2e
+frontend/playwright.config.ts
+frontend/test-results
+frontend/playwright-report
+
 # Caches e testes
 **/__pycache__
 **/.pytest_cache

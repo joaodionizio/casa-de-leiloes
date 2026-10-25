@@ -27,13 +27,76 @@ final**. Ele serviu somente para testar a nova identidade.
 
 **Regra prática:** roxo é a assinatura da marca; **a obra é a protagonista**.
 
-## 2. Marca existente
+## 2. Marca
 
-Ativo aprovado:
+### Identidade ÁTRIO (decidida em 25/10/2026)
 
-`frontend/public/favicon.svg`
+Decidi chamar o produto de **ÁTRIO — Leilões de Arte** e adotar a identidade visual da
+referência "ÁTRIO — Leilões de Arte" que escolhi. Isto substitui o nome de trabalho
+"Casa de Leilões" e o símbolo anterior (que era o ícone padrão do template do Vite, não
+uma marca do projeto). O parágrafo "Decisão visual" acima, escrito antes, permanece como
+histórico: a direção (catálogo de museu, obra protagonista, roxo como assinatura) não
+mudou.
 
-Cores extraídas do próprio SVG:
+- **Referência principal: ÁTRIO.** Identidade, logo, atmosfera, hierarquia, hero, cards e
+  mobile.
+- **Referência complementar: AURA.** Só organização, densidade, polimento dos cards,
+  ficha do lote e composição. Não copiar nome, logo, textos, imagens nem layout pixel a
+  pixel. As imagens das referências não são ativos do projeto e não ficam no repositório.
+- **Direção:** sofisticada, editorial, acolhedora, centrada na obra; premium sem
+  ostentação; limpa e contemporânea; inspirada em catálogo/galeria/casa de leilões. Muito
+  branco e tons claros, roxo como cor da marca e das ações, títulos serifados fortes,
+  obras como protagonistas, respiro intencional, cards refinados e hierarquia tipográfica
+  clara.
+- **Evitar:** dashboard corporativo, UI excessivamente técnica, excesso de caixas, densidade
+  sem hierarquia, copiar literalmente AURA ou qualquer concorrente.
+- **Não antecipar funcionalidade.** As referências mostram "Dar lance", contagem
+  regressiva, lance atual, favoritos, compartilhar, busca pública, filtros, artistas,
+  "Como funciona", criação de conta, carteira e histórico. Nada disso entra antes da
+  story correspondente (a regra "não renderize controle sem funcionalidade" vale).
+- **Novas stories já seguem esta linguagem.** O refinamento visual fino (logotipo
+  incluído) fica para a rodada visual final, depois das funcionalidades críticas
+  (Story 6.2).
+
+**Implementação inicial do logotipo (interpretação vetorial minha, não arte final):**
+
+- Símbolo: `frontend/src/AtrioMark.tsx` (SVG inline, `aria-hidden`) e
+  `frontend/public/favicon.svg` (mesma geometria e mesmas cores; um teste de navegador
+  compara os dois). Conferi contra a referência ampliada. Quatro traços definem a
+  identidade e não podem se perder:
+  1. **silhueta alta e fina** (28 × 38), de duas pernas verticais e **topo pontudo**
+     (portal gótico), nunca um arco semicircular nem `border-radius`;
+  2. **duas faces**: esquerda lilás `#a77bf6`, direita violeta intenso `#6c35e6`,
+     divididas por uma vertical que sai do ápice; sem gradiente contínuo;
+  3. **abertura interna assimétrica**: parede esquerda vertical, topo arredondado e lado
+     direito em diagonal;
+  4. só `path`, sem raster, sem imagem remota e sem dependência; legível em 16 px.
+  A primeira versão (um arco semicircular simétrico, parecido com ∩ ou uma ferradura)
+  **não foi aprovada** e foi descartada por não ter essas quatro características.
+- Palavra: texto real "ÁTRIO" (não imagem), fonte de UI do sistema, `font-weight: 300` e
+  espaçamento `0.18em`, em `--color-ink`. Descartei a serifa (a referência usa sans leve e
+  espaçada; a serifa fica para obras e valores, §4) e o peso 500 da primeira versão
+  (pesado demais). O acento de "Á" é preservado. A fonte definitiva da marca fica para o
+  polimento final.
+- Descritor "Leilões de Arte": menor, peso 400, `--color-muted`. Descartei um cinza mais
+  claro porque reduziria o contraste do texto pequeno abaixo de AA.
+- Lockup: símbolo + "ÁTRIO" + "Leilões de Arte". O descritor só aparece a partir de
+  64 rem; em 375 px e 320 px ficam símbolo e nome, para não apertar Vitrine, Criar lote,
+  Meus lotes e Entrar/Sair.
+- Acessibilidade: o link da marca se chama **"ÁTRIO — Leilões de Arte — ir para a
+  vitrine"**, para conter todo o texto visível (Label in Name, WCAG 2.5.3) e só acrescentar
+  o destino; o SVG é decorativo (`aria-hidden`), então a marca não é anunciada em
+  duplicidade. Alvos de toque do header e de "← Vitrine" com ~44 px de área acionável
+  (pseudo-elemento transparente, sem aumentar a fonte).
+- Nome e título da aba: `frontend/src/brand.ts` (`PRODUCT_NAME`, `documentTitle`),
+  formato "{página} — ÁTRIO".
+
+### Marca anterior (histórico)
+
+Ativo antes de 25/10/2026: `frontend/public/favicon.svg` (substituído).
+
+Cores extraídas do SVG anterior (as cores de marca seguem valendo; o azul fica como token
+sem uso no símbolo novo):
 
 ```css
 --brand-violet: #863bff;

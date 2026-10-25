@@ -204,9 +204,11 @@ def test_image_route_is_public_and_the_policy_check_still_passes(
 
     assert policy_problems(app.routes) == []
     table = policy_by_route(app.routes)
-    assert table[("/api/catalog/images/{image_id}", "http")] == AccessPolicy.PUBLIC
+    assert (
+        table[("/api/catalog/images/{image_id}", "GET", "http")] == AccessPolicy.PUBLIC
+    )
     # A busca e o detalhe continuam exclusivos do leiloeiro.
-    assert table[("/api/catalog/artworks", "http")] == AccessPolicy.AUCTIONEER
-    assert table[("/api/catalog/artworks/{external_id}", "http")] == (
+    assert table[("/api/catalog/artworks", "GET", "http")] == AccessPolicy.AUCTIONEER
+    assert table[("/api/catalog/artworks/{external_id}", "GET", "http")] == (
         AccessPolicy.AUCTIONEER
     )

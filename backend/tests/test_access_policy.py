@@ -27,20 +27,27 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
 
 EXPECTED_POLICIES = {
-    ("/health", "http"): AccessPolicy.PUBLIC,
-    ("/api/auth/login", "http"): AccessPolicy.PUBLIC,
-    ("/api/auth/logout", "http"): AccessPolicy.PUBLIC,
-    ("/api/me", "http"): AccessPolicy.AUTHENTICATED,
-    ("/api/catalog/artworks", "http"): AccessPolicy.AUCTIONEER,
-    ("/api/catalog/artworks/{external_id}", "http"): AccessPolicy.AUCTIONEER,
+    ("/health", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/auth/login", "POST", "http"): AccessPolicy.PUBLIC,
+    ("/api/auth/logout", "POST", "http"): AccessPolicy.PUBLIC,
+    ("/api/me", "GET", "http"): AccessPolicy.AUTHENTICATED,
+    ("/api/catalog/artworks", "GET", "http"): AccessPolicy.AUCTIONEER,
+    ("/api/catalog/artworks/{external_id}", "GET", "http"): AccessPolicy.AUCTIONEER,
     # Mídia de obras em domínio público; a vitrine pública da 2.5 a usa também.
-    ("/api/catalog/images/{image_id}", "http"): AccessPolicy.PUBLIC,
+    ("/api/catalog/images/{image_id}", "GET", "http"): AccessPolicy.PUBLIC,
     # Story 2.4: criar lote e listar os próprios lotes são do leiloeiro.
-    ("/api/lots", "http"): AccessPolicy.AUCTIONEER,
-    ("/api/lots/mine", "http"): AccessPolicy.AUCTIONEER,
-    ("/api/infra-check/ws", "websocket"): AccessPolicy.PUBLIC,
+    ("/api/lots", "POST", "http"): AccessPolicy.AUCTIONEER,
+    ("/api/lots/mine", "GET", "http"): AccessPolicy.AUCTIONEER,
+    # Story 2.5: a vitrine e a página do lote são públicas. `GET /api/lots` e
+    # `POST /api/lots` dividem o caminho: o mapa precisa guardar os dois (D20).
+    ("/api/lots", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/lots/{lot_id}", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/infra-check/ws", None, "websocket"): AccessPolicy.PUBLIC,
 }
-SPA_POLICY = {("/{full_path:path}", "http"): AccessPolicy.PUBLIC}
+SPA_POLICY = {
+    ("/{full_path:path}", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/{full_path:path}", "HEAD", "http"): AccessPolicy.PUBLIC,
+}
 
 
 @pytest.fixture
@@ -164,7 +171,7 @@ def test_route_inside_a_mount_with_policy_passes(api_only_app: FastAPI) -> None:
     api_only_app.mount("/sub", sub_app)
 
     assert policy_problems(api_only_app.routes) == []
-    assert policy_by_route(api_only_app.routes)[("/sub/dentro", "http")] == (
+    assert policy_by_route(api_only_app.routes)[("/sub/dentro", "GET", "http")] == (
         AccessPolicy.PUBLIC
     )
 
@@ -202,7 +209,7 @@ def test_helper_routes_carry_their_policy_dependency(api_only_app: FastAPI) -> N
         return {"ok": True}
 
     assert policy_problems(api_only_app.routes) == []
-    assert policy_by_route(api_only_app.routes)[("/api/admin", "http")] == (
+    assert policy_by_route(api_only_app.routes)[("/api/admin", "GET", "http")] == (
         AccessPolicy.AUCTIONEER
     )
 
@@ -210,7 +217,7 @@ def test_helper_routes_carry_their_policy_dependency(api_only_app: FastAPI) -> N
 def test_technical_websocket_still_passes_as_public(api_only_app: FastAPI) -> None:
     table = policy_by_route(api_only_app.routes)
     assert policy_problems(api_only_app.routes) == []
-    assert table[("/api/infra-check/ws", "websocket")] == AccessPolicy.PUBLIC
+    assert table[("/api/infra-check/ws", None, "websocket")] == AccessPolicy.PUBLIC
 
 
 def test_stacked_plain_decorator_reusing_a_protected_endpoint_is_reported(
@@ -227,8 +234,8 @@ def test_stacked_plain_decorator_reusing_a_protected_endpoint_is_reported(
         "política AUCTIONEER sem a dependência: /api/leak"
     ]
     table = policy_by_route(api_only_app.routes)
-    assert table[("/api/admin", "http")] == AccessPolicy.AUCTIONEER
-    assert ("/api/leak", "http") not in table
+    assert table[("/api/admin", "GET", "http")] == AccessPolicy.AUCTIONEER
+    assert ("/api/leak", "GET", "http") not in table
     # O verificador reprova a rota que de fato está aberta.
     api_only_app.dependency_overrides[get_session] = lambda: iter([object()])
     client = TestClient(api_only_app, base_url=HTTPS_ORIGIN)
@@ -248,7 +255,7 @@ def test_add_api_route_reusing_a_protected_endpoint_is_reported(
     assert policy_problems(api_only_app.routes) == [
         "política BIDDER sem a dependência: /api/bids-copy"
     ]
-    assert ("/api/bids-copy", "http") not in policy_by_route(api_only_app.routes)
+    assert ("/api/bids-copy", "GET", "http") not in policy_by_route(api_only_app.routes)
 
 
 def test_reused_endpoint_with_a_different_dependency_is_reported(
@@ -291,6 +298,68 @@ def test_plain_starlette_routes_with_policy_metadata_are_reported(
         "política PUBLIC sem a dependência: /api/pure",
         "política PUBLIC sem a dependência: /api/pure-ws",
     ]
+
+
+# --- o mapa por (caminho, método, tipo) (Story 2.5, D20) ---
+
+
+def test_same_path_with_two_methods_keeps_both_policies(api_only_app: FastAPI) -> None:
+    @api_route(api_only_app, "/api/dual", methods=["GET"], policy=AccessPolicy.PUBLIC)
+    def read_dual() -> dict[str, bool]:
+        return {"ok": True}
+
+    @api_route(
+        api_only_app, "/api/dual", methods=["POST"], policy=AccessPolicy.AUCTIONEER
+    )
+    def write_dual() -> dict[str, bool]:
+        return {"ok": True}
+
+    table = policy_by_route(api_only_app.routes)
+    assert table[("/api/dual", "GET", "http")] == AccessPolicy.PUBLIC
+    assert table[("/api/dual", "POST", "http")] == AccessPolicy.AUCTIONEER
+    assert policy_problems(api_only_app.routes) == []
+
+
+def test_two_routes_with_the_same_path_and_method_fail_loudly(
+    api_only_app: FastAPI,
+) -> None:
+    @api_route(api_only_app, "/api/twin", methods=["GET"], policy=AccessPolicy.PUBLIC)
+    def first() -> dict[str, bool]:
+        return {"ok": True}
+
+    @api_route(
+        api_only_app, "/api/twin", methods=["GET"], policy=AccessPolicy.AUCTIONEER
+    )
+    def second() -> dict[str, bool]:
+        return {"ok": True}
+
+    with pytest.raises(ValueError, match="rota duplicada"):
+        policy_by_route(api_only_app.routes)
+
+
+def test_a_route_with_two_methods_gets_one_entry_per_method(
+    api_only_app: FastAPI,
+) -> None:
+    @api_route(
+        api_only_app,
+        "/api/both",
+        methods=["GET", "HEAD"],
+        policy=AccessPolicy.PUBLIC,
+    )
+    def both() -> dict[str, bool]:
+        return {"ok": True}
+
+    table = policy_by_route(api_only_app.routes)
+    assert table[("/api/both", "GET", "http")] == AccessPolicy.PUBLIC
+    assert table[("/api/both", "HEAD", "http")] == AccessPolicy.PUBLIC
+
+
+def test_real_app_tells_apart_get_and_post_on_api_lots(api_only_app: FastAPI) -> None:
+    table = policy_by_route(api_only_app.routes)
+    assert table[("/api/lots", "GET", "http")] == AccessPolicy.PUBLIC
+    assert table[("/api/lots", "POST", "http")] == AccessPolicy.AUCTIONEER
+    assert table[("/api/lots/mine", "GET", "http")] == AccessPolicy.AUCTIONEER
+    assert table[("/api/lots/{lot_id}", "GET", "http")] == AccessPolicy.PUBLIC
 
 
 # --- o helper de registro ---

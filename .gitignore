@@ -7,6 +7,8 @@ _bmad/
 .venv/
 node_modules/
 dist/
+frontend/test-results/
+frontend/playwright-report/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

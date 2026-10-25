@@ -161,7 +161,9 @@ function CatalogSearch({ onSessionExpired, onCreateLot, returnFocus }: CatalogSe
       data-view={view}
     >
       <div className="catalog-intro">
-        <h1 id="catalog-title">Buscar obras</h1>
+        <h1 id="catalog-title" tabIndex={-1}>
+          Buscar obras
+        </h1>
         <p className="muted">
           Acervo do Art Institute of Chicago. Só aparecem obras em domínio público
           com imagem.

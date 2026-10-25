@@ -1,6 +1,10 @@
-# Casa de Leilões (Desafio Elite Dev, Verzel)
+# ÁTRIO — Leilões de Arte (Desafio Elite Dev, Verzel)
 
-Casa de Leilões online: leiloeiro cria lotes a partir de uma API pública;
+Nome do produto desde 25/10/2026: **ÁTRIO** (antes, nome de trabalho "Casa de
+Leilões"). Só a interface e a documentação mudaram de nome; repositório, banco,
+módulos e `/api/*` seguem como estão (AD-30).
+
+Casa de leilões online: leiloeiro cria lotes a partir de uma API pública;
 licitantes depositam saldo simulado, dão lances ao vivo e recebem comprovante
 compartilhável; qualquer pessoa audita o histórico de lances. Desafio técnico
 recebido em 22/10/2026, entrega até 29/10/2026. Deploy obrigatório. Projeto
@@ -59,8 +63,12 @@ que não mudam a arquitetura.
   planejar ou editar; se tocar a Vitrine, lê também `VITRINE-BLUEPRINT.md`.
 - São vinculantes para UX/visual no seu escopo, subordinados a: story/enunciado
   > `docs/ARQUITETURA.md` > esses documentos > Figma/protótipos/referências.
-- Marca: `frontend/public/favicon.svg`; roxo é assinatura, não massa de fundo;
-  a obra é a protagonista. Nada de cara de SaaS/curso/fintech nem "AI slop".
+- Marca: **ÁTRIO — Leilões de Arte** (símbolo em `frontend/src/AtrioMark.tsx` e
+  `frontend/public/favicon.svg`; nome e títulos em `frontend/src/brand.ts`). Roxo é
+  assinatura, não massa de fundo; a obra é a protagonista. Nada de cara de
+  SaaS/curso/fintech nem "AI slop". Referência visual principal: a identidade ÁTRIO que
+  eu escolhi; secundária (densidade, cards, acabamento): AURA. Novas stories já seguem
+  essa linguagem (`DESIGN.md` §2); o refinamento final fica para a Story 6.2.
 - Figma e protótipos são referência, não especificação nem contrato de estado.
 - Não renderize controle sem funcionalidade na story (busca/filtro só com OPT1).
 - Fluxo de skills, prompts-base e critérios de review: `docs/FRONTEND-WORKFLOW.md`.
@@ -149,6 +157,11 @@ que não mudam a arquitetura.
 - `verify` falha na primeira etapa que falhar. Back-end: `pytest`, Ruff,
   `ruff format --check`, integração em PostgreSQL real. Front-end: ESLint,
   `tsc --noEmit`, testes existentes, build de produção do Vite.
+- Testes do front: lógica pura com `node --test` (`npm test`), no `verify` padrão;
+  testes de navegador com Playwright (`npm run test:e2e`, Chromium, API simulada), fora
+  do `verify` padrão. `VERIFY_E2E=1 ./verify.sh` roda os dois (opt-in; exige
+  `npx playwright install chromium`). Os testes de `real-stack.spec.ts` só rodam com
+  `E2E_REAL_BASE_URL`, nem no `verify` padrão nem no opt-in.
 - Nunca afrouxe teste para o código passar. Se falhar, relate o erro.
 
 ## Seed e deploy
@@ -176,12 +189,14 @@ implementação story a story. PRD dispensado: o enunciado já é a especificaç
 6. Só quem de fato fechou o lote publica o evento de encerramento.
 7. Smoke test: "API indisponível" exige falha simulada.
 8. Nome e cálculo do estado "Encerrado, apurando resultado" nas leituras.
+   (Resolvida na 2.5: só `phase`; "Encerrado, apurando resultado" para `ended`.)
 9. Tentativa de lance em lote vencido: fechar primeiro, depois responder.
 10. Nomes ainda não definidos: rota do WebSocket, rotas do comprovante e do
     link, segredo do JWT, ferramenta de teste do front. (Resolvidos na 1.2:
     `compose.yaml` na raiz, Python 3.13, PostgreSQL 18, `DATABASE_URL` e
     `TEST_DATABASE_URL`. Ferramenta de teste do front, em parte na 2.4:
-    `node --test` para lógica pura.)
+    `node --test` para lógica pura; na 2.5, Playwright como camada de navegador
+    opt-in, fora do `verify` padrão: `VERIFY_E2E=1 ./verify.sh`.)
 
 ## Armadilhas conhecidas
 (Cada problema que custar tempo vira uma linha aqui.)

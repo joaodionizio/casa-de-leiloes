@@ -1,4 +1,8 @@
-# Casa de Leilões
+# ÁTRIO — Leilões de Arte
+
+> Em 25/10/2026 o produto recebeu o nome ÁTRIO (nome de trabalho anterior: "Casa de
+> Leilões"). Só a interface mudou de nome: repositório, bancos (`casa_de_leiloes_*`),
+> módulos Python e `/api/*` continuam como estão.
 
 Leilões online (Desafio Elite Dev, Verzel). Este README ainda é parcial: cobre o
 desenvolvimento local, o PostgreSQL local, a imagem Docker e a preparação do deploy
@@ -58,9 +62,54 @@ definidos no ambiente; valores já exportados no shell têm precedência. Por is
 
 O `verify` roda, em ordem e parando na primeira falha: Ruff (lint e formato),
 `pytest` (inclui a integração em PostgreSQL real), ESLint, `tsc --noEmit`,
-`npm test` (testes da lógica pura do front, `node --test`, sem dependência nova: dinheiro, horários e a checagem do rascunho do lote), o
+`npm test` (testes da lógica pura do front, `node --test`, sem dependência nova: dinheiro, horários, a checagem do rascunho do lote, as rotas, os rótulos de fase, a vitrine, a linha de atualização e a validação das respostas públicas), o
 build do Vite e o `docker build`. Para rodar só os testes do front:
-`cd frontend && npm test`.
+`cd frontend && npm test`. Os testes de navegador (Playwright) ficam fora do `verify`
+padrão; veja "Testes de navegador".
+
+### Testes de navegador (Playwright)
+
+`npm test` cobre a lógica pura; o que só um navegador real prova (History API, foco,
+layout em viewports reais, imagem quebrada) é do Playwright, em `frontend/e2e/`. É uma
+camada pequena e separada, não substitui os outros testes.
+
+```bash
+cd frontend
+npm install
+npx playwright install chromium   # uma vez; baixa ~100 MB para ~/Library/Caches/ms-playwright
+npm run test:e2e
+```
+
+- A API é **simulada por interceptação de rede** (`e2e/support/mockApi.ts`): nenhum
+  banco, nenhuma AIC e nenhum dado persistente são tocados. O servidor é o `vite preview`
+  do build de produção, que o próprio Playwright sobe (porta 4173).
+- Cobertura: visitante sem login; deep-link com recarga; vitrine → lote → Back →
+  Forward; login com retorno ao lote (e `returnTo` externo ignorado) e logout; header de
+  `BIDDER` e `AUCTIONEER`; "Mostrar mais encerrados" sem novo pedido à API; imagem
+  quebrada → placeholder; Tab, foco visível e foco no `h1`; layout em 1440×900, 375×812
+  e 320×812 (sem rolagem horizontal, destaque em duas colunas no desktop e empilhado no
+  celular, container centrado, densidade dos rails); marca ÁTRIO (títulos da aba, nome
+  acessível do link da marca, tagline só no desktop, header sem sobreposição em 1440, 375 e
+  320 px para anônimo, `BIDDER` e `AUCTIONEER`); alvos de toque de ~44 px no header e em
+  "← Vitrine"; contorno de foco do rail sem corte; `returnTo` interno após reload. Os asserts usam estrutura e caixas
+  delimitadoras com tolerância; não há comparação de screenshot. Em falha, o Playwright
+  guarda screenshot e trace em `frontend/test-results/` só para depuração.
+- **Fora do `./verify.sh` padrão**, de propósito: exige o Chromium do Playwright e sobe um
+  servidor, o que o `verify` (Docker e Node) não precisa. Para incluí-lo:
+  `VERIFY_E2E=1 ./verify.sh`. Rode-o antes de mexer em navegação, foco ou layout.
+- **Pilha real (opcional).** `e2e/real-stack.spec.ts` só roda com `E2E_REAL_BASE_URL` e
+  prova o que a simulação não pode: `/api/*` nunca cai no fallback da SPA e as rotas
+  públicas reais respondem JSON. Com o PostgreSQL de teste no ar (nunca o de
+  desenvolvimento), as migrations e o seed aplicados nele, e o build gerado:
+
+  ```bash
+  cd backend && DATABASE_URL=<url do banco _test> APP_ORIGIN=http://localhost:8765 \
+    JWT_SECRET=<valor aleatório> SPA_DIST_DIR=../frontend/dist \
+    uv run uvicorn app.main:app --port 8765
+  cd frontend && E2E_REAL_BASE_URL=http://localhost:8765 npm run test:e2e -- real-stack
+  ```
+
+  Não rode junto com o `pytest`, que recria o banco de teste a cada sessão.
 
 Recriar o volume do zero (apaga os dois bancos; o script de criação só roda com
 volume vazio):
@@ -143,8 +192,9 @@ lance e um `BIDDER` nunca cria lote.
 - O logout só apaga o cookie no navegador. Não há sessão no banco nem revogação:
   um token copiado antes do logout continua válido até o `exp` (8 horas, AD-29).
 - Não há limite de tentativas de login nem bloqueio por força bruta.
-- Se o `GET /api/me` falhar por indisponibilidade do servidor, a tela mostra o
-  formulário com a mensagem de erro; o login só funciona quando o servidor volta.
+- Se o `GET /api/me` falhar por indisponibilidade do servidor, a vitrine abre
+  normalmente como visitante e a tela de login (`/login`) mostra a mensagem de erro; o
+  login só funciona quando o servidor volta.
 
 ## Imagem de produção
 
@@ -211,6 +261,7 @@ Com `URL=https://casa-de-leiloes-i1xr.onrender.com`:
 curl -sS -i "$URL/health"                 # 200, {"status":"ok"}
 curl -sS -i "$URL/"                       # 200, text/html (SPA)
 curl -sS -i "$URL/lots/qualquer-coisa"    # 200, text/html (index.html)
+curl -sS -i "$URL/api/lots"               # 200, JSON da vitrine (a validar depois do próximo deploy)
 curl -sS -i "$URL/api/docs"               # 200, Swagger
 curl -sS -i "$URL/api/openapi.json"       # 200, JSON, rotas /health, /api/auth/* e /api/me
 curl -sS -i "$URL/api/nao-existe"         # 404, JSON (nunca HTML)
@@ -392,7 +443,7 @@ milhar.
 **Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): todos os lotes do leiloeiro da
 sessão, do mais recente para o mais antigo, sem paginação e sem limite. É leitura pura
 (só `SELECT`), não consulta a AIC e não calcula "ao vivo", "agendado" nem "encerrado":
-a fase do lote vem na Story 2.5.
+a fase aparece na vitrine pública (veja "Vitrine e página do lote"), não aqui.
 
 ### Lote demo
 
@@ -404,6 +455,50 @@ leiloeiro semeado. "Aberto" quer dizer `is_demo` e `ends_at` no futuro. Se já e
 demo aberto, nada é criado; se todos encerraram, nasce um novo. O seed só faz `INSERT`
 em `lots`: nunca altera nem apaga um lote antigo. Uma trava consultiva do PostgreSQL
 (`pg_advisory_xact_lock`) faz dois seeds simultâneos criarem no máximo um demo.
+
+## Vitrine e página do lote
+
+Qualquer pessoa, **sem login**, vê os lotes separados em ao vivo, próximos (agendados) e
+encerrados, e abre a página de cada um. O estado de cada lote é derivado **no servidor**,
+com a hora do PostgreSQL; o navegador só o apresenta.
+
+- `GET /api/lots`: `{as_of, live, scheduled, ended}` com **todos** os lotes (sem
+  paginação nem limite), cada item com `phase` (`scheduled`, `live` ou `ended`).
+  `GET /api/lots/{lot_id}`: `{as_of, lot}`. Ambas são públicas (a resposta não depende de
+  quem pede), `Cache-Control: no-store` e só leem: nenhum `INSERT`, `UPDATE`, `DELETE`,
+  `FOR UPDATE`, nem liquidação ou seed (AD-19). `lot_id` fora do formato UUID dá 422; UUID
+  válido inexistente dá 404 (`not_found`).
+- **Fase:** `now < starts_at` agendado; `starts_at <= now < ends_at` ao vivo; `now >=
+  ends_at` encerrado, exata em microssegundos. Não existe coluna de estado: a fase é
+  calculada na leitura por `lot_phase`.
+- **Um instante, um snapshot.** Cada rota executa um único statement (`WITH clock AS
+  MATERIALIZED (SELECT clock_timestamp() AS as_of) SELECT … FROM clock LEFT OUTER JOIN
+  lots …`): `as_of` e as linhas saem do mesmo snapshot do PostgreSQL, e todos os lotes da
+  resposta são classificados com o mesmo `as_of`. Duas consultas independentes dariam dois
+  snapshots em `READ COMMITTED`. Sem lotes, a resposta continua tendo `as_of` e três listas
+  vazias.
+- **Ordem:** ao vivo por `ends_at` crescente; agendados por `starts_at` crescente;
+  encerrados por `ends_at` decrescente; `id` crescente desempata. O destaque da vitrine é
+  o primeiro ao vivo, senão o primeiro agendado.
+- **Dados públicos só do nosso banco:** título, artista, data, técnica, dimensões,
+  departamento, tipo, crédito, fonte, valores e horários vêm do snapshot gravado no lote;
+  as rotas não chamam a AIC. Só a imagem vem do museu, pelo proxy da nossa origem. Não
+  saem `auctioneer_id`, `is_demo`, `created_at`, o `image_id` solto nem dado de usuário.
+- **Endereços do front:** `/` (vitrine), `/lots/{uuid}`, `/login`, `/auctioneer/lots/new`
+  (Criar lote) e `/auctioneer/lots` (Meus lotes). A navegação usa a History API, sem
+  React Router: clique, Back, Forward, recarregar e link direto funcionam, e o servidor
+  devolve a SPA para esses caminhos. "Entrar" abre `/login`; depois do login a pessoa
+  volta à página pública de onde veio (o destino fica em `history.state`, só rotas
+  conhecidas valem, nunca uma URL externa). "Sair" leva à vitrine.
+
+Como validar (com a aplicação rodando):
+
+```bash
+curl -sS -i http://localhost:8000/api/lots            # 200, no-store, {"as_of":…,"live":[…]}
+curl -sS -i http://localhost:8000/api/lots/<uuid>      # 200, ou 404 se o UUID não existe
+curl -sS -i http://localhost:8000/api/lots/abc         # 422 validation_error
+curl -sS -i http://localhost:8000/lots/<uuid>          # 200, text/html (SPA montada)
+```
 
 ## Erros e proteção das escritas
 
@@ -482,3 +577,21 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
 - Cada imagem exibida custa uma chamada do servidor à AIC (sem cache): uma busca com
   20 resultados dispara até 20, contra o limite de 60 req/min por IP. Excedido, o
   restante das imagens cai no placeholder até a janela passar.
+- A situação do lote é uma **fotografia** do `as_of` mostrado na página ("Situação
+  atualizada às HH:mm"): com a página aberta, um lote não passa sozinho de agendado a ao
+  vivo nem de ao vivo a encerrado. A fase só muda num novo carregamento (abrir outra vista,
+  voltar, recarregar). Não há polling, contagem regressiva nem relógio do navegador no
+  estado do lote; a validação de um lance sempre será do servidor.
+- Todo lote encerrado aparece como "Encerrado, apurando resultado" até a liquidação
+  existir (Story 4.3). Hoje isso é só texto de interface: não há vencedor, valor final
+  nem comprovante, e nenhuma leitura liquida lote.
+- A vitrine traz todos os lotes, sem paginação, e os lotes demo encerrados se acumulam a
+  cada 72 horas de inicialização. "Mostrar mais encerrados" revela mais 6 por clique, só
+  no navegador, sem nova chamada à API.
+- Qualquer caminho desconhecido do front responde 200 com a SPA, e a tela mostra "Página
+  não encontrada" (o servidor não distingue rota do cliente de rota inexistente); `/api/*`
+  nunca recebe HTML.
+- A API aceita o UUID do lote também em maiúsculas ou sem hífens (o Pydantic é
+  tolerante); o front só gera e só reconhece o formato minúsculo com hífens.
+- Depois do login, o botão Voltar do navegador passa pela página de origem antes de sair:
+  o destino substitui `/login` no histórico.

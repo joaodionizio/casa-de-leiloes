@@ -37,13 +37,16 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Select,
     String,
     Text,
     false,
     func,
     select,
+    true,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.sql.expression import CTE
 
 from app.access import NO_STORE, AccessPolicy, api_route, require_auctioneer
 from app.artic import IMAGE_ID_PATTERN, ArticClient, CatalogUnavailable
@@ -241,6 +244,27 @@ def resolve_schedule(
     return Schedule(starts_at=start.astimezone(UTC), ends_at=ends_at.astimezone(UTC))
 
 
+class LotPhase(StrEnum):
+    """Fase temporal do lote (2.4 §7, Story 2.5 P2). Derivada, nunca persistida: fim
+    temporal não é liquidação, que só nasce na 4.3 (P8)."""
+
+    SCHEDULED = "scheduled"
+    LIVE = "live"
+    ENDED = "ended"
+
+
+def lot_phase(starts_at: datetime, ends_at: datetime, now: datetime) -> LotPhase:
+    """`now < starts_at` agendado; `starts_at <= now < ends_at` ao vivo; `now >=
+    ends_at` encerrado. Compara instantes: o offset de cada argumento não importa."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    if now < starts_at:
+        return LotPhase.SCHEDULED
+    if now < ends_at:
+        return LotPhase.LIVE
+    return LotPhase.ENDED
+
+
 # --- serviço, nível externo (só a criação manual) ---
 
 
@@ -360,6 +384,131 @@ def lot_response(lot: Lot) -> LotResponse:
     )
 
 
+# --- leituras públicas (Story 2.5): DTOs próprios, separados do `LotResponse` ---
+
+
+class PublicLotSummary(BaseModel):
+    """Item da vitrine. Sem `auctioneer_id`, `is_demo`, `created_at` nem `image_id`."""
+
+    id: uuid.UUID
+    title: str | None
+    artist_display: str | None
+    date_display: str | None
+    image_url: str
+    starting_bid_cents: int
+    starts_at: datetime
+    ends_at: datetime
+    phase: LotPhase
+
+
+class PublicLotDetail(PublicLotSummary):
+    external_id: int
+    medium_display: str | None
+    dimensions: str | None
+    department_title: str | None
+    artwork_type_title: str | None
+    credit_line: str | None
+    source_url: str
+    min_increment_cents: int
+
+
+class PublicLotsResponse(BaseModel):
+    as_of: datetime
+    live: list[PublicLotSummary]
+    scheduled: list[PublicLotSummary]
+    ended: list[PublicLotSummary]
+
+
+class PublicLotDetailResponse(BaseModel):
+    as_of: datetime
+    lot: PublicLotDetail
+
+
+def _clock_cte() -> CTE:
+    """`clock_timestamp()` avaliado uma única vez: o CTE `MATERIALIZED` nunca é
+    embutido na consulta, então o valor se repete em todas as linhas."""
+    return (
+        select(func.clock_timestamp().label("as_of"))
+        .cte("clock")
+        .prefix_with("MATERIALIZED")
+    )
+
+
+def public_snapshot_statement() -> Select:
+    """O único statement da vitrine: o instante e todos os lotes no mesmo snapshot.
+    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes."""
+    clock = _clock_cte()
+    return select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, true())
+
+
+def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
+    rows = session.execute(public_snapshot_statement()).all()
+    as_of = rows[0].as_of.astimezone(UTC)
+    return as_of, [row.Lot for row in rows if row.Lot is not None]
+
+
+def read_public_lot_snapshot(
+    session: Session, lot_id: uuid.UUID
+) -> tuple[datetime, Lot | None]:
+    # A condição do id fica no JOIN, nunca num WHERE: o WHERE apagaria a linha do
+    # `as_of` quando o lote não existe.
+    clock = _clock_cte()
+    row = session.execute(
+        select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, Lot.id == lot_id)
+    ).one()
+    return row.as_of.astimezone(UTC), row.Lot
+
+
+def public_lot_summary(lot: Lot, as_of: datetime) -> PublicLotSummary:
+    return PublicLotSummary(
+        id=lot.id,
+        title=lot.title,
+        artist_display=lot.artist_display,
+        date_display=lot.date_display,
+        image_url=image_url_for(lot.image_id),
+        starting_bid_cents=lot.starting_bid_cents,
+        starts_at=lot.starts_at.astimezone(UTC),
+        ends_at=lot.ends_at.astimezone(UTC),
+        phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
+    )
+
+
+def public_lot_detail(lot: Lot, as_of: datetime) -> PublicLotDetail:
+    return PublicLotDetail(
+        **public_lot_summary(lot, as_of).model_dump(),
+        external_id=lot.external_id,
+        medium_display=lot.medium_display,
+        dimensions=lot.dimensions,
+        department_title=lot.department_title,
+        artwork_type_title=lot.artwork_type_title,
+        credit_line=lot.credit_line,
+        source_url=lot.source_url,
+        min_increment_cents=lot.min_increment_cents,
+    )
+
+
+def build_public_lots(lots: list[Lot], as_of: datetime) -> PublicLotsResponse:
+    """Classifica todos os lotes com o MESMO `as_of` e ordena cada grupo (P4, D3):
+    ao vivo `ends_at ASC`, agendados `starts_at ASC`, encerrados `ends_at DESC`;
+    `id ASC` desempata nos três."""
+    by_phase: dict[LotPhase, list[Lot]] = {phase: [] for phase in LotPhase}
+    for lot in lots:
+        by_phase[lot_phase(lot.starts_at, lot.ends_at, as_of)].append(lot)
+    live = sorted(by_phase[LotPhase.LIVE], key=lambda lot: (lot.ends_at, lot.id))
+    scheduled = sorted(
+        by_phase[LotPhase.SCHEDULED], key=lambda lot: (lot.starts_at, lot.id)
+    )
+    # `reverse=True` preserva a estabilidade: o `id ASC` do primeiro sort sobrevive.
+    ended = sorted(by_phase[LotPhase.ENDED], key=lambda lot: lot.id)
+    ended.sort(key=lambda lot: lot.ends_at, reverse=True)
+    return PublicLotsResponse(
+        as_of=as_of,
+        live=[public_lot_summary(lot, as_of) for lot in live],
+        scheduled=[public_lot_summary(lot, as_of) for lot in scheduled],
+        ended=[public_lot_summary(lot, as_of) for lot in ended],
+    )
+
+
 def _violation_response(violation: ScheduleViolation) -> Response:
     field = (
         "starts_at"
@@ -431,8 +580,8 @@ def register_lot_routes(app: FastAPI) -> None:
         response.headers["Cache-Control"] = "no-store"
         return lot_response(result)
 
-    # Registrada antes de qualquer `/api/lots/{lot_id}` (2.5): senão "mine" cairia
-    # no parâmetro.
+    # Registrada antes de `/api/lots/{lot_id}` (2.5, D4): senão "mine" cairia no
+    # parâmetro.
     @api_route(
         app,
         "/api/lots/mine",
@@ -454,3 +603,47 @@ def register_lot_routes(app: FastAPI) -> None:
         ).all()
         response.headers["Cache-Control"] = "no-store"
         return MyLotsResponse(items=[lot_response(lot) for lot in lots])
+
+    @api_route(
+        app,
+        "/api/lots",
+        methods=["GET"],
+        policy=AccessPolicy.PUBLIC,
+        response_model=PublicLotsResponse,
+    )
+    def public_lots(
+        response: Response, session: Session = Depends(get_session)
+    ) -> PublicLotsResponse:
+        # Leitura pública (AD-19): um único statement `SELECT`, sem trava, sem a AIC e
+        # sem sessão. O instante e as linhas vêm do mesmo snapshot (P2 refinada).
+        as_of, lots = read_public_snapshot(session)
+        result = build_public_lots(lots, as_of)
+        session.rollback()  # encerra a transação de leitura antes da resposta (D2)
+        response.headers["Cache-Control"] = "no-store"
+        return result
+
+    # Sempre depois de `/api/lots/mine` (D4).
+    @api_route(
+        app,
+        "/api/lots/{lot_id}",
+        methods=["GET"],
+        policy=AccessPolicy.PUBLIC,
+        response_model=PublicLotDetailResponse,
+        responses=error_responses(404, 422),
+    )
+    def public_lot(
+        lot_id: uuid.UUID,
+        response: Response,
+        session: Session = Depends(get_session),
+    ) -> PublicLotDetailResponse | Response:
+        as_of, lot = read_public_lot_snapshot(session, lot_id)
+        result = (
+            None
+            if lot is None
+            else PublicLotDetailResponse(as_of=as_of, lot=public_lot_detail(lot, as_of))
+        )
+        session.rollback()
+        if result is None:
+            return error_response(404, "not_found", headers=NO_STORE)
+        response.headers["Cache-Control"] = "no-store"
+        return result

@@ -47,7 +47,7 @@ def create_app(
     cookie_name, cookie_secure = session_cookie_for_origin(app_origin)
 
     app = FastAPI(
-        title="Casa de Leilões",
+        title="ÁTRIO",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
