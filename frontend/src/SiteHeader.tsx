@@ -1,7 +1,12 @@
 import { roleLabel, type CurrentUser } from './api/auth'
 
+export type AuctioneerView = 'create' | 'mine'
+
 interface SiteHeaderProps {
   user: CurrentUser | null
+  // Navegação do leiloeiro (Story 2.4): só aparece para o papel AUCTIONEER.
+  view: AuctioneerView
+  onNavigate: (view: AuctioneerView) => void
   loggingOut: boolean
   logoutError: string | null
   onLogout: () => void
@@ -9,6 +14,8 @@ interface SiteHeaderProps {
 
 function SiteHeader({
   user,
+  view,
+  onNavigate,
   loggingOut,
   logoutError,
   onLogout,
@@ -20,6 +27,26 @@ function SiteHeader({
           <img src="/favicon.svg" alt="" width={24} height={24} />
           <span className="site-brand-name">Casa de Leilões</span>
         </div>
+        {user !== null && user.role === 'AUCTIONEER' && (
+          <nav className="site-nav" aria-label="Painel do leiloeiro">
+            <button
+              type="button"
+              className="site-nav-item"
+              aria-current={view === 'create' ? 'page' : undefined}
+              onClick={() => onNavigate('create')}
+            >
+              Criar lote
+            </button>
+            <button
+              type="button"
+              className="site-nav-item"
+              aria-current={view === 'mine' ? 'page' : undefined}
+              onClick={() => onNavigate('mine')}
+            >
+              Meus lotes
+            </button>
+          </nav>
+        )}
         {user !== null && (
           <div className="account">
             <span className="account-email" title={user.email}>

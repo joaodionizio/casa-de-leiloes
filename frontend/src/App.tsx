@@ -7,9 +7,10 @@ import {
   type CurrentUser,
 } from './api/auth'
 import { fetchHealth } from './api/health'
-import CatalogSearch from './CatalogSearch'
 import LoginForm from './LoginForm'
-import SiteHeader from './SiteHeader'
+import LotCreation from './LotCreation'
+import MyLots from './MyLots'
+import SiteHeader, { type AuctioneerView } from './SiteHeader'
 
 type HealthState = 'loading' | 'available' | 'unavailable'
 
@@ -31,6 +32,7 @@ function App() {
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const [justLoggedOut, setJustLoggedOut] = useState(false)
+  const [auctioneerView, setAuctioneerView] = useState<AuctioneerView>('create')
 
   useEffect(() => {
     let cancelled = false
@@ -65,10 +67,11 @@ function App() {
   function handleLoggedIn(user: CurrentUser) {
     setSessionNotice(null)
     setJustLoggedOut(false)
+    setAuctioneerView('create')
     setSession({ status: 'authenticated', user })
   }
 
-  // 401 numa rota do catálogo: a sessão acabou (o cookie venceu).
+  // 401 numa rota do leiloeiro: a sessão acabou (o cookie venceu).
   function handleSessionExpired() {
     setSessionNotice('Sua sessão expirou. Entre novamente.')
     setJustLoggedOut(false)
@@ -92,6 +95,8 @@ function App() {
     <div className="app">
       <SiteHeader
         user={session.status === 'authenticated' ? session.user : null}
+        view={auctioneerView}
+        onNavigate={setAuctioneerView}
         loggingOut={loggingOut}
         logoutError={logoutError}
         onLogout={handleLogout}
@@ -117,7 +122,22 @@ function App() {
         )}
         {session.status === 'authenticated' &&
           (session.user.role === 'AUCTIONEER' ? (
-            <CatalogSearch onSessionExpired={handleSessionExpired} />
+            <>
+              {/* "Criar lote" fica montado e oculto em "Meus lotes", para não perder
+                  a busca nem o rascunho; "Meus lotes" monta a cada abertura. */}
+              <div hidden={auctioneerView !== 'create'}>
+                <LotCreation
+                  onSessionExpired={handleSessionExpired}
+                  onShowMyLots={() => setAuctioneerView('mine')}
+                />
+              </div>
+              {auctioneerView === 'mine' && (
+                <MyLots
+                  onSessionExpired={handleSessionExpired}
+                  onCreateLot={() => setAuctioneerView('create')}
+                />
+              )}
+            </>
           ) : (
             <h1 className="visually-hidden">Casa de Leilões</h1>
           ))}

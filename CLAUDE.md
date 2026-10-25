@@ -171,6 +171,7 @@ implementação story a story. PRD dispensado: o enunciado já é a especificaç
 2. Validar `Origin` no handshake do WebSocket?
 3. `bidder_alias` persistido na linha do lance ou recalculado na auditoria?
 4. Ordem na inicialização: catch-up antes do seed e antes do tráfego normal.
+   (Demo aberto e trava do seed resolvidos na 2.4; o catch-up fica para a 4.4.)
 5. Limite exato dos 2 min: `now` fixo; caminho real com margens.
 6. Só quem de fato fechou o lote publica o evento de encerramento.
 7. Smoke test: "API indisponível" exige falha simulada.
@@ -179,7 +180,8 @@ implementação story a story. PRD dispensado: o enunciado já é a especificaç
 10. Nomes ainda não definidos: rota do WebSocket, rotas do comprovante e do
     link, segredo do JWT, ferramenta de teste do front. (Resolvidos na 1.2:
     `compose.yaml` na raiz, Python 3.13, PostgreSQL 18, `DATABASE_URL` e
-    `TEST_DATABASE_URL`.)
+    `TEST_DATABASE_URL`. Ferramenta de teste do front, em parte na 2.4:
+    `node --test` para lógica pura.)
 
 ## Armadilhas conhecidas
 (Cada problema que custar tempo vira uma linha aqui.)

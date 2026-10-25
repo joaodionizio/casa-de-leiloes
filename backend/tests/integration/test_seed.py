@@ -1,19 +1,45 @@
-"""Seed idempotente das contas de demonstração (Story 2.2, CAP-1)."""
+"""Seed idempotente das contas e do lote demo (Story 2.2, CAP-1; Story 2.4, CAP-9)."""
 
+import ast
+import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import uuid
+from datetime import timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app import artic, catalog, lots, seed
 from app.config import BACKEND_DIR
 from app.security import hash_password, verify_password
-from app.seed import DEMO_PASSWORD, SEED_USERS, seed_users
+from app.seed import (
+    DEMO_ARTWORK_PATH,
+    DEMO_AUCTIONEER_ID,
+    DEMO_LOT_DURATION,
+    DEMO_MIN_INCREMENT_CENTS,
+    DEMO_PASSWORD,
+    DEMO_STARTING_BID_CENTS,
+    SEED_ADVISORY_LOCK_KEY,
+    SEED_USERS,
+    seed_users,
+)
+from tests.lot_support import (
+    LOT_COLUMNS,
+    count_lots,
+    db_now,
+    insert_lot,
+    lot_rows,
+    statement_recorder,
+)
 
 EXPECTED = {
     "219e37a5-0def-4b26-87d4-b08668f7c112": ("auctioneer@example.com", "AUCTIONEER"),
@@ -165,8 +191,10 @@ def test_module_runs_alone_with_only_database_url(
     assert result.returncode != 42, "o seed importou app.main"
     assert result.returncode == 0, result.stderr
     assert "3 user(s) inserted" in result.stderr + result.stdout
+    assert "demo lot created" in result.stderr + result.stdout
     with db_session_factory() as session:
         assert len(all_rows(session)) == 3
+    assert count_lots(db_session_factory) == 1
 
 
 def test_start_script_runs_migrations_then_seed_then_server() -> None:
@@ -178,3 +206,390 @@ def test_start_script_runs_migrations_then_seed_then_server() -> None:
     ]
     assert order == sorted(order)
     assert "set -eu" in script
+
+
+# --- Story 2.4: lote demo ---
+
+
+def run_full_seed(factory: sessionmaker[Session]) -> tuple[int, bool]:
+    """O que `main()` faz: uma transação, um commit."""
+    with factory() as session:
+        result = seed.run_seed(session)
+        session.commit()
+    return result
+
+
+def demo_count(factory: sessionmaker[Session]) -> int:
+    with factory() as session:
+        return session.execute(
+            text("SELECT count(*) FROM lots WHERE is_demo")
+        ).scalar_one()
+
+
+def stored(row: tuple) -> dict:
+    return dict(zip(LOT_COLUMNS, row, strict=True))
+
+
+def test_demo_constants_match_the_agreed_values() -> None:
+    assert str(DEMO_AUCTIONEER_ID) == "219e37a5-0def-4b26-87d4-b08668f7c112"
+    assert SEED_ADVISORY_LOCK_KEY == 7161131744880846180
+    assert SEED_ADVISORY_LOCK_KEY.to_bytes(8, "big") == b"casaseed"
+    assert DEMO_LOT_DURATION == timedelta(hours=72)
+    assert DEMO_STARTING_BID_CENTS == 10000
+    assert DEMO_MIN_INCREMENT_CENTS == 1000
+
+
+def test_empty_database_gets_users_and_one_open_demo_lot(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    before = db_now(db_session_factory)
+
+    assert run_full_seed(db_session_factory) == (3, True)
+
+    after = db_now(db_session_factory)
+    (row,) = lot_rows(db_session_factory)
+    lot = stored(row)
+    fixture = json.loads(DEMO_ARTWORK_PATH.read_text(encoding="utf-8"))
+    assert lot["is_demo"] is True
+    assert lot["auctioneer_id"] == DEMO_AUCTIONEER_ID
+    assert lot["external_id"] == 27992
+    for key, value in fixture.items():
+        assert lot[key] == value, key
+    assert lot["starting_bid_cents"] == 10000
+    assert lot["min_increment_cents"] == 1000
+    assert lot["starts_at"] == lot["created_at"]
+    assert before <= lot["starts_at"] <= after
+    assert lot["ends_at"] - lot["starts_at"] == timedelta(hours=72)
+
+
+def test_a_second_run_creates_nothing_and_changes_no_column(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    run_full_seed(db_session_factory)
+    before = lot_rows(db_session_factory)
+
+    assert run_full_seed(db_session_factory) == (0, False)
+
+    assert lot_rows(db_session_factory) == before
+
+
+def test_a_closed_demo_stays_exactly_as_it_was_and_a_new_one_is_created(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    db_engine: Engine,
+) -> None:
+    seed_users_only(db_session_factory)
+    now = db_now(db_session_factory)
+    old = insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        starts_at=now - timedelta(days=4),
+        ends_at=now - timedelta(days=1),
+        created_at=now - timedelta(days=4),
+        title="Demo antigo",
+    )
+    before = lot_rows(db_session_factory)
+
+    with statement_recorder(db_engine) as recorder:
+        assert run_full_seed(db_session_factory) == (0, True)
+
+    rows = lot_rows(db_session_factory)
+    assert len(rows) == 2
+    assert [row for row in rows if row[0] == old] == before
+    for statement in recorder.statements:
+        normalized = statement.lstrip().upper()
+        assert not normalized.startswith("UPDATE"), statement
+        assert not normalized.startswith("DELETE"), statement
+        assert "FOR UPDATE" not in normalized
+
+
+def test_several_old_demos_and_one_open_demo_change_nothing(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    seed_users_only(db_session_factory)
+    now = db_now(db_session_factory)
+    for days in (5, 3):
+        insert_lot(
+            db_session_factory,
+            auctioneer_id=DEMO_AUCTIONEER_ID,
+            is_demo=True,
+            starts_at=now - timedelta(days=days + 1),
+            ends_at=now - timedelta(days=days),
+        )
+    insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        ends_at=now + timedelta(hours=1),
+    )
+    before = lot_rows(db_session_factory)
+
+    assert run_full_seed(db_session_factory) == (0, False)
+
+    assert lot_rows(db_session_factory) == before
+
+
+def test_an_open_manual_lot_does_not_count_as_the_demo(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    seed_users_only(db_session_factory)
+    insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=False,
+        ends_at=db_now(db_session_factory) + timedelta(days=1),
+    )
+
+    assert run_full_seed(db_session_factory) == (0, True)
+
+    assert count_lots(db_session_factory) == 2
+    assert demo_count(db_session_factory) == 1
+
+
+@pytest.mark.parametrize(
+    ("offset", "created"),
+    [(timedelta(seconds=5), False), (timedelta(seconds=-5), True)],
+)
+def test_the_boundary_of_open_is_the_database_clock(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    offset: timedelta,
+    created: bool,
+) -> None:
+    seed_users_only(db_session_factory)
+    insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        starts_at=db_now(db_session_factory) - timedelta(days=1),
+        ends_at=db_now(db_session_factory) + offset,
+    )
+
+    assert run_full_seed(db_session_factory) == (0, created)
+
+
+def seed_users_only(factory: sessionmaker[Session]) -> None:
+    run_seed(factory)
+
+
+def test_the_demo_goes_through_the_shared_schedule_rule(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        lots,
+        "resolve_schedule",
+        lambda starts_at, ends_at, now: lots.ScheduleViolation.ENDS_AT_NOT_AFTER_START,
+    )
+
+    with db_session_factory() as session:
+        with pytest.raises(RuntimeError):
+            seed.run_seed(session)
+
+    assert count_lots(db_session_factory) == 0
+    with db_session_factory() as session:
+        assert all_rows(session) == []  # a transação toda foi desfeita
+
+
+def test_the_seed_uses_create_lot_once_with_the_fixture_snapshot(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+    real = seed.create_lot
+
+    def spy(session, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(kwargs)
+        return real(session, **kwargs)
+
+    monkeypatch.setattr(seed, "create_lot", spy)
+
+    run_full_seed(db_session_factory)
+
+    (call,) = calls
+    assert call["is_demo"] is True
+    assert call["snapshot"] == seed.load_demo_artwork()
+    assert call["auctioneer_id"] == DEMO_AUCTIONEER_ID
+
+
+def boom(*args: object, **kwargs: object) -> None:
+    raise AssertionError("o seed não pode falar com o catálogo nem com a rede")
+
+
+def test_the_seed_never_touches_the_catalog_or_the_network(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(lots, "resolve_artwork_for_lot", boom)
+    monkeypatch.setattr(catalog, "get_artwork", boom)
+    monkeypatch.setattr(lots, "get_artwork", boom)
+    monkeypatch.setattr(artic.ArticClient, "search", boom)
+    monkeypatch.setattr(artic.ArticClient, "get_artwork", boom)
+    monkeypatch.setattr(artic.ArticClient, "get_image", boom)
+    monkeypatch.setattr(httpx.Client, "__init__", boom)
+
+    assert run_full_seed(db_session_factory) == (3, True)
+    # A guarda de rede do conftest reprovaria o teste se algum host fosse resolvido.
+
+
+def test_seed_source_does_not_reference_the_catalog_or_http_client() -> None:
+    tree = ast.parse(Path(seed.__file__).read_text(encoding="utf-8"))
+    forbidden = {
+        "resolve_artwork_for_lot",
+        "get_artwork",
+        "ArticClient",
+        "artic_client",
+        "httpx",
+    }
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(alias.name for alias in node.names)
+            names.add((node.module or "").split(".")[-1])
+        elif isinstance(node, ast.Import):
+            names.update(alias.name.split(".")[0] for alias in node.names)
+    assert names & forbidden == set()
+
+
+def test_the_seed_runs_in_read_committed(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    # O algoritmo depende disso: em REPEATABLE READ o segundo seed não veria o demo
+    # que o primeiro acabou de confirmar.
+    with db_session_factory() as session:
+        seed.run_seed(session)
+        isolation = session.execute(text("SHOW transaction_isolation")).scalar_one()
+        session.rollback()
+    assert isolation == "read committed"
+
+
+# --- concorrência ---
+
+
+def wait_for_blocked_advisory_lock(engine: Engine, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    with engine.connect() as connection:
+        while time.monotonic() < deadline:
+            waiting = connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_locks "
+                    "WHERE locktype = 'advisory' AND NOT granted"
+                )
+            ).scalar_one()
+            connection.rollback()
+            if waiting:
+                return
+            time.sleep(0.02)
+    raise AssertionError("o seed não ficou esperando pela trava consultiva")
+
+
+def start_seed_thread(
+    factory: sessionmaker[Session], outcome: list[object]
+) -> threading.Thread:
+    def work() -> None:
+        try:
+            outcome.append(run_full_seed(factory))
+        except BaseException as error:  # noqa: BLE001
+            outcome.append(error)
+
+    thread = threading.Thread(target=work)
+    thread.start()
+    return thread
+
+
+def test_a_seed_waits_for_the_lock_and_then_sees_the_demo_the_holder_created(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    db_engine: Engine,
+) -> None:
+    seed_users_only(db_session_factory)
+    outcome: list[object] = []
+    holder = db_engine.connect()
+    thread: threading.Thread | None = None
+    try:
+        holder.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": SEED_ADVISORY_LOCK_KEY}
+        )
+        thread = start_seed_thread(db_session_factory, outcome)
+        wait_for_blocked_advisory_lock(db_engine)
+        assert outcome == []  # ainda bloqueado
+
+        insert_lot(
+            db_session_factory,
+            auctioneer_id=DEMO_AUCTIONEER_ID,
+            is_demo=True,
+            ends_at=db_now(db_session_factory) + timedelta(days=1),
+        )
+        holder.commit()  # solta a trava
+        thread.join(timeout=15)
+    finally:
+        holder.rollback()
+        holder.close()
+        if thread is not None:
+            thread.join(timeout=15)
+
+    assert outcome == [(0, False)]
+    assert demo_count(db_session_factory) == 1
+
+
+def test_a_seed_waiting_on_the_lock_creates_the_demo_if_the_holder_created_none(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    db_engine: Engine,
+) -> None:
+    seed_users_only(db_session_factory)
+    outcome: list[object] = []
+    holder = db_engine.connect()
+    thread: threading.Thread | None = None
+    try:
+        holder.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": SEED_ADVISORY_LOCK_KEY}
+        )
+        thread = start_seed_thread(db_session_factory, outcome)
+        wait_for_blocked_advisory_lock(db_engine)
+        holder.rollback()  # solta a trava sem criar nada
+        thread.join(timeout=15)
+    finally:
+        holder.rollback()
+        holder.close()
+        if thread is not None:
+            thread.join(timeout=15)
+
+    assert outcome == [(0, True)]
+    assert demo_count(db_session_factory) == 1
+
+
+@pytest.mark.parametrize("attempt", range(5))
+def test_two_free_running_seeds_create_exactly_one_demo(
+    db_session_factory: sessionmaker[Session], clean_users: None, attempt: int
+) -> None:
+    barrier = threading.Barrier(2)
+    outcome: list[object] = []
+
+    def work() -> None:
+        try:
+            barrier.wait(timeout=10)
+            outcome.append(run_full_seed(db_session_factory))
+        except BaseException as error:  # noqa: BLE001
+            outcome.append(error)
+
+    threads = [threading.Thread(target=work) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert all(isinstance(item, tuple) for item in outcome), outcome
+    assert sorted(item[1] for item in outcome) == [False, True]  # type: ignore[index]
+    assert sum(item[0] for item in outcome) == 3  # type: ignore[index]
+    assert demo_count(db_session_factory) == 1
+    with db_session_factory() as session:
+        assert len(all_rows(session)) == 3

@@ -30,6 +30,8 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/catalog/artworks",
         "/api/catalog/artworks/{external_id}",
         "/api/catalog/images/{image_id}",
+        "/api/lots",
+        "/api/lots/mine",
     ]
 
 
@@ -161,3 +163,101 @@ def test_image_route_documents_a_jpeg_and_the_real_error_envelope(
     # Rota pública: não documenta 401/403.
     assert "401" not in image["responses"]
     assert "403" not in image["responses"]
+
+
+# --- Story 2.4: lotes ---
+
+LOTS_PATH = "/api/lots"
+MINE_PATH = "/api/lots/mine"
+LOT_FIELDS = sorted(
+    [
+        "id",
+        "external_id",
+        "title",
+        "artist_display",
+        "date_display",
+        "medium_display",
+        "dimensions",
+        "department_title",
+        "artwork_type_title",
+        "credit_line",
+        "source_url",
+        "image_id",
+        "image_url",
+        "starting_bid_cents",
+        "min_increment_cents",
+        "starts_at",
+        "ends_at",
+        "created_at",
+    ]
+)
+
+
+def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
+    paths = list(api_only.get("/api/openapi.json").json()["paths"])
+
+    assert paths[-2:] == [LOTS_PATH, MINE_PATH]
+    assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
+
+
+def test_create_lot_documents_201_and_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    operation = api_only.get("/api/openapi.json").json()["paths"][LOTS_PATH]["post"]
+
+    assert operation["responses"]["201"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/LotResponse")
+    for status in ("401", "403", "422", "503"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/CreateLotRequest")
+
+
+def test_my_lots_documents_200_and_the_auth_errors(api_only: TestClient) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    operation = paths[MINE_PATH]["get"]
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/MyLotsResponse")
+    for status in ("401", "403"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert "parameters" not in operation  # o dono vem só da sessão
+    assert set(paths[LOTS_PATH]) == {"post"}
+    assert set(paths[MINE_PATH]) == {"get"}
+
+
+def test_lot_schemas_have_exactly_the_contract_fields(api_only: TestClient) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    assert sorted(schemas["CreateLotRequest"]["properties"]) == [
+        "ends_at",
+        "external_id",
+        "min_increment_cents",
+        "starting_bid_cents",
+        "starts_at",
+    ]
+    assert sorted(schemas["CreateLotRequest"]["required"]) == [
+        "ends_at",
+        "external_id",
+        "min_increment_cents",
+        "starting_bid_cents",
+    ]
+    assert schemas["CreateLotRequest"]["additionalProperties"] is False
+    assert sorted(schemas["LotResponse"]["properties"]) == LOT_FIELDS
+    assert sorted(schemas["MyLotsResponse"]["properties"]) == ["items"]
+    assert "HTTPValidationError" not in schemas
+
+
+def test_no_lot_schema_exposes_the_owner_or_the_demo_flag(
+    api_only: TestClient,
+) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    for name in ("CreateLotRequest", "LotResponse", "MyLotsResponse"):
+        properties = set(schemas[name]["properties"])
+        assert {"is_demo", "auctioneer_id", "is_public_domain", "status"}.isdisjoint(
+            properties
+        )

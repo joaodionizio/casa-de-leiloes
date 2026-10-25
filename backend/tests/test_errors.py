@@ -110,6 +110,11 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
             "O catálogo do museu está indisponível no momento. "
             "Tente novamente em instantes."
         ),
+        # Story 2.4: obra que não pode virar lote, emitido só pela criação de lote.
+        "artwork_not_eligible": (
+            "Esta obra não pode virar lote. Só são aceitas obras de domínio "
+            "público com imagem no acervo do museu."
+        ),
     }
 
 

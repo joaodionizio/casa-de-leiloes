@@ -14,6 +14,8 @@ interface ArtworkDetailPanelProps {
   headingRef: RefObject<HTMLHeadingElement | null>
   onRetry: () => void
   onBack: () => void
+  // Abre o formulário de lote com esta obra (Story 2.4); só no estado pronto.
+  onCreateLot?: (artwork: ArtworkDetail) => void
 }
 
 function Field({ label, value }: { label: string; value: string | null }) {
@@ -30,6 +32,7 @@ function ArtworkDetailPanel({
   headingRef,
   onRetry,
   onBack,
+  onCreateLot,
 }: ArtworkDetailPanelProps) {
   const artwork = state.status === 'ready' ? state.artwork : null
   const title = artwork !== null ? (artwork.title ?? 'Sem título') : 'Detalhe da obra'
@@ -107,6 +110,15 @@ function ArtworkDetailPanel({
           <p className="artwork-public-domain">
             <span aria-hidden="true">✓ </span>Domínio público
           </p>
+          {onCreateLot !== undefined && (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => onCreateLot(artwork)}
+            >
+              Criar lote com esta obra
+            </button>
+          )}
           <dl className="artwork-facts">
             <Field label="Data" value={artwork.date_display} />
             <Field label="Técnica" value={artwork.medium_display} />

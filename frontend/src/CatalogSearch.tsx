@@ -4,7 +4,7 @@ import ArtworkDetailPanel from './ArtworkDetailPanel'
 import type { DetailState } from './ArtworkDetailPanel'
 import ArtworkImage from './ArtworkImage'
 import { catalogFailureMessage, fetchArtwork, searchArtworks } from './api/catalog'
-import type { ArtworkSummary, CatalogFailure } from './api/catalog'
+import type { ArtworkDetail, ArtworkSummary, CatalogFailure } from './api/catalog'
 
 // Limite de resultados do servidor (P7): com 20, avisa que há mais para refinar.
 const RESULT_LIMIT = 20
@@ -19,9 +19,13 @@ type MobileView = 'list' | 'detail'
 
 interface CatalogSearchProps {
   onSessionExpired: () => void
+  // Abre o formulário de lote com a obra do detalhe (Story 2.4).
+  onCreateLot: (artwork: ArtworkDetail) => void
+  // Contador: quando aumenta, a busca (de volta à tela) devolve o foco ao detalhe.
+  returnFocus: number
 }
 
-function CatalogSearch({ onSessionExpired }: CatalogSearchProps) {
+function CatalogSearch({ onSessionExpired, onCreateLot, returnFocus }: CatalogSearchProps) {
   const [term, setTerm] = useState('')
   const [termInvalid, setTermInvalid] = useState(false)
   const [search, setSearch] = useState<SearchState>({ status: 'idle' })
@@ -52,6 +56,10 @@ function CatalogSearch({ onSessionExpired }: CatalogSearchProps) {
   useEffect(() => {
     if (detailFocus > 0) headingRef.current?.focus()
   }, [detailFocus])
+
+  useEffect(() => {
+    if (returnFocus > 0) headingRef.current?.focus()
+  }, [returnFocus])
 
   useEffect(() => {
     if (listFocus === 0) return
@@ -299,6 +307,7 @@ function CatalogSearch({ onSessionExpired }: CatalogSearchProps) {
           headingRef={headingRef}
           onRetry={handleRetryDetail}
           onBack={handleBack}
+          onCreateLot={onCreateLot}
         />
       </div>
     </section>

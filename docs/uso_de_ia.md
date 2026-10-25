@@ -276,3 +276,72 @@ Usei o Claude Code com Opus para validar o contrato real da AIC e escrever a spe
 - O L1 (guarda de rede e `HTTPS_PROXY`/`ALL_PROXY`) permaneceu deferred e o D1 (chamadas repetidas de mídia à AIC, sem cache) permaneceu como limitação aceita, ambos no `deferred-work.md`.
 - Aprovei a Story 2.3 e ela foi marcada `done`. Não houve nova execução de verify: vale o último resultado registrado, `./verify.sh` exit 0, 763 passed, 1 warning.
 
+## Story 2.4 — Criação de lotes pelo leiloeiro e lote demo semeado
+
+Usei o Claude Code com Opus para escrever a spec (P1 a P9 decididas por mim, mais a aprovação final com a Q1 e os ajustes A2 a A4) e com Sonnet para implementar, em sessão separada, pelo `bmad-build`. O processo de front-end seguiu o `FRONTEND-WORKFLOW.md`. Antes do build, dei uma orientação explícita: o enunciado do desafio avisa que as regras de lance e os requisitos de back-end são o que mais pesa, então esta story, que ainda não tem lance, devia tratar o schema, o dinheiro, o tempo e as transações como base das regras futuras.
+
+### O que a IA fez
+
+- Escreveu a migration `0003` (`lots`, FK `RESTRICT`, CHECKs de dinheiro, tempo, `external_id` e `image_id`), o módulo `app/lots.py` (modelo, regra pura que recebe `now`, `resolve_artwork_for_lot` para a AIC, `create_lot` sem rede, as duas rotas), o `artwork_not_eligible`, o seed do lote demo com trava consultiva e fixture offline, e o front (navegação, formulário, revisão, confirmação, "Meus lotes", `money.ts` e seu teste com `node --test`).
+- Escreveu 206 testes novos no back-end (migration e tipos reais pelo `information_schema`, regra pura, criação, política, atomicidade, "Meus lotes", seed e concorrência do seed) e 14 no front.
+- Provou que dois testes importantes não eram vazios, por mutação temporária (removeu o `rollback()` antes da AIC e a trava do seed, viu os testes falharem, restaurou e conferiu): o de `pg_stat_activity` e os de concorrência determinística.
+- Conferiu a pilha real fora do `pytest`: o seed dentro da imagem Docker (a fixture está lá) e as rotas com uvicorn e login de verdade. Fez uma chamada real `POST /api/lots` à AIC, uma só, fora do `verify`.
+
+### O que eu decidi
+
+- Todas as decisões de produto e de contrato: o servidor reconsulta a AIC e é a única fonte do snapshot (P1), sem coluna de estado (P3), "começar agora" pela hora do banco e sem duração mínima (P4), dinheiro em centavos com a mesma faixa técnica na API, no serviço, no front e no banco (P5 e A4), um só código para obra inelegível (P6), sem `Idempotency-Key` (P7), seed offline e idempotente com 72 h, R$ 100,00 e R$ 10,00 (P8), `GET /api/lots/mine` sem limite (P9 e A2), e a separação entre resolver a obra na AIC e criar o lote, que o seed nunca cruza (A3). O agente não leu `.env*`.
+
+### Alternativas descartadas
+
+- As listadas em cada decisão da story: front enviando metadados da obra, `status` persistido, teto comercial de R$ 100 milhões, `Idempotency-Key`, limite de 100 em "Meus lotes", `TRUNCATE users CASCADE`, React Router e Vitest com Testing Library.
+
+### Limitações e observações
+
+- Não houve navegador nesta sessão: o formulário, a revisão, a confirmação, "Meus lotes", o foco entre etapas, 320 px e o teclado não foram vistos. Componentes não têm teste automatizado; só `money.ts` tem. O roteiro manual (`test-plan.md` §9) e o `bmad-code-review` são meus e ainda não foram feitos.
+- Os testes de corrida livre do seed passam mesmo sem a trava; quem prova a trava são os dois deterministas. Registrado na story.
+- Ajustei um detalhe da spec: o regex do horário aceita o offset como opcional, para "sem fuso" sair como `timezone_aware` e não como `datetime_format`, que é o que o plano de testes pedia. O comportamento é o do plano.
+- Comandos executados: `./verify.sh` completo, exit 0, 969 testes do back-end (763 antes da story), `npm test` com 14 testes, ESLint, `tsc --noEmit` dos dois projetos, build do Vite e `docker build`. Sem git e sem deploy. A story e o `sprint-status.yaml` ficam em `review`.
+
+### Bug de runtime no primeiro teste manual da 2.4 (tela branca)
+
+- Meu primeiro teste manual abriu `http://localhost:5173` e a tela ficou toda branca. O console apontou `lotTime.ts:21` com `Uncaught TypeError: Invalid option : option`. Lint, `tsc --noEmit`, build do Vite e o `verify` completo tinham passado: nenhum deles executa o módulo, e a IA não tinha como ver isso sem navegador.
+- Causa: a IA escreveu um `Intl.DateTimeFormat` com `dateStyle`, `timeStyle` e `timeZoneName` juntos, combinação que o `Intl` recusa. Como a construção ficava no nível do módulo, o erro estourava na importação, antes do React renderizar. Era a combinação que a própria spec descrevia, copiada sem ser executada.
+- Eu pedi a correção mínima antes de continuar o roteiro manual, sem mexer na regra temporal do back-end, em P4 nem no fuso de persistência. A IA reproduziu o erro no Node, trocou as opções por campos explícitos (dia, mês abreviado, ano, hora, minuto e `timeZoneName`), mantendo o fuso e o visual, e escreveu `lotTime.test.ts` (`node:test`, sem dependência nova). Conferiu por mutação temporária que o teste pega o bug (com o código antigo, a execução falha com o mesmo `TypeError`) e restaurou a correção.
+- Ao escrever o teste, a IA viu que o `Date` do V8 faz rollover de `2026-02-30T10:00` em vez de recusar; o `datetime-local` não emite essa data, então registrou como observação e não alterou a função.
+- Comandos executados: `npm test` (22 testes, 22 passaram), `npm run lint`, `npm run typecheck`, `npm run build` e `./verify.sh` completo. Sem git e sem deploy. A story e o `sprint-status.yaml` continuam em `review`; o roteiro manual recomeça do passo 1.
+
+### Ajustes depois do teste manual da 2.4 (25/10/2026)
+
+- Observei no navegador, e registro só isso: a API local deu 500 ao criar lote porque meu banco de desenvolvimento estava na revisão `0002` e o `head` era `0003`; era ambiente desatualizado, não falha da migration, e depois de aplicar o schema o fluxo funcionou. Vi as validações de dinheiro, as de início e término no passado, a revisão, a criação real até "Lote criado", o celular a 375 px, o `BIDDER` sem controles do leiloeiro e o anônimo no login. Ainda não observei o HTTP 201 na aba Rede, o payload exato, 320 px, o teclado nem o refresh de "Meus lotes".
+- Pedi à IA que investigasse uma captura em que a revisão mostrava um término de 23/10 num teste feito em 25/10. Resultado real: o bug existia. O "Revisar lote" já reexecutava a checagem com o valor atual, mas `checkDraft` nunca comparava com "agora", porque a spec dizia para o front não usar o relógio do navegador; a mensagem do formulário veio do servidor, depois da revisão. A IA provou isso com uma sonda antes de corrigir.
+- Decidi que o front valide de forma preventiva, com o relógio do navegador (`now` injetado), mantendo o servidor como autoridade final; é uma revisão consciente da frase da spec. A IA implementou, escreveu `lotDraft.test.ts` com `now` fixo e conferiu por mutação temporária que os testes falham sem a comparação (8 falhas), e que passam restaurado. Também precisou acrescentar a extensão `.ts` aos imports de `lotDraft.ts` para ele rodar no Node.
+- Pedi melhorias de UX sem biblioteca: uma confirmação explícita de data e hora (botão "Confirmar data e hora"; removida depois, veja a próxima seção) e, no dinheiro, "Digite o valor em reais.", exemplos e "Valor reconhecido". Não mudei layout, API, `MAX_CENTS` nem back-end.
+- Limitações: o roteiro manual continua meu; a tela de confirmação, o foco depois de confirmar e o botão no celular só valem depois do meu reteste. Comandos executados: `npm test` (37 testes, todos passaram), lint, typecheck, build e `./verify.sh` completo (exit 0, 969 testes do back-end); detalhes na story. Sem git, sem deploy e sem smoke externo. A story e o `sprint-status.yaml` continuam em `review`.
+
+### Último ajuste de UX da 2.4 (25/10/2026)
+
+- Observei no reteste, e registro só isso: o `POST /api/lots` voltou HTTP 201 na aba Rede; a resposta mostrou valores em centavos coerentes com a interface; a validação preventiva passou a impedir data passada na revisão; o "Valor reconhecido" funcionou; a criação real continuou funcionando; o celular a cerca de 375 px seguiu utilizável. Não conferi o payload exato na aba Payload, nem 320 px, nem o teclado.
+- Decidi remover o botão "Confirmar data e hora" que eu mesmo tinha pedido: era para contornar o desconforto do seletor nativo do Edge, e sem substituir o componente inteiro não dá para pôr um botão dentro dele; uma etapa artificial de confirmação não valia manter. "Revisar lote" passa a ser a confirmação natural. A IA removeu o botão, o estado de "confirmado" e a regra de exigi-lo, e preservou os testes do bug da data passada (refez a mutação: 9 falhas sem a comparação com `now`, 13 passando restaurado).
+- Decidi que `655.3` seja recusado com uma dica, não reinterpretado: "Use vírgula para os centavos. Ex.: 655,30." A IA acrescentou o erro `dot_decimal` e os testes, e simplificou a ajuda dos campos para "Digite o valor em reais. Use vírgula para centavos. Ex.: 5,50 ou 1.250,00."; o "Valor reconhecido" continua confirmando a interpretação.
+- Nada mudou no back-end. Comandos executados: ver a story. Sem git, sem deploy e sem smoke externo. A story e o `sprint-status.yaml` continuam em `review`.
+
+### Feedback monetário inválido (25/10/2026)
+
+- O meu reteste manual mostrou que `333.55` fazia sumir o "Valor reconhecido", mas sem nenhum erro específico: parecia só "sem reconhecimento". Pedi feedback vermelho no mesmo lugar do verde.
+- A IA ajustou o UX: um único espaço de feedback, com "✓ Valor reconhecido" quando válido e "✕" com a mensagem quando inválido, e a dica da vírgula só para o formato de ponto decimal, com o exemplo vindo do que foi digitado (`333.55` → `333,55`). O ponto como milhar válido continua aceito. Lógica financeira, API e `MAX_CENTS` não mudaram.
+- A IA avisou que `10.999` é milhar válido em pt-BR (R$ 10.999,00) e manteve aceito, recusando `10,999`; fica para eu confirmar. Sem evidência manual nova até o meu reteste final. Comandos executados: ver a story. Sem git, sem deploy e sem back-end. A story e o `sprint-status.yaml` continuam em `review`.
+
+### Primeiro code review da 2.4 (25/10/2026)
+
+- O primeiro `bmad-code-review` (Opus) achou 0 BLOCKER, 0 HIGH e 0 MEDIUM, mais L1 (bug LOW), L2 (acessibilidade LOW), L3 (documentação LOW) e D1 (contradição documental). O reviewer rodou o `./verify.sh` (exit 0, 969 testes do back-end, 39 do front). Os subagentes do review não rodaram por limite 429: o Opus principal fez o review completo e executou o `verify`. Não houve review multiagente.
+- Aprovei corrigir L1, L2, L3 e decidi corrigir o D1 antes do fechamento. L1: um horário com offset que não cabe em UTC (`9999-12-31T23:00:00-05:00`) virava 500 depois da chamada à AIC; a IA reproduziu, moveu a invariante para o tipo `ApiDatetime` (recusa com `datetime_format`, 422, sem chamar a AIC) e provou os testes por mutação temporária (8 falhas com o `OverflowError` real sem o validador). Um dos casos de teste que a própria IA escreveu tinha a conta errada (`19:00:01-04:59` cabe em UTC), e ela corrigiu a entrada, não o comportamento. L2: removeu o `aria-live` do feedback monetário e conferiu o render real de `333.33` (vermelho, com a dica da vírgula e `aria-describedby`). L3 e D1: atualizou README, `ARQUITETURA.md` e a spec (a comparação com o relógio do navegador é só preventiva; o PostgreSQL é a autoridade final) e achou na spec mais trechos que os ajustes anteriores tinham deixado velhos, inclusive o `Intl.DateTimeFormat` do bug da tela branca.
+- A IA afirmou que não havia nada em `deferred-work.md` para L1, L2, L3 ou D1; o re-review mostrou que a entrada do D1 da 2.4 estava lá (veja abaixo). Comandos executados: ver a story. Sem git, sem deploy e sem smoke externo. A story e o `sprint-status.yaml` continuaram em `review`.
+
+### Re-review final da 2.4 (25/10/2026)
+
+- Pedi um re-review direcionado (Opus, sessão nova), só de L1, L2, L3, D1, das regressões e da sincronização documental, sem refazer o review inteiro, sem git, sem deploy e sem alterar código. Resultado: 0 BLOCKER, 0 HIGH, 0 MEDIUM.
+- O que a IA conferiu: L1 no tipo `ApiDatetime` (recusa no Pydantic, antes da AIC, sem `try/except` no handler; os 16 testes novos cobrem a recusa nos dois campos, `fake.requests == []`, zero linhas e os extremos que ainda cabem); L2 sem `aria-live`, com `aria-describedby`, `aria-invalid` e texto além da cor, e o parser no Node (`333.33` com a dica da vírgula; `10.999` válido como R$ 10.999,00 e `10,999` recusado, como eu decidi); L3 no README e no `ARQUITETURA.md`; D1 na spec, com o AD-6 intacto. Rodou o `./verify.sh` de novo: exit 0, 985 testes do back-end, 39 do front, build e `docker build`.
+- A IA achou resíduos só de documentação, LOW, e corrigiu no fechamento: a entrada do D1 da 2.4 ainda pendente em `deferred-work.md` (marcada como resolvida, sem apagar; o D1 da 2.3 ficou intacto), a linha de testes de componentes que dizia "só `money.ts`", os itens do "Review Findings" da story ainda abertos, a atribuição errada do caso de teste neste arquivo e a dica antiga do campo de dinheiro na spec.
+- Evidência manual: considerei só o que vi (listado na story). Não observei o payload exato do POST, 320 px, o teclado nem o refresh de "Meus lotes".
+- Story 2.4 e a linha dela no `sprint-status.yaml` marcadas como `done`. A 2.5 não foi tocada. O commit é meu; sem deploy.
+

@@ -35,6 +35,9 @@ CSRF_ORIGIN_MISMATCH = "csrf_origin_mismatch"
 INVALID_CREDENTIALS = "invalid_credentials"
 # Catálogo do museu fora do ar (Story 2.3): sai só das rotas do catálogo, com 503.
 CATALOG_UNAVAILABLE = "catalog_unavailable"
+# Obra que não pode virar lote (Story 2.4, P6): inexistente, fora do domínio público
+# ou sem imagem. Um código só: o motivo interno vai ao log, nunca ao cliente.
+ARTWORK_NOT_ELIGIBLE = "artwork_not_eligible"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -54,6 +57,10 @@ MESSAGES = {
     CATALOG_UNAVAILABLE: (
         "O catálogo do museu está indisponível no momento. "
         "Tente novamente em instantes."
+    ),
+    ARTWORK_NOT_ELIGIBLE: (
+        "Esta obra não pode virar lote. Só são aceitas obras de domínio "
+        "público com imagem no acervo do museu."
     ),
 }
 

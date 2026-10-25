@@ -35,6 +35,9 @@ EXPECTED_POLICIES = {
     ("/api/catalog/artworks/{external_id}", "http"): AccessPolicy.AUCTIONEER,
     # Mídia de obras em domínio público; a vitrine pública da 2.5 a usa também.
     ("/api/catalog/images/{image_id}", "http"): AccessPolicy.PUBLIC,
+    # Story 2.4: criar lote e listar os próprios lotes são do leiloeiro.
+    ("/api/lots", "http"): AccessPolicy.AUCTIONEER,
+    ("/api/lots/mine", "http"): AccessPolicy.AUCTIONEER,
     ("/api/infra-check/ws", "websocket"): AccessPolicy.PUBLIC,
 }
 SPA_POLICY = {("/{full_path:path}", "http"): AccessPolicy.PUBLIC}

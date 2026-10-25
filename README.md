@@ -41,7 +41,8 @@ cd backend && uv run python -m app.seed
 ```
 
 O seed é idempotente: cria só as contas que faltam e nunca altera uma conta que já
-existe (nem o hash da senha). Veja "Contas de demonstração".
+existe (nem o hash da senha). Também garante um lote demo aberto (veja "Lotes").
+Veja "Contas de demonstração".
 
 Rodar os testes (o banco `_test` é recriado a cada sessão) e a verificação completa:
 
@@ -54,6 +55,12 @@ O `./verify.sh` fornece valores locais padrão para `DATABASE_URL`,
 `TEST_DATABASE_URL` e `APP_ORIGIN` (`http://localhost:5173`) quando eles não estão
 definidos no ambiente; valores já exportados no shell têm precedência. Por isso o verify não depende de
 `backend/.env`.
+
+O `verify` roda, em ordem e parando na primeira falha: Ruff (lint e formato),
+`pytest` (inclui a integração em PostgreSQL real), ESLint, `tsc --noEmit`,
+`npm test` (testes da lógica pura do front, `node --test`, sem dependência nova: dinheiro, horários e a checagem do rascunho do lote), o
+build do Vite e o `docker build`. Para rodar só os testes do front:
+`cd frontend && npm test`.
 
 Recriar o volume do zero (apaga os dois bancos; o script de criação só roda com
 volume vazio):
@@ -279,8 +286,8 @@ curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: application/json' -d '{}
 ## Catálogo do Art Institute of Chicago
 
 O leiloeiro (`AUCTIONEER`) escolhe a obra que vai virar lote num catálogo real de
-domínio público. Esta etapa só **busca e mostra**: não cria lote nem grava nada no
-banco (a criação vem na Story 2.4).
+domínio público. A busca e o detalhe só **leem e mostram**: não gravam nada no banco.
+Quem cria o lote a partir da obra escolhida é `POST /api/lots` (veja "Lotes").
 
 - `GET /api/catalog/artworks?q=termo`: até 20 obras mais relevantes, só
   `is_public_domain=true` e com imagem. Sem paginação. O termo tem de 1 a 100
@@ -344,6 +351,60 @@ passarem: busca (e termo sem correspondência → 0), detalhe, `is_public_domain
 indisponível. Este último é uma falha simulada e determinística: o mesmo cliente
 apontado para `127.0.0.1:9`. Não usa banco, login nem segredo e não grava nada.
 
+## Lotes
+
+O leiloeiro cria um lote a partir de uma obra do catálogo e acompanha os seus em
+"Meus lotes". Valores em **centavos inteiros** (`BIGINT`, sufixo `_cents`), horários
+em `TIMESTAMPTZ`, tudo no PostgreSQL. Depois de criado, o lote não depende mais da AIC
+para nenhum dado de negócio; só a imagem continua vindo do museu, pelo proxy da nossa
+origem.
+
+**Criar** (`POST /api/lots`, só `AUCTIONEER`): o corpo leva `external_id`,
+`starting_bid_cents`, `min_increment_cents`, `starts_at` (opcional) e `ends_at`.
+Qualquer outro campo, como `title`, `image_id` ou `auctioneer_id`, é recusado com 422.
+O servidor **consulta a AIC de novo** e grava o que ele mesmo obteve (11 campos da obra,
+sem `image_url` e sem bytes de imagem), então editar o corpo no DevTools não adultera o
+snapshot. O dono do lote é sempre o usuário da sessão. Respostas: `201` com o lote;
+`422 artwork_not_eligible` (obra inexistente, fora do domínio público ou sem imagem, sem
+dizer qual); `503 catalog_unavailable` (AIC fora: nada é gravado); `422
+validation_error` com `details` para dinheiro e horários; 401 sem login e 403 para
+`BIDDER`, ambos sem chamar a AIC. A chamada à AIC acontece **antes** da transação de
+escrita; a transação só lê o relógio do banco, insere e confirma.
+
+**Dinheiro:** de `1` a `9007199254740991` centavos (`Number.MAX_SAFE_INTEGER`, o maior
+inteiro que o JavaScript representa sem perda; limite técnico, não comercial, ou seja,
+R$ 90.071.992.547.409,91). A mesma faixa vale na API, no serviço, no front e nas CHECKs
+do banco. Número com casa decimal, texto ou booleano é recusado. Na tela, o valor é
+digitado em reais (`10`, `1234,56`, `1.234,56`) e convertido para centavos por texto,
+sem `float`; a revisão mostra o valor formatado a partir dos centavos.
+
+**Horários:** ISO 8601 com fuso obrigatório (`Z` ou `-03:00`); a resposta sai sempre em
+UTC com `Z`. `starts_at` ausente ou `null` significa "assim que eu publicar": vale a hora
+do **PostgreSQL** (`clock_timestamp()`), nunca a do navegador. Início agendado precisa
+ser futuro; o término precisa ser posterior ao início efetivo. Não há duração mínima nem
+horizonte máximo.
+A tela também confere, só de forma preventiva e com o relógio do navegador, que o término
+não passou e que um início agendado é futuro; o servidor repete a regra com a hora do banco
+e é quem decide. "Revisar lote" revalida os horários antes da revisão.
+No dinheiro, `655.3` é recusado com a dica de usar vírgula (`655,30`): o ponto só vale como
+milhar.
+
+**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): todos os lotes do leiloeiro da
+sessão, do mais recente para o mais antigo, sem paginação e sem limite. É leitura pura
+(só `SELECT`), não consulta a AIC e não calcula "ao vivo", "agendado" nem "encerrado":
+a fase do lote vem na Story 2.5.
+
+### Lote demo
+
+`python -m app.seed` (rodado antes do servidor pelo `start.sh`) garante um lote demo
+aberto: a obra 27992 ("A Sunday on La Grande Jatte — 1884"), de uma fixture versionada
+em `backend/app/seed_data/demo_artwork.json`, **sem consultar a AIC**. Começa na hora do
+banco e dura 72 horas, com lance inicial de R$ 100,00 e incremento de R$ 10,00, ligado ao
+leiloeiro semeado. "Aberto" quer dizer `is_demo` e `ends_at` no futuro. Se já existe um
+demo aberto, nada é criado; se todos encerraram, nasce um novo. O seed só faz `INSERT`
+em `lots`: nunca altera nem apaga um lote antigo. Uma trava consultiva do PostgreSQL
+(`pg_advisory_xact_lock`) faz dois seeds simultâneos criarem no máximo um demo.
+
 ## Erros e proteção das escritas
 
 Todo erro da API tem o mesmo formato JSON: `status` (igual ao status HTTP),
@@ -399,6 +460,25 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   e a interface sugere tentar outro termo.
 - A imagem da obra pode falhar (bloqueio do IIIF, 429, indisponibilidade) sem afetar
   os dados: aparece o placeholder e o resto continua.
+- Criar um lote **depende da AIC** (o servidor reconfere a obra): com o museu fora do
+  ar, `POST /api/lots` responde 503 e nenhum lote é criado. Os lotes já criados e o
+  seed não dependem dela.
+- Não há deduplicação de envio no servidor. Se a rede cair depois de o servidor gravar
+  o lote, a tela diz que não foi possível confirmar e manda conferir "Meus lotes" antes
+  de tentar de novo; repetir às cegas pode criar dois lotes. A mesma obra também pode
+  estar em vários lotes.
+- Um lote de duração mínima é aceito (basta o término ser posterior ao início): um lote
+  de um segundo já nasce dentro da janela de anti-sniping de 2 minutos.
+- "Começar agora" usa a hora do servidor; um início agendado "daqui a poucos segundos"
+  pode ser recusado se, ao chegar, o servidor já considerar que passou.
+- O lote demo vencido só é substituído na próxima inicialização do serviço (o seed roda
+  no boot), então, entre o fim das 72 horas e o próximo boot, pode não haver demo
+  aberto. Crie um lote para demonstrar.
+- Os valores são limitados a R$ 90.071.992.547.409,91 por limite técnico (inteiro seguro
+  do JavaScript), não comercial.
+- "Meus lotes" lista todos os lotes, sem paginação, e cada miniatura é uma chamada do
+  servidor à AIC (sem cache), então uma lista muito longa pode esbarrar no limite de
+  60 req/min e mostrar o placeholder.
 - Cada imagem exibida custa uma chamada do servidor à AIC (sem cache): uma busca com
   20 resultados dispara até 20, contra o limite de 60 req/min por IP. Excedido, o
   restante das imagens cai no placeholder até a janela passar.

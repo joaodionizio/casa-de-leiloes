@@ -747,6 +747,15 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    criar lances, eles passam pelo serviço de domínio, para a cadeia e a âncora
    saírem válidas. Verificar no primeiro deploy se o catch-up não atrapalha a
    inicialização do Render.
+   **Resolvida em parte na Story 2.4 (24/10/2026):** decidi que o lote demo
+   realmente aberto é `is_demo` e `ends_at > clock_timestamp()`, lido depois de
+   `pg_advisory_xact_lock`, que serializa dois seeds simultâneos; a ordem continua
+   migrations → seed → servidor (`start.sh`). O catch-up de fechamento da 4.4 entra
+   **antes** do seed, e a 3.6 acrescenta "e não cancelado" ao predicado. Um demo
+   vencido e ainda não liquidado conta como encerrado (o seed cria outro).
+   Descartei `SELECT ... FOR UPDATE` (não há linha para travar), a trava de sessão e
+   `pg_try_advisory_lock` com desistência. Continua aberto: o catch-up em si (4.4) e
+   a verificação no primeiro deploy com ele.
 5. **Limite exato dos 2 minutos.** O AD-26 pede esse limite nos testes de
    integração com o relógio real, mas o instante exato só é reproduzível com
    `now` injetado. Defino: limite exato em teste com `now` fixo; caminho real com
@@ -783,6 +792,12 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
     comprovante e do link compartilhável e a ferramenta de teste do front-end.
     Detalhes e alternativas descartadas em
     `_bmad-output/implementation-artifacts/2-2-login-papéis-e-política-de-acesso.md`.
+    **Resolvido em parte na Story 2.4 (24/10/2026), ferramenta de teste do
+    front-end:** decidi `node:test` nativo do Node 24, com `npm test` como etapa do
+    `verify`, só para lógica pura sem DOM (hoje, o dinheiro em `money.ts`, os
+    horários em `lotTime.ts` e a checagem do rascunho do lote em `lotDraft.ts`). Descartei Vitest com Testing Library: dependência nova para um
+    arquivo pequeno. Componentes seguem sem teste automatizado. Continuam abertos: a
+    rota do WebSocket da sala e as rotas do comprovante e do link compartilhável.
 
 ## Pontos de atenção (consequências, não decisões)
 
@@ -809,6 +824,12 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- Story 2.4 (24/10/2026): Questão 4 resolvida em parte (demo realmente aberto, trava
+  consultiva, ordem na inicialização) e Questão 10 resolvida em parte (ferramenta de
+  teste do front-end para lógica pura). Nenhuma AD alterada. As decisões da story
+  (P1 a P9, D1 a D14, Q1 e A2 a A4) ficam em
+  `_bmad-output/implementation-artifacts/2-4-criação-de-lotes-pelo-leiloeiro-e-lote-demo-semeado.md`.
 
 - AD-22: consequência técnica revisada na Story 2.3 (24/10/2026). O hotlink direto do
   navegador deu 403 (Cloudflare) no teste manual; passo a servir a imagem por proxy

@@ -153,10 +153,24 @@ def db_session_factory(db_engine: Engine) -> sessionmaker[Session]:
 
 @pytest.fixture
 def clean_users(db_engine: Engine, test_database_url: str) -> None:
-    """Esvazia `users` no banco _test antes do teste que grava usuários, pela
-    mesma guarda de banco de teste do reset da sessão."""
+    """Esvazia `lots` e `users` no banco _test antes do teste que grava usuários,
+    pela mesma guarda de banco de teste do reset da sessão.
+
+    `lots` referencia `users` (Story 2.4, D11): o PostgreSQL recusa `TRUNCATE users`
+    sozinho. Os dois vão num comando só, sem `CASCADE`, que esconderia uma tabela nova
+    que referencie `users` sem que o teste soubesse."""
     with db_engine.begin() as connection:
         assert_connection_is_test_database(
             connection, make_url(test_database_url).database or ""
         )
-        connection.execute(text("TRUNCATE users"))
+        connection.execute(text("TRUNCATE lots, users"))
+
+
+@pytest.fixture
+def clean_lots(db_engine: Engine, test_database_url: str) -> None:
+    """Esvazia `lots` no banco _test, pela mesma guarda."""
+    with db_engine.begin() as connection:
+        assert_connection_is_test_database(
+            connection, make_url(test_database_url).database or ""
+        )
+        connection.execute(text("TRUNCATE lots"))

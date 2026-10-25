@@ -561,3 +561,426 @@ a:focus-visible {
     margin-top: 0;
   }
 }
+
+/* Navegação do leiloeiro (Story 2.4): dois destinos que funcionam. Texto com uma
+   linha de apoio, sem pill nem fundo; o item atual leva sublinhado E aria-current,
+   nunca só cor (DESIGN §14). */
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.site-nav-item {
+  padding: 0.25rem 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.site-nav-item:hover {
+  color: var(--color-ink);
+}
+
+.site-nav-item[aria-current='page'] {
+  border-bottom-color: var(--color-brand);
+  color: var(--color-ink);
+}
+
+@media (max-width: 29.99rem) {
+  .site-nav {
+    flex-basis: 100%;
+  }
+}
+
+/* Criação de lote (Story 2.4): obra primeiro, depois campos e divisores. Sem card,
+   sombra nem pill (DESIGN §5). */
+.lot-step {
+  width: 100%;
+}
+
+.lot-step-title {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.lot-step-title:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 4px;
+}
+
+.lot-layout {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.lot-layout > * {
+  min-width: 0;
+}
+
+.lot-artwork p {
+  margin: 0;
+}
+
+.lot-artwork-large .artwork-image-large {
+  max-height: 40vh;
+}
+
+.lot-artwork-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  margin-top: 0.75rem;
+}
+
+.lot-artwork-title {
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.lot-artwork-artist {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  color: var(--color-ink);
+}
+
+.lot-artwork-meta {
+  font-size: 0.9375rem;
+}
+
+.lot-artwork-compact {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.lot-artwork-compact .lot-artwork-text {
+  margin-top: 0;
+}
+
+.lot-artwork-compact .lot-artwork-title {
+  font-size: 1.125rem;
+}
+
+.lot-copy-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.lot-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.lot-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.lot-fieldset > legend {
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.lot-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lot-radio-group > legend {
+  padding: 0;
+  margin-bottom: 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.lot-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.lot-radio input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--color-brand-strong);
+}
+
+.lot-radio input:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 2px;
+}
+
+.money-input {
+  display: flex;
+  align-items: stretch;
+}
+
+.money-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  border: 1px solid var(--color-border);
+  border-right: 0;
+  border-radius: 2px 0 0 2px;
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.money-input input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0 2px 2px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.field input[type='datetime-local'] {
+  max-width: 100%;
+  min-height: 3rem;
+  padding: 0.75rem;
+}
+
+/* Resumo do horário escolhido, discreto, com o fuso. */
+.datetime-chosen {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  color: var(--color-muted);
+}
+
+/* Dica e valor reconhecido do dinheiro. */
+.money-feedback {
+  margin: 0;
+  min-height: 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.money-recognized {
+  color: var(--color-success);
+}
+
+.money-invalid {
+  color: var(--color-danger);
+}
+
+.lot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.lot-form .lot-actions {
+  margin-top: 0;
+}
+
+/* Termos (revisão e confirmação): valores grandes, rótulo pequeno. */
+.lot-terms {
+  display: grid;
+  gap: 1rem 2rem;
+  margin: 0 0 1rem;
+}
+
+.lot-terms > div {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.lot-terms dt {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.lot-terms dd {
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+.lot-money {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lot-failure {
+  margin-bottom: 0.5rem;
+}
+
+.lot-failure .form-error {
+  margin: 0;
+}
+
+.lot-failure .lot-actions {
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 64rem) {
+  .lot-layout {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .lot-layout-artwork {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .lot-terms {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Meus lotes (Story 2.4): lista densa, sem estado nem ação por linha. */
+.my-lots {
+  width: 100%;
+}
+
+.my-lots h1 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.my-lots h1:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 4px;
+}
+
+.my-lots-count {
+  margin: 0 0 1rem;
+}
+
+.lot-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.lot-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 0.875rem;
+  padding: 0.875rem 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.lot-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.lot-row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  color: var(--color-ink);
+}
+
+.lot-row-artist {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.lot-row-facts {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+}
+
+.lot-row-facts > div {
+  min-width: 0;
+}
+
+.lot-row-facts dt {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.lot-row-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lot-money-small {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@media (min-width: 64rem) {
+  .lot-row {
+    grid-template-columns: 4.5rem minmax(14rem, 2fr) repeat(4, minmax(8rem, 1fr));
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .lot-row-facts {
+    display: contents;
+  }
+}

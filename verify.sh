@@ -42,6 +42,9 @@ npm run lint
 echo "=== Frontend: typecheck ==="
 npm run typecheck
 
+echo "=== Frontend: test ==="
+npm test
+
 echo "=== Frontend: build ==="
 npm run build
 
