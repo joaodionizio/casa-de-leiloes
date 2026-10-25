@@ -31,6 +31,10 @@ EXPECTED_POLICIES = {
     ("/api/auth/login", "http"): AccessPolicy.PUBLIC,
     ("/api/auth/logout", "http"): AccessPolicy.PUBLIC,
     ("/api/me", "http"): AccessPolicy.AUTHENTICATED,
+    ("/api/catalog/artworks", "http"): AccessPolicy.AUCTIONEER,
+    ("/api/catalog/artworks/{external_id}", "http"): AccessPolicy.AUCTIONEER,
+    # Mídia de obras em domínio público; a vitrine pública da 2.5 a usa também.
+    ("/api/catalog/images/{image_id}", "http"): AccessPolicy.PUBLIC,
     ("/api/infra-check/ws", "websocket"): AccessPolicy.PUBLIC,
 }
 SPA_POLICY = {("/{full_path:path}", "http"): AccessPolicy.PUBLIC}

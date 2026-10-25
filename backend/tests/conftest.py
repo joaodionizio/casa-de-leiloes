@@ -1,5 +1,7 @@
+import ipaddress
 import os
 import secrets
+import socket
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -31,6 +33,11 @@ COMPOSE_HINT = "Suba o banco com: docker compose up -d --wait postgres"
 
 _test_database_url: str | None = None
 
+# Guarda de rede (Story 2.3, CAP-7): o `verify` nunca fala com a internet. Só
+# loopback resolve; qualquer outro host é anotado aqui e reprova o teste.
+BLOCKED_HOSTS: list[str] = []
+_real_getaddrinfo = socket.getaddrinfo
+
 
 def alembic_config(database_url: str) -> Config:
     config = Config(str(ALEMBIC_INI))
@@ -56,9 +63,43 @@ def reset_test_database(test_url: str) -> None:
     command.upgrade(alembic_config(test_url), "head")
 
 
+def _is_loopback(host: object) -> bool:
+    if host is None:
+        return True
+    name = host.decode() if isinstance(host, bytes) else str(host)
+    if name == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def guarded_getaddrinfo(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+    """Substitui `socket.getaddrinfo`: loopback passa, o resto é anotado e recusado.
+    O libpq (PostgreSQL) resolve em C e não passa por aqui."""
+    if not _is_loopback(host):
+        BLOCKED_HOSTS.append(str(host))
+        raise OSError(f"network access blocked in tests: {host}")
+    return _real_getaddrinfo(host, *args, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def fail_on_external_network() -> Iterator[None]:
+    """Reprova o teste que tentou resolver um host externo, mesmo que o código sob
+    teste tenha transformado a falha em outra resposta (ex.: 503)."""
+    BLOCKED_HOSTS.clear()
+    yield
+    blocked = list(BLOCKED_HOSTS)
+    BLOCKED_HOSTS.clear()
+    if blocked:
+        pytest.fail(f"teste tentou acessar a rede externa: {', '.join(blocked)}")
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Prepara o banco de teste uma vez por sessão; nunca pula, falha com mensagem."""
     global _test_database_url
+    socket.getaddrinfo = guarded_getaddrinfo  # type: ignore[assignment]
     try:
         settings = get_settings()
     except ValidationError as error:

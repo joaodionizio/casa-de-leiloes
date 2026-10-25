@@ -34,7 +34,7 @@ As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + 
 | AD-19 | Fechamento em estratégia dupla: scheduler interno simples + catch-up na inicialização e em operações que já alteram estado (tentativa de lance), sempre pelo serviço do AD-9; leituras nunca liquidam; evento só após commit | Depender só de timer em memória; depender só de uma requisição específica; liquidar em GET por ser derivada do tempo | Depois de um cold start, a inicialização liquida os atrasados; leituras mostram "Encerrado, apurando resultado" |
 | AD-20 | Pseudônimo por lote: `HMAC(PSEUDONYM_SECRET, "{lot_id}:{user_id}")`, exibindo parte do resultado | Pseudônimo global | Mesmo alias no mesmo lote, alias diferente entre lotes |
 | AD-21 | Representação canônica v1 do lance e da âncora (JSON canônico, UTC, 6 casas, sufixo Z, genesis de 64 zeros) | Não registrei | Mesmos bytes e mesmo hash para a mesma entrada, com teste |
-| AD-22 | Imagem: não armazenar bytes; guardar `image_id` e referência IIIF; carregar direto do IIIF; placeholder local se falhar | Baixar e armazenar os bytes | Só a imagem depende do museu; o resto não |
+| AD-22 | Imagem: não armazenar bytes; guardar `image_id` e referência IIIF; placeholder local se falhar. **Transporte revisado em 24/10/2026:** proxy same-origin controlado (`GET /api/catalog/images/{image_id}`) em vez do hotlink direto do navegador | Baixar e armazenar os bytes; hotlink direto (refutado: 403 do Cloudflare) | Só a imagem depende do museu; o resto não |
 | AD-23 | `is_public_domain=true` é filtro obrigatório; snapshot mínimo definido; smoke test com 6 itens | Domínio público apenas como preferência | Só obras de domínio público viram lote |
 | AD-24 | Seed idempotente no boot, IDs fixos, lotes demo marcados, novo lote demo só se todos estiverem encerrados; fixtures versionadas | Não registrei | Cold start não duplica usuários nem altera lotes usados |
 | AD-25 | WebSocket assíncrono sobre SQLAlchemy síncrono em threadpool, Session curta; publicar só após o commit; sem outbox agora | Outbox agora | Morte do processo entre commit e publicação é corrigida pelo snapshot ao reconectar |
@@ -545,6 +545,10 @@ exatamente os mesmos bytes e o mesmo hash.
 **Descartei:** não registrei alternativa para esta decisão.
 
 ### AD-22. Imagem da obra: carregada direto do IIIF
+> **Transporte revisado em 24/10/2026 (Story 2.3):** o hotlink direto do navegador
+> deu 403 e foi trocado por proxy same-origin controlado; veja "Revisão da
+> consequência técnica" no fim deste AD. O texto abaixo é a decisão original.
+
 **Decidi** não baixar nem armazenar os bytes das imagens. Persisto `image_id`, a
 URL/referência IIIF necessária e os metadados/atribuição necessários. O
 front-end carrega a imagem diretamente do IIIF do Art Institute.
@@ -556,6 +560,26 @@ externa pode afetar a imagem, mas nunca torna a vitrine ou a sala inutilizável.
 Documento essa distinção no README.
 
 **Descartei:** baixar e armazenar os bytes das imagens.
+
+**Revisão da consequência técnica (24/10/2026, Story 2.3).** A decisão original
+previa que o navegador carregasse a imagem direto do IIIF (hotlink). O teste manual
+da Story 2.3 refutou essa suposição: toda requisição `default.jpg` do navegador
+recebeu HTTP 403 do Cloudflare da AIC, que exige uma identificação (`User-Agent` e
+`AIC-User-Agent`) que a tag `<img>` não consegue enviar; o mesmo URL pedido pelo
+servidor com esses cabeçalhos devolve 200 `image/jpeg`. O placeholder funcionou, mas
+deixaria todas as obras sem imagem. **Decidi** então ajustar só o transporte, para um
+proxy same-origin controlado: `GET /api/catalog/images/{image_id}`, que busca
+`https://www.artic.edu/iiif/2/{image_id}/full/843,/0/default.jpg` no servidor e
+devolve o JPEG. O que continua valendo: os bytes **não são armazenados nem
+persistidos** (ficam só em memória durante a resposta, sem filesystem, banco ou
+cache), guardo `image_id` e a referência, e a falha da mídia degrada para o
+placeholder local sem afetar o resto. O proxy não é genérico: aceita só `image_id`
+validado (UUID minúsculo), com host, esquema, caminho, tamanho e formato fixos,
+`follow_redirects=False`, teto de tamanho e conferência de tipo e assinatura JPEG; é
+público (`PUBLIC`) por tratar obras de domínio público sem dado de conta e por servir
+também a vitrine pública (Story 2.5). Isto revisa a consequência técnica do AD-22,
+não o domínio da decisão. **Descartei** manter o hotlink (não funciona), baixar e
+guardar as imagens, e um proxy genérico. Detalhes na Story 2.3 (P6.1).
 
 ### AD-23. Domínio público obrigatório e snapshot mínimo
 **Decidi** que, nesta entrega, domínio público é filtro obrigatório, não apenas
@@ -731,6 +755,13 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    execução idempotente que não fez nada não publica.
 7. **Smoke test.** O item "API indisponível" (AD-23) não é verificável contra a
    API real; precisa de falha simulada.
+   **Resolvida na Story 2.3 (24/10/2026):** o smoke test da AIC é o script manual
+   `backend/scripts/smoke_artic.py` (`cd backend && uv run python -m
+   scripts.smoke_artic`), fora do `verify`; a indisponibilidade é a falha
+   controlada e determinística do mesmo cliente apontado para `127.0.0.1:9`
+   (conexão recusada); timeout fica coberto pelos testes com transporte falso;
+   descartei rodar o smoke como `pytest -m smoke` e deixar a indisponibilidade só
+   nos testes com transporte falso. Detalhes na story 2.3.
 8. **Estado transitório nas leituras.** Nome do valor e do campo que representa
    "Encerrado, apurando resultado", e como a leitura o calcula sem alterar estado
    e sem travar o lote (com a hora do banco, coerente com o AD-6).
@@ -778,6 +809,12 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- AD-22: consequência técnica revisada na Story 2.3 (24/10/2026). O hotlink direto do
+  navegador deu 403 (Cloudflare) no teste manual; passo a servir a imagem por proxy
+  same-origin controlado, sem armazenar bytes. Motivação original mantida.
+
+- Questão 7 resolvida na Story 2.3. Nenhuma AD alterada.
 
 - Questão 10: segredo do JWT (`JWT_SECRET`) e rotas de autenticação
   (`/api/auth/login`, `/api/auth/logout`, `/api/me`) resolvidos na Story 2.2.

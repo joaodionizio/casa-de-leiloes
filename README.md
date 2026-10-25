@@ -276,6 +276,74 @@ curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: application/json' -d '{}
   Render.
 - Cold start não observado nesta validação. Não houve espera artificial.
 
+## Catálogo do Art Institute of Chicago
+
+O leiloeiro (`AUCTIONEER`) escolhe a obra que vai virar lote num catálogo real de
+domínio público. Esta etapa só **busca e mostra**: não cria lote nem grava nada no
+banco (a criação vem na Story 2.4).
+
+- `GET /api/catalog/artworks?q=termo`: até 20 obras mais relevantes, só
+  `is_public_domain=true` e com imagem. Sem paginação. O termo tem de 1 a 100
+  caracteres depois de `strip`. O acervo está em inglês.
+- `GET /api/catalog/artworks/{external_id}`: o detalhe com os campos que a Story 2.4
+  vai copiar para o lote. Obra inexistente, fora do domínio público ou sem imagem
+  dá o mesmo `404 not_found`.
+- A busca e o detalhe só aceitam o leiloeiro: sem login, 401; licitante, 403. Nos dois
+  casos a AIC nem é chamada. A resposta nunca é o JSON da AIC, e sempre sai com
+  `Cache-Control: no-store`.
+- O servidor monta a consulta (`bool` com `multi_match`, domínio público e imagem
+  existente como filtros). O termo digitado entra só como valor, nunca como
+  estrutura de consulta. Cada obra recebida é reconferida no servidor antes de
+  sair.
+
+### Identificação enviada à AIC
+
+Toda chamada do servidor à AIC (busca, detalhe e imagem) leva `User-Agent: casa-de-leiloes/1.0` e `AIC-User-Agent:
+casa-de-leiloes (https://casa-de-leiloes-i1xr.onrender.com)`. A documentação
+oficial da AIC recomenda se identificar; nos testes que fiz em 24/10/2026 o
+Cloudflare da AIC devolveu 403 sem identificação adequada. Não é autenticação, não
+há chave nem e-mail. A AIC documenta 60 requisições por minuto por IP anônimo; não
+há cache nem nova tentativa automática.
+
+### Se a AIC cair
+
+A busca e o detalhe respondem `503 catalog_unavailable` (conexão, DNS, timeout de
+3 s de conexão e 5 s de leitura, redirecionamento, 403 do Cloudflare, 429, 5xx,
+JSON inválido ou fora do formato) e a interface mostra "O catálogo do museu não
+respondeu". Login, `/health` e o resto da aplicação seguem normais. Lotes futuros
+não dependem da AIC para os dados (AD-12); só a imagem vem do museu.
+
+### Imagem
+
+O navegador **não** carrega a imagem direto do IIIF: no teste manual de 24/10/2026
+toda requisição `default.jpg` do navegador recebeu HTTP 403 do Cloudflare da AIC
+(a tag `<img>` não envia a identificação). Por isso `image_url` aponta para um proxy
+da nossa própria origem, `GET /api/catalog/images/{image_id}`, que busca
+`https://www.artic.edu/iiif/2/{image_id}/full/843,/0/default.jpg` no servidor, com a
+identificação, e devolve o JPEG. A rota é pública (obras de domínio público, sem dado
+de conta; a vitrine da 2.5 usa as mesmas imagens), aceita só um `image_id` válido
+(UUID minúsculo) e não é um proxy genérico: host, caminho, tamanho e formato são
+fixos, não segue redirecionamento e limita o tamanho. Os bytes **não são
+guardados**: ficam só em memória durante a resposta, sem arquivo, banco nem cache
+(`Cache-Control: no-store`). Falha do IIIF vira 503 `catalog_unavailable` (404 se a
+imagem não existir) e a interface mostra um placeholder local, com título e
+metadados intactos.
+
+### Smoke test contra a AIC real
+
+Fora do `verify` (usa a internet; o `pytest` bloqueia qualquer acesso externo):
+
+```bash
+cd backend
+uv run python -m scripts.smoke_artic
+```
+
+Imprime `PASS` ou `FAIL` para os seis itens do AD-23 e sai com 0 só se todos
+passarem: busca (e termo sem correspondência → 0), detalhe, `is_public_domain=true`
+(com controle negativo), imagem IIIF (e deriva da base fixa), campos usados e API
+indisponível. Este último é uma falha simulada e determinística: o mesmo cliente
+apontado para `127.0.0.1:9`. Não usa banco, login nem segredo e não grava nada.
+
 ## Erros e proteção das escritas
 
 Todo erro da API tem o mesmo formato JSON: `status` (igual ao status HTTP),
@@ -324,3 +392,13 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   quem esquecer.
 - O traceback de um 500 pode conter texto de exceções do SQLAlchemy, incluindo
   parâmetros da consulta; ele fica apenas no log do servidor.
+- A busca do catálogo mostra só as 20 obras mais relevantes e não pagina: para
+  encontrar outras, refine o termo.
+- O firewall (Cloudflare) da AIC recusa alguns termos, como `<script>` ou aspas
+  combinadas com `AND` e parênteses. Isso chega como "catálogo indisponível" (503),
+  e a interface sugere tentar outro termo.
+- A imagem da obra pode falhar (bloqueio do IIIF, 429, indisponibilidade) sem afetar
+  os dados: aparece o placeholder e o resto continua.
+- Cada imagem exibida custa uma chamada do servidor à AIC (sem cache): uma busca com
+  20 resultados dispara até 20, contra o limite de 60 req/min por IP. Excedido, o
+  restante das imagens cai no placeholder até a janela passar.

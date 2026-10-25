@@ -1,0 +1,20 @@
+{
+  "data": {
+    "id": 555001,
+    "title": "  Study  ",
+    "artist_display": "Unknown Artist",
+    "date_display": null,
+    "artwork_type_title": "Drawing and Watercolor",
+    "image_id": "a1b2c3d4-0555-4000-8000-000000000555",
+    "is_public_domain": true,
+    "credit_line": ""
+  },
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

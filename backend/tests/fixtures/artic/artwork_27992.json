@@ -1,0 +1,23 @@
+{
+  "data": {
+    "id": 27992,
+    "title": "A Sunday on La Grande Jatte — 1884",
+    "artist_display": "Georges Seurat (French, 1859–1891)",
+    "date_display": "1884–86, border added 1888–89",
+    "medium_display": "Oil on canvas",
+    "dimensions": "207.5 × 308.1 cm (81 3/4 × 121 1/4 in.)",
+    "department_title": "Painting and Sculpture of Europe",
+    "artwork_type_title": "Painting",
+    "image_id": "2d484387-2509-5e8e-2c43-22f9981972eb",
+    "is_public_domain": true,
+    "credit_line": "Helen Birch Bartlett Memorial Collection"
+  },
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

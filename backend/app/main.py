@@ -4,7 +4,9 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.access import AccessPolicy, api_route
+from app.artic import ArticClient
 from app.auth import register_auth_routes
+from app.catalog import register_catalog_routes
 from app.config import (
     AuthSettings,
     OriginSettings,
@@ -57,6 +59,8 @@ def create_app(
         cookie_name=cookie_name,
         cookie_secure=cookie_secure,
     )
+    # Cliente da AIC (Story 2.3): sem rede na criação; os testes o substituem.
+    app.state.artic_client = ArticClient()
 
     register_error_handlers(app)
     app.add_middleware(ApiWriteGuardMiddleware, allowed_origin=app_origin)
@@ -66,6 +70,7 @@ def create_app(
         return {"status": "ok"}
 
     register_auth_routes(app)
+    register_catalog_routes(app)
     register_infra_check_routes(app)
 
     if spa_dist_dir is None:

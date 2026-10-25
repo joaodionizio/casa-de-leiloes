@@ -224,3 +224,55 @@ Usei o Claude Code com Opus para especificar (spec aprovada por mim, com as deci
 
 - O re-review (Opus, sessão separada) validou o código das correções do M1 e dos LOW e rodou o `./verify.sh` por conta própria (exit 0). Encontrou uma divergência só documental (MEDIUM): `backend-contract.md` e `test-plan.md` ainda descreviam o verificador de política só pela metadata, prometiam que `hide_parameters` escondia o e-mail do log de uma colisão de UNIQUE e descreviam o teste com o marcador no e-mail. Como a spec é o contrato canônico, não aprovei a story com ela desatualizada.
 - A IA (Sonnet) sincronizou a spec com o que já estava no código e na story: `route.dependencies` no verificador, o problema "política X sem a dependência", os 6 testes de regressão do M1, o limite real do `hide_parameters` (o `DETAIL` do PostgreSQL pode conter valores), o marcador no `password_hash` e a checagem de `'app.main' not in sys.modules` no seed. Nenhum código, teste ou decisão mudou; não rodei testes nesta etapa. A story e o `sprint-status.yaml` continuam em `review`.
+
+## Story 2.3 — Busca de obras no Art Institute of Chicago
+
+Usei o Claude Code com Opus para validar o contrato real da AIC e escrever a spec (aprovada por mim, com P1 a P11, P7.1, P7.2, P8.1 e C1 a C4 fechadas) e com Sonnet para implementar, em sessão separada. O processo de front-end seguiu o `FRONTEND-WORKFLOW.md`.
+
+### O que a IA fez
+
+- Na fase da spec, fez poucas chamadas reais e de leitura à AIC e trouxe três fatos que a story não previa: o Cloudflare devolveu 403 sem a identificação recomendada pela documentação, o parâmetro `q` não filtra (qualquer termo devolvia as 62119 obras de domínio público) e o firewall recusa alguns termos. Daí saíram a identificação nos cabeçalhos, a consulta `bool` montada no servidor e o 503 para o 403 externo.
+- Implementou o cliente `httpx` síncrono (`app/artic.py`), o serviço e as duas rotas `AUCTIONEER` de dados (`app/catalog.py`; a rota pública de imagem veio depois, na correção abaixo), o código `catalog_unavailable`, as fixtures, os testes com `httpx.MockTransport`, a guarda que impede o `pytest` de resolver qualquer host fora de loopback, o smoke `backend/scripts/smoke_artic.py` e a tela de busca e detalhe (sem dependência nova).
+- Conferiu as rotas com a AIC real, dentro do processo e com o banco `_test`: busca, lista vazia, detalhe, 404 e o 503 do termo recusado pelo firewall.
+
+### O que eu decidi
+
+- Todas as decisões de produto e de contrato (P1 a P11 e os conflitos C1 a C4): rotas em `/api/catalog`, 404 indistinguível para obra inexistente, fora do domínio público ou sem imagem, sem paginação, sem cache, a identificação com a URL pública do Render e sem e-mail pessoal, sem React Router e sem botão "Criar lote". O agente não leu `.env*`.
+
+### Alternativas descartadas
+
+- As listadas em cada item da story (por exemplo `urllib.request`, códigos 502/504, nova tentativa automática, cache com TTL, `pytest -m smoke`, montar a URL IIIF no front e usar `config.iiif_url`).
+
+### Limitações e observações
+
+- A guarda de rede reprova o teste que tentar resolver um host externo, mesmo que o código sob teste transforme a falha em 503. O libpq resolve em C e não passa por ela, e o `TestClient` não abre socket.
+- Ajustei a fixture do detalhe 27992 aos valores que a chamada real devolveu (`artist_display` e `date_display`); a primeira versão, escrita à mão, estava diferente.
+- O firewall da AIC recusa termos como `<script>`, que chegam à interface como "catálogo indisponível" (documentado no README).
+- Não há teste automatizado do front-end (Q10 segue aberta). O meu teste manual no navegador e o `bmad-code-review` ainda não foram feitos; a story fica em `review`.
+- Comandos executados (antes da correção das imagens): `./verify.sh` completo, exit 0, 707 testes do back-end; smoke real `uv run python -m scripts.smoke_artic`, exit 0, 6/6 PASS. Saídas na story. Sem git e sem deploy.
+
+### Correção das imagens depois do meu teste manual
+
+- No navegador, busca, detalhe, lista vazia, loading, offline e placeholder funcionaram, mas toda imagem IIIF falhou com HTTP 403 (Cloudflare). O agente não tinha como ver isso: o smoke dele passava porque o servidor envia `User-Agent` e `AIC-User-Agent`, e a tag `<img>` não envia. A suposição da spec e do AD-22 (o navegador carrega o IIIF direto) foi refutada pelo meu teste, não por teste automatizado.
+- Eu decidi a correção: um proxy same-origin controlado, `GET /api/catalog/images/{image_id}`, público, que só aceita `image_id` validado, usa host/caminho/tamanho/formato fixos, não segue redirecionamento e não armazena nem faz cache dos bytes. Também decidi registrar a mudança como revisão da consequência técnica do AD-22, mantendo a motivação original, e não avançar para o code review antes do meu reteste.
+- A IA implementou `ArticClient.get_image` e a rota, trocou `image_url` pelo caminho same-origin, escreveu os testes (cliente, rota pública, falhas, id inválido sem chamada ao upstream, política) e atualizou a spec, o AD-22, o README e a story. Conferiu a rota contra o IIIF real, em processo.
+- Descartei: manter o hotlink, baixar e guardar as imagens, proxy genérico, cache no servidor.
+- Limitação aberta, que é minha decisão: sem cache, uma busca com 20 resultados chama a AIC até 20 vezes (limite de 60 por minuto por IP); a rota também é pública. Registrado na story e no README.
+- Comandos executados: `./verify.sh` completo, exit 0, 763 testes do back-end; smoke real `uv run python -m scripts.smoke_artic`, exit 0, 6/6 PASS (item 4 com `get_image`: 197727 bytes JPEG). Sem git e sem deploy. O reteste manual e o `bmad-code-review` ainda não foram feitos.
+
+### Reteste manual e code review
+
+- Refiz o teste manual depois do proxy. Registro só o que observei. Antes da correção: estado inicial do catálogo, loading em rede limitada, busca válida, 20 resultados, nenhum resultado, detalhe da obra e erro/offline de comunicação funcionavam, mas toda imagem `default.jpg` do IIIF dava 403 no navegador e o placeholder aparecia em todas as obras. Depois do proxy: as miniaturas e o detalhe carregaram imagens reais; a aba Rede mostrou `/api/catalog/images/{image_id}` com várias respostas 200 `image/jpeg`; pelo menos uma imagem deu 503 e o placeholder local apareceu corretamente, com os metadados disponíveis; `BIDDER` não teve acesso ao catálogo; atualizar a página manteve a sessão e voltou o catálogo ao estado inicial; no mobile, o fluxo lista → detalhe → "Voltar" funcionou.
+- Não registro como observados a navegação por teclado, a largura exata de 320 px nem cada um dos dez estados do roteiro individualmente: faziam parte do roteiro, mas não tenho evidência explícita deles.
+- Rodei o `bmad-code-review` com Opus, em sessão separada: 0 BLOCKER, 0 HIGH, 1 MEDIUM documental (M1), três LOW (L1 a L3) e um risco (D1). O reviewer rodou o `./verify.sh` por conta própria (exit 0, 763 passed).
+- Aprovei: M1 (a story e o `implementation-map.md` ainda descreviam o IIIF direto do navegador, duas rotas `AUCTIONEER` e o proxy como fora de escopo; mandei reescrever o contrato principal, não só acrescentar nota), L2 (o aviso oculto "Imagem indisponível" da miniatura vinha antes do título no nome acessível do botão), L3 (registrar este reteste), e sincronizar o resumo do AD-22 no `CLAUDE.md` e a referência no `epics.md`.
+- Decidi não corrigir L1 (a guarda de rede não trata `HTTPS_PROXY`/`ALL_PROXY`): risco teórico, sem bug atual; foi para o `deferred-work.md`. E decidi manter o D1: rota de imagem pública, sem cache, 843 px, sem miniatura alternativa. A limitação (uma busca de 20 resultados pode disparar várias chamadas de mídia; não sei se a cota do IIIF é compartilhada com a da API) também está no `deferred-work.md`.
+- A IA reescreveu os trechos da story e do mapa de implementação, removeu o texto oculto da miniatura (a falha da miniatura fica só visual, com `alt=""`) e sincronizou os resumos. Não mexeu no proxy.
+- Comandos executados: `npm run lint`, `npm run typecheck`, `npm run build` e `./verify.sh` completo, exit 0, 763 testes do back-end. Sem smoke novo, sem git e sem deploy. A story e o `sprint-status.yaml` continuam em `review`, esperando o re-review.
+
+### Re-review final e aprovação
+
+- O Opus fez o re-review final da Story 2.3, em sessão separada da implementação. Validou M1, L2 e L3, e confirmou que o `CLAUDE.md` e o `epics.md` estavam sincronizados com o AD-22 revisado. Não havia BLOCKER, HIGH nem MEDIUM pendente.
+- O L1 (guarda de rede e `HTTPS_PROXY`/`ALL_PROXY`) permaneceu deferred e o D1 (chamadas repetidas de mídia à AIC, sem cache) permaneceu como limitação aceita, ambos no `deferred-work.md`.
+- Aprovei a Story 2.3 e ela foi marcada `done`. Não houve nova execução de verify: vale o último resultado registrado, `./verify.sh` exit 0, 763 passed, 1 warning.
+

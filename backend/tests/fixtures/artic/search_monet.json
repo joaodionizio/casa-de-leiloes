@@ -1,0 +1,90 @@
+{
+  "pagination": {
+    "total": 8,
+    "limit": 20,
+    "offset": 0,
+    "total_pages": 1,
+    "current_page": 1
+  },
+  "data": [
+    {
+      "_score": 900.5,
+      "id": 16568,
+      "title": "Water Lilies",
+      "artist_display": "Claude Monet\nFrench, 1840-1926",
+      "date_display": "1906",
+      "image_id": "3c27b499-af56-f0d5-93b5-a7f2f1ad5813",
+      "is_public_domain": true
+    },
+    {
+      "_score": 800.1,
+      "id": 16571,
+      "title": "Water Lily Pond",
+      "artist_display": "Claude Monet\nFrench, 1840-1926",
+      "date_display": "1900",
+      "image_id": "5b0ee1ab-7b2f-3a1b-9c58-12d0cdd6ca31",
+      "is_public_domain": true
+    },
+    {
+      "_score": 700.0,
+      "id": 16572,
+      "title": "Study of Water",
+      "artist_display": "Atelier Monet\nFrench, 19th century",
+      "date_display": null,
+      "image_id": "e8f46f1c-86a7-4c58-0b94-5d2ad1d1a9c4",
+      "is_public_domain": true
+    },
+    {
+      "_score": 600.0,
+      "id": 100001,
+      "title": "Not Public Domain Work",
+      "artist_display": "Someone Modern",
+      "date_display": "1960",
+      "image_id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "is_public_domain": false
+    },
+    {
+      "_score": 500.0,
+      "id": 100002,
+      "title": "Unknown Domain Work",
+      "artist_display": "Someone Else",
+      "date_display": "1950",
+      "image_id": "a1b2c3d4-0002-4000-8000-000000000002"
+    },
+    {
+      "_score": 400.0,
+      "id": 100003,
+      "title": "Work Without Image",
+      "artist_display": "Claude Monet",
+      "date_display": "1890",
+      "image_id": null,
+      "is_public_domain": true
+    },
+    {
+      "_score": 300.0,
+      "id": 100004,
+      "title": "Work With Evil Image Id",
+      "artist_display": "Claude Monet",
+      "date_display": "1891",
+      "image_id": "../evil",
+      "is_public_domain": true
+    },
+    {
+      "_score": 200.0,
+      "id": "16568",
+      "title": "Work With String Id",
+      "artist_display": "Claude Monet",
+      "date_display": "1892",
+      "image_id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "is_public_domain": true
+    }
+  ],
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

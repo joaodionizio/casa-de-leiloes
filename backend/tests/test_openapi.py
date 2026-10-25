@@ -27,6 +27,9 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/auth/login",
         "/api/auth/logout",
         "/api/me",
+        "/api/catalog/artworks",
+        "/api/catalog/artworks/{external_id}",
+        "/api/catalog/images/{image_id}",
     ]
 
 
@@ -86,3 +89,75 @@ def test_app_openapi_is_not_overridden(api_only: TestClient) -> None:
     # Sem override de `app.openapi()`: o método continua sendo o do FastAPI.
     assert type(api_only.app).openapi is FastAPI.openapi
     assert "openapi" not in vars(api_only.app)
+
+
+# --- Story 2.3: catálogo da AIC ---
+
+SEARCH_PATH = "/api/catalog/artworks"
+DETAIL_PATH = "/api/catalog/artworks/{external_id}"
+SUMMARY_FIELDS = [
+    "artist_display",
+    "date_display",
+    "external_id",
+    "image_id",
+    "image_url",
+    "title",
+]
+DETAIL_FIELDS = sorted(
+    SUMMARY_FIELDS
+    + [
+        "artwork_type_title",
+        "credit_line",
+        "department_title",
+        "dimensions",
+        "medium_display",
+        "source_url",
+    ]
+)
+
+
+def test_catalog_routes_document_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    search = paths[SEARCH_PATH]["get"]
+    detail = paths[DETAIL_PATH]["get"]
+
+    for status in ("401", "403", "422", "503"):
+        assert response_ref(search, status) == ERROR_REF
+        assert response_ref(detail, status) == ERROR_REF
+    assert response_ref(detail, "404") == ERROR_REF
+    assert "404" not in search["responses"]
+
+
+def test_catalog_schemas_have_exactly_the_contract_fields(
+    api_only: TestClient,
+) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    assert sorted(schemas["ArtworkSummary"]["properties"]) == SUMMARY_FIELDS
+    assert sorted(schemas["ArtworkDetail"]["properties"]) == DETAIL_FIELDS
+    assert sorted(schemas["ArtworkSearchResponse"]["properties"]) == ["items"]
+
+
+def test_catalog_schemas_do_not_leak_aic_internals(api_only: TestClient) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+    forbidden = {"_score", "thumbnail", "config", "is_public_domain", "alt_text"}
+
+    for name in ("ArtworkSummary", "ArtworkDetail", "ArtworkSearchResponse"):
+        assert forbidden.isdisjoint(schemas[name]["properties"])
+    assert "HTTPValidationError" not in schemas
+
+
+def test_image_route_documents_a_jpeg_and_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    image = paths["/api/catalog/images/{image_id}"]["get"]
+
+    assert "image/jpeg" in image["responses"]["200"]["content"]
+    for status in ("404", "422", "503"):
+        assert response_ref(image, status) == ERROR_REF
+    # Rota pública: não documenta 401/403.
+    assert "401" not in image["responses"]
+    assert "403" not in image["responses"]

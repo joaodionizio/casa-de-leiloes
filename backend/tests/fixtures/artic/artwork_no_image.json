@@ -1,0 +1,23 @@
+{
+  "data": {
+    "id": 555002,
+    "title": "Work Without Image",
+    "artist_display": "Unknown Artist",
+    "date_display": "1800",
+    "medium_display": "Ink on paper",
+    "dimensions": "10 × 10 cm",
+    "department_title": "Prints and Drawings",
+    "artwork_type_title": "Drawing and Watercolor",
+    "image_id": null,
+    "is_public_domain": true,
+    "credit_line": "Gift of a collector"
+  },
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

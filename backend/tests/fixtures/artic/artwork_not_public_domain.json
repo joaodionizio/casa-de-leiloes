@@ -1,0 +1,23 @@
+{
+  "data": {
+    "id": 129884,
+    "title": "Starry Night and the Astronauts",
+    "artist_display": "Alma Thomas\nAmerican, 1891-1978",
+    "date_display": "1972",
+    "medium_display": "Acrylic on canvas",
+    "dimensions": "152.4 × 134.6 cm",
+    "department_title": "Contemporary Art",
+    "artwork_type_title": "Painting",
+    "image_id": "a1b2c3d4-0129-4000-8000-000000129884",
+    "is_public_domain": false,
+    "credit_line": "Major Acquisitions Centennial Fund"
+  },
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

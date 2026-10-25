@@ -106,7 +106,9 @@ que não mudam a arquitetura.
   parte do resultado. Segredo diferente do `AUDIT_HMAC_SECRET`.
 - AD-21 Representação canônica v1 (JSON ordenado, UTF-8, UTC com 6 casas e
   `Z`, genesis de 64 zeros). Teste de bytes e hash idênticos.
-- AD-22 Imagem direto do IIIF, placeholder local se falhar; sem guardar bytes.
+- AD-22 Imagem: bytes nunca armazenados; a mídia vem do IIIF, mas o navegador usa a
+  rota same-origin pública `GET /api/catalog/images/{image_id}` (valida `image_id`,
+  host/caminho fixos); falha degrada para placeholder local.
 - AD-23 `is_public_domain=true` obrigatório; snapshot mínimo no ARQUITETURA.md.
 - AD-24 Seed idempotente na inicialização; IDs fixos; lotes demo marcados;
   novo lote demo só se todos estiverem encerrados; fixtures, sem API externa.

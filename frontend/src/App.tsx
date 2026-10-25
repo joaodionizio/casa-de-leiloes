@@ -7,6 +7,7 @@ import {
   type CurrentUser,
 } from './api/auth'
 import { fetchHealth } from './api/health'
+import CatalogSearch from './CatalogSearch'
 import LoginForm from './LoginForm'
 import SiteHeader from './SiteHeader'
 
@@ -67,6 +68,13 @@ function App() {
     setSession({ status: 'authenticated', user })
   }
 
+  // 401 numa rota do catálogo: a sessão acabou (o cookie venceu).
+  function handleSessionExpired() {
+    setSessionNotice('Sua sessão expirou. Entre novamente.')
+    setJustLoggedOut(false)
+    setSession({ status: 'anonymous' })
+  }
+
   async function handleLogout() {
     setLoggingOut(true)
     setLogoutError(null)
@@ -107,9 +115,12 @@ function App() {
             />
           </section>
         )}
-        {session.status === 'authenticated' && (
-          <h1 className="visually-hidden">Casa de Leilões</h1>
-        )}
+        {session.status === 'authenticated' &&
+          (session.user.role === 'AUCTIONEER' ? (
+            <CatalogSearch onSessionExpired={handleSessionExpired} />
+          ) : (
+            <h1 className="visually-hidden">Casa de Leilões</h1>
+          ))}
       </main>
       <footer className="app-footnote page-container">
         <p>Leilões ao vivo de obras de arte em domínio público.</p>

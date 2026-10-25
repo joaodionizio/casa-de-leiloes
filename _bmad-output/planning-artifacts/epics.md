@@ -102,7 +102,7 @@ NFR6: Uso de IA descrito (onde, como, o que foi revisado).
 - AR6 (AD-9, AD-19): fechamento sob a mesma trava, idempotente, `UNIQUE(lot_id)` em `receipts`; scheduler + catch-up na inicialização e na tentativa de lance; leituras nunca liquidam; evento só depois do commit.
 - AR7 (AD-10, AD-25): WebSocket só para a sala; lances por REST; heartbeat do cliente; snapshot completo ao (re)conectar; um processo; Session curta em threadpool.
 - AR8 (AD-11, AD-29): JWT de 8 h em cookie HttpOnly, mesma origem; Argon2; CSRF por JSON + `Origin`/`Referer`; sem CORS permissivo; toda rota declara política de acesso.
-- AR9 (AD-12, AD-22, AD-23): Art Institute of Chicago; só domínio público; snapshot mínimo copiado no lote; imagem direto do IIIF com placeholder local.
+- AR9 (AD-12, AD-22, AD-23): Art Institute of Chicago; só domínio público; snapshot mínimo copiado no lote; imagem da obra vinda do IIIF, servida ao navegador por rota same-origin controlada (AD-22 revisado), sem armazenar bytes, com placeholder local.
 - AR10 (AD-13, AD-20, AD-21): pseudônimo por lote via HMAC; representação canônica v1; cadeia SHA-256; âncora HMAC com `AUDIT_HMAC_SECRET`.
 - AR11 (AD-14, AD-28): monorepo, `uv`, Dockerfile multi-stage, FastAPI serve a SPA; Render gratuito (um Web Service + PostgreSQL); `GET /health`; primeiro deploy no épico 1 validando FastAPI, PostgreSQL, React, WebSocket, cookies e migrations.
 - AR12 (AD-17, AD-27): testes críticos em PostgreSQL real, banco de teste isolado do de desenvolvimento; `verify` fail-fast.
@@ -429,7 +429,7 @@ Para que eu escolha a obra que vai virar lote.
 
 **Dado** estar logado como leiloeiro
 **Quando** busco por um termo no painel
-**Então** vejo apenas obras com `is_public_domain=true`, com título, artista e imagem IIIF (ou placeholder local se a imagem falhar).
+**Então** vejo apenas obras com `is_public_domain=true`, com título, artista e imagem da obra (ou placeholder local se a imagem falhar).
 
 **Dado** uma obra da lista
 **Quando** abro o detalhe

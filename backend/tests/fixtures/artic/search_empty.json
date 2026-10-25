@@ -1,0 +1,18 @@
+{
+  "pagination": {
+    "total": 0,
+    "limit": 20,
+    "offset": 0,
+    "total_pages": 0,
+    "current_page": 1
+  },
+  "data": [],
+  "info": {
+    "license_text": "Fixture escrita à mão no formato da API da AIC (dados CC0).",
+    "version": "1.13"
+  },
+  "config": {
+    "iiif_url": "https://www.artic.edu/iiif/2",
+    "website_url": "https://www.artic.edu"
+  }
+}

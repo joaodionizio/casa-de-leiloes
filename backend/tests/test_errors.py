@@ -105,6 +105,11 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
         "csrf_origin_mismatch": "Origem da requisição não permitida.",
         # Story 2.2: código específico do login, emitido só pela rota de login.
         "invalid_credentials": "E-mail ou senha inválidos.",
+        # Story 2.3: catálogo do museu fora do ar, emitido só pelas rotas do catálogo.
+        "catalog_unavailable": (
+            "O catálogo do museu está indisponível no momento. "
+            "Tente novamente em instantes."
+        ),
     }
 
 
