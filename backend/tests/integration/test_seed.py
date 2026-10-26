@@ -40,6 +40,7 @@ from tests.lot_support import (
     lot_rows,
     statement_recorder,
 )
+from tests.wallet_support import wallet_rows
 
 EXPECTED = {
     "219e37a5-0def-4b26-87d4-b08668f7c112": ("auctioneer@example.com", "AUCTIONEER"),
@@ -195,6 +196,11 @@ def test_module_runs_alone_with_only_database_url(
     with db_session_factory() as session:
         assert len(all_rows(session)) == 3
     assert count_lots(db_session_factory) == 1
+    # Story 3.1: o seed completo também cria as três carteiras, zeradas, e o log não
+    # afirma contagem de carteiras (só usuários e lote, confirmados pelo commit).
+    assert len(wallet_rows(db_session_factory)) == 3
+    assert {row[1:] for row in wallet_rows(db_session_factory)} == {(0, 0)}
+    assert "wallet" not in (result.stderr + result.stdout).lower()
 
 
 def test_start_script_runs_migrations_then_seed_then_server() -> None:

@@ -21,6 +21,7 @@ from app.errors import register_error_handlers
 from app.infra_check import register_infra_check_routes
 from app.lots import register_lot_routes
 from app.spa import register_spa_routes, validate_spa_dist_dir
+from app.wallet import register_wallet_routes
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
@@ -73,6 +74,7 @@ def create_app(
     register_auth_routes(app)
     register_catalog_routes(app)
     register_lot_routes(app)
+    register_wallet_routes(app)
     register_infra_check_routes(app)
 
     if spa_dist_dir is None:

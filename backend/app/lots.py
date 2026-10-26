@@ -65,15 +65,11 @@ from app.errors import (
     error_response,
     error_responses,
 )
+from app.money import MAX_CENTS, Cents
 from app.users import User
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
-
-# Number.MAX_SAFE_INTEGER (D3): o maior inteiro que o consumidor JavaScript
-# representa sem perda. Limite técnico, não comercial; a mesma faixa vale na API, no
-# serviço e nas CHECKs do banco (A4).
-MAX_CENTS = 9_007_199_254_740_991
 
 # Estrutura do horário aceito pela API (D2). O offset é opcional aqui de propósito:
 # sem ele o `AwareDatetime` devolve `timezone_aware`, o erro certo. Número, data sem
@@ -114,7 +110,6 @@ ApiDatetime = Annotated[
     BeforeValidator(_api_datetime_input),
     AfterValidator(_api_datetime_normalizable),
 ]
-Cents = Annotated[StrictInt, Field(gt=0, le=MAX_CENTS)]
 ExternalId = Annotated[StrictInt, Field(gt=0, le=MAX_EXTERNAL_ID)]
 
 

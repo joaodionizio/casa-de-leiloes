@@ -38,6 +38,8 @@ CATALOG_UNAVAILABLE = "catalog_unavailable"
 # Obra que não pode virar lote (Story 2.4, P6): inexistente, fora do domínio público
 # ou sem imagem. Um código só: o motivo interno vai ao log, nunca ao cliente.
 ARTWORK_NOT_ELIGIBLE = "artwork_not_eligible"
+# Depósito que levaria o total da carteira acima do teto técnico (Story 3.1, P3).
+BALANCE_LIMIT_EXCEEDED = "balance_limit_exceeded"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -62,6 +64,7 @@ MESSAGES = {
         "Esta obra não pode virar lote. Só são aceitas obras de domínio "
         "público com imagem no acervo do museu."
     ),
+    BALANCE_LIMIT_EXCEEDED: "O depósito ultrapassaria o limite de saldo da carteira.",
 }
 
 

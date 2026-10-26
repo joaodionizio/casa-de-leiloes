@@ -1723,3 +1723,137 @@ h2[tabindex='-1']:focus-visible {
 .back-link::after {
   inset: -0.8125rem 0;
 }
+
+/* Carteira (Story 3.1, DESIGN §10, EXPERIENCE §8): três números, o disponível em
+   destaque, e o depósito. Sem gráfico, sem card dentro de card, sem sombra. O estado
+   de aviso leva símbolo e texto, nunca só cor (DESIGN §14). */
+.wallet {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.wallet h1 {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+/* Um só nível dentro do `dl` (cada `div` agrupa diretamente o seu `dt`/`dd`): o
+   agrupamento visual do total e do comprometido é feito pelo grid, não por outro
+   `div`. */
+.wallet-balances {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.wallet-balances > div {
+  min-width: 0;
+}
+
+.wallet-balances dt {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.wallet-balances dd {
+  margin: 0;
+}
+
+.wallet-available {
+  grid-column: 1 / -1;
+  margin-bottom: 0.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wallet-available dd {
+  margin-top: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.wallet-balance dd:first-of-type {
+  margin-top: 0.125rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.wallet-note {
+  margin-top: 0.125rem;
+  font-size: 0.875rem;
+}
+
+@media (min-width: 40rem) {
+  .wallet-available dd {
+    font-size: 3rem;
+  }
+
+  .wallet-balances {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.5rem;
+  }
+}
+
+.wallet-deposit {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.wallet-deposit h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.wallet-deposit-note {
+  margin: -0.5rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.wallet-deposit .button {
+  align-self: stretch;
+}
+
+@media (min-width: 30rem) {
+  .wallet-deposit .button {
+    align-self: flex-start;
+  }
+}
+
+.wallet-notice {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.wallet-notice-success {
+  color: var(--color-success);
+}
+
+.wallet-notice-error {
+  color: var(--color-danger);
+}
+
+.wallet-notice-uncertain {
+  color: var(--color-warning);
+}

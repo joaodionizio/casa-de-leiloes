@@ -33,6 +33,8 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/lots",
         "/api/lots/mine",
         "/api/lots/{lot_id}",
+        "/api/wallet",
+        "/api/wallet/deposit",
     ]
 
 
@@ -171,6 +173,8 @@ def test_image_route_documents_a_jpeg_and_the_real_error_envelope(
 LOTS_PATH = "/api/lots"
 MINE_PATH = "/api/lots/mine"
 LOT_DETAIL_PATH = "/api/lots/{lot_id}"
+WALLET_PATH = "/api/wallet"
+DEPOSIT_PATH = "/api/wallet/deposit"
 LOT_FIELDS = sorted(
     [
         "id",
@@ -198,7 +202,9 @@ LOT_FIELDS = sorted(
 def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     paths = list(api_only.get("/api/openapi.json").json()["paths"])
 
-    assert paths[-3:] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    # Story 3.1: a carteira vem depois dos lotes, imediatamente.
+    assert paths[-5:-2] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-2:] == [WALLET_PATH, DEPOSIT_PATH]
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
 
@@ -365,3 +371,57 @@ def test_no_public_lot_schema_exposes_internal_fields(api_only: TestClient) -> N
         assert INTERNAL_FIELDS.isdisjoint(schemas[name]["properties"])
     # O `LotResponse` privado continua como era (com `created_at` e `image_id`).
     assert sorted(schemas["LotResponse"]["properties"]) == LOT_FIELDS
+
+
+# --- Story 3.1: carteira ---
+
+
+def test_wallet_read_documents_200_and_the_auth_errors(api_only: TestClient) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    operation = paths[WALLET_PATH]["get"]
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/WalletResponse")
+    for status in ("401", "403"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert "422" not in operation["responses"]
+    assert "parameters" not in operation  # o dono vem só da sessão
+    assert "requestBody" not in operation
+    assert set(paths[WALLET_PATH]) == {"get"}
+
+
+def test_deposit_documents_200_the_request_and_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    operation = paths[DEPOSIT_PATH]["post"]
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/WalletResponse")
+    for status in ("401", "403", "422"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/DepositRequest")
+    assert set(paths[DEPOSIT_PATH]) == {"post"}
+
+
+def test_wallet_schemas_have_exactly_the_contract_fields(api_only: TestClient) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    assert sorted(schemas["WalletResponse"]["properties"]) == [
+        "available_balance_cents",
+        "committed_balance_cents",
+        "total_balance_cents",
+    ]
+    assert sorted(schemas["WalletResponse"]["required"]) == [
+        "available_balance_cents",
+        "committed_balance_cents",
+        "total_balance_cents",
+    ]
+    assert sorted(schemas["DepositRequest"]["properties"]) == ["amount_cents"]
+    assert schemas["DepositRequest"]["required"] == ["amount_cents"]
+    assert schemas["DepositRequest"]["additionalProperties"] is False
+    assert "HTTPValidationError" not in schemas

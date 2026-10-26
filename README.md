@@ -45,8 +45,9 @@ cd backend && uv run python -m app.seed
 ```
 
 O seed é idempotente: cria só as contas que faltam e nunca altera uma conta que já
-existe (nem o hash da senha). Também garante um lote demo aberto (veja "Lotes").
-Veja "Contas de demonstração".
+existe (nem o hash da senha). Também garante uma carteira zerada para todo usuário que
+ainda não tem uma, sem nunca alterar um saldo (veja "Carteira"), e um lote demo aberto
+(veja "Lotes"). Veja "Contas de demonstração".
 
 Rodar os testes (o banco `_test` é recriado a cada sessão) e a verificação completa:
 
@@ -164,6 +165,10 @@ três:
 Senha: `Demo123!`. Não existe cadastro, troca nem recuperação de senha. Para
 mudar a senha de uma conta que já existe é preciso agir direto no banco: o seed
 nunca altera uma conta existente.
+
+Cada conta nasce com uma **carteira zerada** (veja "Carteira"): o seed não
+pré-carrega saldo. Para demonstrar, entre como `bidder1@example.com` e deposite pela
+tela "Carteira".
 
 ## Login e sessão
 
@@ -500,6 +505,56 @@ curl -sS -i http://localhost:8000/api/lots/abc         # 422 validation_error
 curl -sS -i http://localhost:8000/lots/<uuid>          # 200, text/html (SPA montada)
 ```
 
+## Carteira
+
+O licitante vê o próprio saldo e faz um **depósito simulado** (valor fictício, sem
+dinheiro real). Valores em **centavos inteiros** (`BIGINT`, sufixo `_cents`), sem `float`.
+
+| Rota | Quem | O que faz |
+| --- | --- | --- |
+| `GET /api/wallet` | só `BIDDER` | `{total_balance_cents, committed_balance_cents, available_balance_cents}`, `Cache-Control: no-store`. Só lê: nenhum `INSERT`, `UPDATE` nem trava (AD-19). |
+| `POST /api/wallet/deposit` | só `BIDDER` | corpo `{"amount_cents": n}`; soma `n` ao total da **própria** carteira e devolve `200` com os mesmos três valores. |
+
+- **Saldo:** o disponível é sempre `total - comprometido`, calculado no servidor, e nunca
+  é gravado. O comprometido existe e vale `0` nesta etapa: quem o altera é o lance
+  (Story 3.4). O `AUCTIONEER` recebe 403 nas duas rotas e não tem tela de carteira.
+- **Entrada estrita:** `amount_cents` é um inteiro de `1` a `9007199254740991`. Zero,
+  negativo, `100.5`, `1e2`, texto, booleano, ausente, campo extra (inclusive `user_id`) e
+  valor acima do teto dão 422 `validation_error`. A carteira alterada é sempre a do
+  usuário da sessão.
+- **Teto do saldo:** o total da carteira também não passa de `9007199254740991` centavos
+  (`R$ 90.071.992.547.409,91`, o inteiro seguro do JavaScript; limite técnico, não
+  comercial). Um depósito válido que ultrapassaria esse total recebe 422
+  `balance_limit_exceeded` ("O depósito ultrapassaria o limite de saldo da carteira."),
+  sem `details`, e nada é gravado. O banco impede o mesmo por CHECK, com o mesmo literal da
+  aplicação (`app/money.py`).
+- **Concorrência:** o depósito é uma transação curta que trava a linha da carteira
+  (`SELECT ... FOR UPDATE`), **lê o saldo depois da trava**, confere o teto, atualiza e
+  confirma. Dois depósitos simultâneos na mesma carteira somam os dois, e perto do teto o
+  segundo decide sobre o saldo que o primeiro confirmou.
+- **Carteira para todo usuário:** a migration `0004` cria `wallets` e uma carteira zerada
+  para cada usuário que já existe; o seed completa quem faltar (todo usuário sem carteira,
+  só `INSERT`, nunca altera saldo). Um usuário autenticado sem carteira é violação de
+  invariante: `GET` e `POST` respondem 500 genérico e **nunca criam a carteira**.
+- **Tela:** `/bidder/wallet` ("Carteira" no header do licitante), com o disponível em
+  destaque, o total e o comprometido, e o depósito. O `AUCTIONEER` que digita o endereço
+  vê "Área do licitante", e a página nem chama a API. O anônimo vai a `/login` e, depois
+  de entrar como licitante, volta à carteira.
+
+Como validar (com a aplicação rodando; as escritas exigem `Origin` e JSON, veja
+"Erros e proteção das escritas"):
+
+```bash
+# Entrar como bidder1 e guardar o cookie de sessão
+curl -sS -c /tmp/cookies -X POST http://localhost:5173/api/auth/login \
+  -H 'Origin: http://localhost:5173' -H 'Content-Type: application/json' \
+  -d '{"email":"bidder1@example.com","password":"Demo123!"}'
+curl -sS -b /tmp/cookies http://localhost:5173/api/wallet           # 200, tudo 0 numa carteira nova
+curl -sS -b /tmp/cookies -X POST http://localhost:5173/api/wallet/deposit \
+  -H 'Origin: http://localhost:5173' -H 'Content-Type: application/json' \
+  -d '{"amount_cents": 125000}'                                       # 200, R$ 1.250,00 disponíveis
+```
+
 ## Erros e proteção das escritas
 
 Todo erro da API tem o mesmo formato JSON: `status` (igual ao status HTTP),
@@ -571,6 +626,22 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   aberto. Crie um lote para demonstrar.
 - Os valores são limitados a R$ 90.071.992.547.409,91 por limite técnico (inteiro seguro
   do JavaScript), não comercial.
+- A carteira não tem histórico de depósitos nem de movimentos: só o estado atual (total,
+  comprometido, disponível). Cada depósito apenas soma ao total.
+- Não há deduplicação de depósito no servidor (sem `Idempotency-Key`). A tela bloqueia o
+  botão enquanto o envio está pendente e **nunca reenvia sozinha**; se a rede cair ou o
+  servidor responder 5xx, ela faz uma única releitura do saldo e, sem poder confirmar,
+  não afirma que o depósito entrou. Mas um timeout **depois** do commit, seguido de uma
+  nova tentativa **manual** sua, ainda pode duplicar o depósito: confira o saldo antes de
+  repetir.
+- O total da carteira é limitado a R$ 90.071.992.547.409,91 por limite técnico (inteiro
+  seguro do JavaScript), não comercial; depósitos acima disso são recusados.
+- Qualquer pessoa pode depositar nas contas demo da URL pública (a senha é pública), então
+  o saldo de `bidder1` e `bidder2` pode não ser o que você deixou. Se uma delas já
+  estiver no teto e o depósito for recusado ("O depósito ultrapassaria o limite de saldo
+  da carteira."), use a outra conta de licitante: o seed nunca zera um saldo existente.
+- Reverter a migration `0004` (`alembic downgrade 0003`) apaga a tabela `wallets` e, com
+  ela, os saldos: aceitável no desafio, mas irreversível.
 - "Meus lotes" lista todos os lotes, sem paginação, e cada miniatura é uma chamada do
   servidor à AIC (sem cache), então uma lista muito longa pode esbarrar no limite de
   60 req/min e mostrar o placeholder.

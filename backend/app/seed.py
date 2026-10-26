@@ -1,7 +1,9 @@
 """Contas e lote demo de demonstração (Story 2.2 e 2.4, AD-24, P8, P12, P13).
 
 Idempotente. Usuários: `INSERT ... ON CONFLICT (id) DO NOTHING`, nunca `UPDATE`; uma
-conta que já existe nunca é recriada nem alterada, nem o hash. Lote demo: só `INSERT`,
+conta que já existe nunca é recriada nem alterada, nem o hash. Carteiras (Story 3.1):
+todo usuário sem carteira ganha uma zerada, só `INSERT`; saldo existente nunca é
+alterado e nenhum saldo demo é pré-carregado. Lote demo: só `INSERT`,
 e só quando não há demo realmente aberto (`is_demo` e `ends_at > agora do banco`);
 um lote antigo nunca é alterado nem apagado.
 
@@ -35,6 +37,7 @@ from app.lots import (
 )
 from app.security import hash_password
 from app.users import User, UserRole
+from app.wallet import ensure_wallets
 
 logger = logging.getLogger(__name__)
 
@@ -155,11 +158,15 @@ def seed_demo_lot(session: Session, now: datetime) -> bool:
 
 
 def run_seed(session: Session) -> tuple[int, bool]:
-    """Uma transação para usuários e lote; não faz commit. A trava é o primeiro
-    statement; o instante do banco é lido depois dela (análogo ao AD-6) e decide
-    tudo: "existe demo aberto?", `starts_at`, `created_at` e a base de `ends_at`."""
+    """Uma transação para usuários, carteiras e lote; não faz commit. A trava é o
+    primeiro statement; o instante do banco é lido depois dela (análogo ao AD-6) e
+    decide tudo: "existe demo aberto?", `starts_at`, `created_at` e a base de
+    `ends_at`."""
     acquire_seed_lock(session)
     users = seed_users(session)  # o leiloeiro precisa existir antes do lote (FK)
+    # Todo usuário sem carteira, não só os semeados. A contagem não entra no retorno
+    # nem no log: o log do seed só afirma o que já foi confirmado pelo commit.
+    ensure_wallets(session)
     now = database_now(session)
     created = seed_demo_lot(session, now)
     return users, created

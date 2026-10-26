@@ -9,6 +9,9 @@ interface MoneyFieldProps {
   error: string | undefined
   inputRef: RefObject<HTMLInputElement | null>
   onChange: (value: string) => void
+  // Enquanto um envio está pendente (carteira, Story 3.1): o valor fica visível e
+  // focável, mas não muda.
+  readOnly?: boolean
 }
 
 // Campo de reais em texto: o valor vira centavos por `money.ts`, nunca por
@@ -21,7 +24,15 @@ interface MoneyFieldProps {
 // `aria-live`: o valor reconhecido muda a cada tecla e o leitor de tela reanunciaria
 // "R$ 1,00", "R$ 12,00"... durante a digitação. O feedback continua ligado ao campo por
 // `aria-describedby` e `aria-invalid`, e o erro do envio recebe o foco no campo.
-function MoneyField({ id, label, value, error, inputRef, onChange }: MoneyFieldProps) {
+function MoneyField({
+  id,
+  label,
+  value,
+  error,
+  inputRef,
+  onChange,
+  readOnly = false,
+}: MoneyFieldProps) {
   const hintId = `${id}-hint`
   const feedbackId = `${id}-feedback`
   const parsed = parseReaisToCents(value)
@@ -47,6 +58,7 @@ function MoneyField({ id, label, value, error, inputRef, onChange }: MoneyFieldP
           inputMode="decimal"
           autoComplete="off"
           value={value}
+          readOnly={readOnly}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={invalidMessage !== undefined}
           aria-describedby={hasFeedback ? `${hintId} ${feedbackId}` : hintId}

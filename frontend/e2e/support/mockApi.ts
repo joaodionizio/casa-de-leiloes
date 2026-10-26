@@ -125,6 +125,18 @@ export interface MockOptions {
   session?: Role | null
   // `broken`: toda imagem responde 503, como a rota real quando o IIIF falha.
   images?: 'ok' | 'broken'
+  // Carteira inicial de cada licitante (Story 3.1), em centavos. Padrão: zerada. Cada
+  // conta tem a sua: o depósito de uma nunca aparece na outra.
+  wallet?: { total: number; committed: number }
+  // Resposta do `POST /api/wallet/deposit`. `ok` soma ao estado; `server_error` e
+  // `network` são erros ambíguos (o depósito pode ou não ter entrado, ver abaixo).
+  deposit?: 'ok' | 'limit' | 'validation' | 'server_error' | 'network'
+  // Atraso do `POST`, para o teste do duplo envio.
+  depositDelayMs?: number
+  // Nos erros ambíguos: o servidor chegou a gravar o depósito antes de falhar?
+  depositAppliedOnError?: boolean
+  // Releituras `GET /api/wallet` depois do primeiro `POST`: `fail` responde 503.
+  reread?: 'ok' | 'fail'
 }
 
 export interface MockApi {
@@ -162,6 +174,24 @@ export async function mockApi(
               : 'bidder1@example.com',
           role: options.session,
         }
+  const wallets = new Map<string, { total: number; committed: number }>()
+  const walletOf = (email: string) => {
+    let state = wallets.get(email)
+    if (state === undefined) {
+      state = { total: options.wallet?.total ?? 0, committed: options.wallet?.committed ?? 0 }
+      wallets.set(email, state)
+    }
+    return state
+  }
+  let depositAttempted = false
+  const walletSnapshot = (email: string) => {
+    const state = walletOf(email)
+    return {
+      total_balance_cents: state.total,
+      committed_balance_cents: state.committed,
+      available_balance_cents: state.total - state.committed,
+    }
+  }
   const api: MockApi = {
     requests: [],
     count: (request) => api.requests.filter((item) => item === request).length,
@@ -201,6 +231,42 @@ export async function mockApi(
     if (pathname === '/api/auth/logout' && method === 'POST') {
       session = null
       return route.fulfill({ status: 204 })
+    }
+    if (pathname === '/api/wallet' && method === 'GET') {
+      if (session === null) return json(route, 401, errorBody(401, 'unauthorized'))
+      if (session.role !== 'BIDDER') return json(route, 403, errorBody(403, 'forbidden'))
+      if (depositAttempted && options.reread === 'fail') {
+        return json(route, 503, errorBody(503, 'internal_error'))
+      }
+      return json(route, 200, walletSnapshot(session.email))
+    }
+    if (pathname === '/api/wallet/deposit' && method === 'POST') {
+      if (session === null) return json(route, 401, errorBody(401, 'unauthorized'))
+      if (session.role !== 'BIDDER') return json(route, 403, errorBody(403, 'forbidden'))
+      depositAttempted = true
+      // A conta é a da sessão no momento do pedido, como o cookie no servidor real:
+      // sair e entrar com outra conta durante o atraso não muda o dono.
+      const owner = session.email
+      if (options.depositDelayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, options.depositDelayMs))
+      }
+      const mode = options.deposit ?? 'ok'
+      const { amount_cents: amount } = request.postDataJSON() as { amount_cents: number }
+      if (mode === 'limit') return json(route, 422, errorBody(422, 'balance_limit_exceeded'))
+      if (mode === 'validation') {
+        return json(route, 422, {
+          ...errorBody(422, 'validation_error'),
+          details: [{ loc: ['body', 'amount_cents'], type: 'greater_than' }],
+        })
+      }
+      if (mode === 'server_error' || mode === 'network') {
+        if (options.depositAppliedOnError === true) walletOf(owner).total += amount
+        return mode === 'network'
+          ? route.abort('failed')
+          : json(route, 500, errorBody(500, 'internal_error'))
+      }
+      walletOf(owner).total += amount
+      return json(route, 200, walletSnapshot(owner))
     }
     if (pathname === '/api/lots/mine' && method === 'GET') {
       return session?.role === 'AUCTIONEER'

@@ -440,3 +440,66 @@ Usei o Claude Code com Opus para especificar (spec aprovada por mim, com P1 a P9
 - Confirmou que M1, L1, L2, L3 e L4 foram resolvidos (L4: nenhum 429/503 manual novo na 2.5; o 503 com placeholder é da 2.3), que a interface não mostra mais "Casa de Leilões", que `AtrioMark` e o favicon usam a mesma geometria e que o nome acessível da marca contém o texto visível nas três larguras.
 - Ficaram cinco LOWs não corrigidos, listados na story: o título conferido sem nova tentativa em `brand.spec.ts`; o contorno do rail testado só no viewport padrão; nenhuma asserção explícita de não sobreposição dos alvos; "arco" no adendo da AD-15 e no `deferred-work.md`; e um ramo não usado de `documentTitle`.
 - Story 2.5 e a linha dela no `sprint-status.yaml` marcadas como `done`; o `epic-2` continua `in-progress`. O Epic 3 não foi iniciado. O commit é meu; sem deploy.
+
+## Story 3.1 — Carteira e depósito simulado
+
+Usei o Claude Code com Opus para criar a story e a spec (P1 a P8 decididas por mim antes da spec, D1 a D16 detalhadas dentro delas, e dois refinamentos meus na revisão final) e com Sonnet para implementar, em sessão separada, pelo `bmad-build`. A IA implementou direto, sem subagente, a partir da spec. O Git foi meu, como sempre.
+
+### O que eu decidi
+
+- P1 a P8: `wallets.user_id` como PK e FK com `ON DELETE RESTRICT`, sem `id` nem timestamps; backfill na migration e garantia genérica no seed (todo usuário sem carteira); `app/money.py` como fonte única do teto e 422 com `code` próprio `balance_limit_exceeded`; depósito sob `SELECT ... FOR UPDATE`; `GET /api/wallet` e `POST /api/wallet/deposit` só para `BIDDER`; saldo inicial zero; `/bidder/wallet` sem React Router; sem `Idempotency-Key`, sem retry automático e com uma única releitura em erro ambíguo.
+- Dois refinamentos da revisão final, que prevalecem sobre a spec: (1) o log do seed **não afirma** nada antes do commit, então a spec D10 (`seed: %d wallet(s) inserted` dentro de `run_seed`) não foi implementada; (2) o teste de concorrência **não pode depender só de `pg_locks`**: a prova é a sincronização controlada de duas transações reais e o estado final no PostgreSQL, e o `pg_locks` é evidência auxiliar.
+- Sem ledger, sem histórico de movimentos, sem lógica de lance: `committed_balance_cents` existe e fica `0`.
+
+### O que a IA fez
+
+- Leu a story e a spec inteira, conferiu o código real (a próxima revisão era mesmo a `0004`, `MAX_CENTS` e `Cents` moravam em `lots.py`, `docs/deferred-work.md` não existe e o arquivo real é `_bmad-output/implementation-artifacts/deferred-work.md`) e seguiu a ordem da spec: `app/money.py` e refatoração de `lots.py`; migration `0004` com backfill; módulo `app/wallet.py` (modelo, regra pura, serviço, rotas); seed; testes; front; Playwright; documentação.
+- Preservou o contrato do `run_seed` (`(users, created)`) e a propriedade de só logar depois do commit: `ensure_wallets` roda na mesma transação, e a contagem de carteiras simplesmente não é registrada. Um teste confere que `run_seed` não loga nada sobre carteira antes do commit e que o subprocesso do seed não menciona carteira no log.
+- Escreveu os testes de concorrência em PostgreSQL real com duas sessões e conexões: a sessão A trava a carteira e segura a trava; B (thread própria) chega ao `SELECT` da carteira (aviso pelo evento `before_cursor_execute`, sem `sleep`); só então A confirma. Cobre dois depósitos que se somam, perto do teto com recusa e com aceite (decididos sobre o saldo que A confirmou), o mesmo pelo HTTP, corrida livre com `Barrier`, controle negativo (padrão ler-somar-gravar perde um depósito) e leitura que não espera a trava. `pg_stat_activity`/`pg_locks` entram só como evidência auxiliar de que B esperou.
+- Provou por mutação temporária que os testes pegam o problema: tirar `.with_for_update()` fez falhar os testes C1 a C5 (por exemplo, total final `1500` em vez de `1800`, e `MAX − 6` em vez de `MAX`) e o de serviço do `FOR UPDATE`; tirar só o `populate_existing` fez falhar apenas o teste de serviço que pré-carrega a carteira na `Session` (os de concorrência usam sessões novas e não o detectam). Os dois arquivos foram restaurados e conferidos com `diff`.
+- Escreveu o front: `route.ts` (`/bidder/wallet`, `isBidderRoute`, `isRestrictedRoute` como type guard, `safeReturnPath`), `api/wallet.ts` (guarda de resposta e classificação conhecido × ambíguo), `walletFeedback.ts` (textos puros), `WalletPage.tsx`, `BidderOnly` no `App.tsx`, link "Carteira" no header e a seção de CSS; o duplo envio é barrado por uma `ref` síncrona, além do botão `disabled`. Olhou as capturas de tela em 1440 e 375 px (spec temporária descartável, removida).
+- Atualizou conscientemente só o que o contrato mudou: `clean_users` (`TRUNCATE wallets, lots, users`, sem `CASCADE`), tabelas do `test_database.py`, paths do OpenAPI, `MESSAGES`, `EXPECTED_POLICIES`, o teste "as seis rotas" do front e a asserção `/carteira/i` de `session.spec.ts` (agora escopada ao `main`, com a asserção positiva do link no header).
+
+### Onde a IA errou ou divergiu da spec
+
+- Divergência deliberada: sem o log `wallet(s) inserted` (D10), por decisão minha acima; o teste do subprocesso passou a afirmar a ausência do log em vez da presença.
+- `wait_for_blocked_lock` devolve `bool` em vez de levantar `AssertionError` como previa o plano: o teste decide, e o `pg_locks` fica como auxiliar.
+- O primeiro observador de trava contava `FOR UPDATE` a partir do segundo statement, mas só era ligado depois de A travar; os testes esperaram 15 s e falharam. A IA corrigiu a contagem e depois trocou o gatilho para o primeiro `SELECT` de `wallets` de B (com ou sem `FOR UPDATE`), para a mutação falhar pelo **estado final** e não por um passo de sincronização.
+- Os casos de CHECK do plano esperavam uma CHECK específica, mas o PostgreSQL informa a primeira que falha e um total negativo também deixa `committed > total`; os testes passaram a aceitar o conjunto de CHECKs ligadas à regra violada.
+- Outros tropeços corrigidos na hora: variáveis do banco de teste esquecidas num comando (`Unsafe test database`; nenhum `.env*` foi lido), cópia do baseline com `for` no zsh (sem divisão de palavras), leitura de atributo expirado depois do `rollback` num teste, `RequestInfo` inexistente no `tsconfig` do app, ordem dos botões (header antes do formulário) e `isRestrictedRoute` que precisava ser type guard.
+- `fetchWallet` ganhou um `AbortSignal` opcional (a spec previa sem argumentos) para a tela abortar a leitura ao desmontar.
+- Acessibilidade do aviso do depósito: erros conhecidos usam `role="alert"`; sucesso e incerteza usam `role="status"` (a spec previa `status` para todos).
+
+### Limitações e observações
+
+- **Teste manual ainda é meu**, como no roteiro do `test-plan.md` §10: depositar como `bidder1`, valores inválidos, duplo clique, servidor parado, `AUCTIONEER` sem "Carteira", 375 e 320 px, teclado. Os testes de navegador usam API simulada e só Chromium; o visual real e o servidor parado de verdade não foram observados por mim nesta sessão. O `bmad-code-review` também é meu e não foi rodado; a story fica em `review`.
+- Idempotência continua fora: uma nova tentativa **manual** depois de um timeout pós-commit pode duplicar o depósito (`deferred-work.md` e README).
+- Comandos executados (saída real nesta sessão): `./verify.sh` e `VERIFY_E2E=1 ./verify.sh`, ambos com exit 0: Ruff e `ruff format --check` ok (66 arquivos), 1174 testes do back-end (1058 registrados ao fim da 2.5), ESLint, `tsc` (app, node e e2e), 107 testes do front com `node --test`, build do Vite e `docker build`; no opt-in, 123 testes de navegador passando e 5 ignorados (pilha real, só com `E2E_REAL_BASE_URL`). Sem git, sem deploy e sem smoke externo.
+
+### Code review e correções (25/10/2026)
+
+- **Review.** Rodei o `bmad-code-review` com sete camadas (Blind Hunter e Edge Case Hunter em back-end e front-end, Verification Gap, Acceptance Auditor e Project Auditor). Cinco camadas caíram por limite da API e foram retomadas depois. Resultado: nenhum BLOCKER ou HIGH, e um MEDIUM (F-08): a `WalletPage` remonta a cada navegação (`key={where.id}`), e o bloqueio do depósito pendente vivia na instância. Outro clique em "Carteira" ou Back/Forward durante o `POST` trazia o botão ativo de novo e permitia um segundo depósito. Os demais achados eram LOW (F-01 a F-07, F-09 a F-13).
+- **O que eu decidi.** Corrigir F-08 com o depósito em andamento **fora da página e escopado por conta**, nunca uma promessa global sem dono. Corrigir também F-01 a F-03, F-05 a F-07 e F-09 a F-13. Ficou de fora F-04 (expansão opcional de cobertura e2e).
+- **O que a IA fez.**
+  - Criou `src/walletDeposit.ts`: um registro de depósito por conta (o e-mail da sessão), com o envio e a releitura única do erro ambíguo. A página, ao montar com um depósito da mesma conta pendente, nasce com "Depositando…" e o campo travado e mostra o resultado daquele `POST`. A conta B nunca herda o bloqueio nem o resultado da conta A. Uma leitura que começou antes de um saldo vindo do depósito não o sobrescreve.
+  - **F-01:** acrescentou `readOnly` opcional no `MoneyField` e apagou o "confirmado" antigo ao editar o valor.
+  - **F-02:** colocou a região `status` sempre montada.
+  - **F-12:** deixou o `dl` válido.
+  - **F-03:** completou os casos do classificador.
+  - **F-09:** pôs a guarda `ValueError` em `apply_deposit` para valor que não é `Cents`.
+  - **F-11:** escreveu os testes de política antes do corpo.
+  - **F-06:** passou a evidência de espera de trava para `pg_blocking_pids`, restrita a este banco.
+  - **F-05 e F-07:** limpou testes e corrigiu nomes de teste.
+  - **F-10:** acrescentou uma linha no README sobre as contas demo no teto.
+  - **F-13:** sincronizou os trechos desatualizados da story e da spec.
+- **Mutação do F-08.** Com a página voltando a nascer com `pending=false` ao remontar (o comportamento anterior), o novo teste de navegador falhou ("Depositando…" não encontrado). O arquivo foi restaurado e conferido com `cmp`.
+- **Onde divergiu.** A spec previa `depositFailureNotice('ambiguous') === 'reread'`. A decisão de reler passou para `sendDeposit`, e o teste correspondente mudou de lugar (`walletDeposit.test.ts`), sem afrouxar. O erro de campo vindo do servidor continua sem reanúncio quando o foco já está no campo: é o padrão do `MoneyField` da 2.4, que eu não quis mudar aqui.
+- **Processo.** O `CLAUDE.md` pede Sonnet para implementar. Esta rodada de correções rodou no Opus, na mesma sessão que fez o review; registro isso para decidir se as correções pedem uma revisão independente antes do `done`.
+- **Comandos executados (saída real):** `./verify.sh` e `VERIFY_E2E=1 ./verify.sh`, ambos com exit 0. Ruff e `ruff format --check` ok (66 arquivos), 1187 testes do back-end, ESLint, `tsc`, 114 testes do front com `node --test`, build do Vite e `docker build`. No opt-in, 127 testes de navegador passando e 5 ignorados (pilha real). Sem git e sem deploy.
+
+### Re-review independente e aprovação final (25/10/2026)
+
+- **Por quê.** As correções foram implementadas no Opus, na mesma sessão do review, e não no Sonnet que o `CLAUDE.md` prevê; quem corrigiu não podia aprovar a própria correção. Fiz antes o roteiro manual do F-08.
+- **Como.** Pedi uma re-review em sessão nova do Opus, só das correções, das regressões e principalmente do F-08, sem refazer o review inteiro, sem git, sem deploy e sem alterar código.
+- **Resultado.** F-08 confirmado como corrigido, F-01 a F-03 e F-05 a F-13 também; nenhum BLOCKER, HIGH ou MEDIUM introduzido. A re-review achou dois LOWs novos: LOW-1 (ao voltar pelo login com o `POST` pendente, o botão pode ficar em "Depositando…" até a próxima navegação, sem segundo `POST`) e LOW-2 (na remontagem, a confirmação pode não ser anunciada pelo leitor de tela). Comandos executados por ela: `npm test` (114 pass) e o `wallet.spec.ts` do Playwright três vezes (84 passed).
+- **O que eu decidi.** Aceitar F-04, LOW-1 e LOW-2 como LOWs opcionais, sem corrigir agora e sem nova story, e aprovar o fechamento: a Story 3.1 ficou `done`.

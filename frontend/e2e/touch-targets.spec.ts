@@ -60,6 +60,23 @@ for (const viewport of VIEWPORTS) {
       }
     })
 
+    test('BIDDER: marca, Vitrine, Carteira e Sair têm alvo de ~44 px', async ({ page }) => {
+      await mockApi(page, { lots: LOTS, session: 'BIDDER' })
+      await page.goto('/')
+      await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+
+      const nav = page.getByRole('navigation', { name: 'Principal' })
+      const targets: Record<string, Locator> = {
+        marca: page.locator('.site-brand'),
+        Vitrine: nav.getByRole('link', { name: 'Vitrine' }),
+        Carteira: nav.getByRole('link', { name: 'Carteira' }),
+        Sair: page.getByRole('button', { name: 'Sair' }),
+      }
+      for (const [name, locator] of Object.entries(targets)) {
+        expect(await hitHeight(page, locator), name).toBeGreaterThanOrEqual(MIN_HIT_HEIGHT)
+      }
+    })
+
     test('anônimo: Entrar tem alvo de ~44 px', async ({ page }) => {
       await mockApi(page, { lots: LOTS })
       await page.goto('/')

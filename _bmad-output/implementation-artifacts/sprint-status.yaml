@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-23-2026 22:51
-last_updated: 10-25-2026 13:43
+last_updated: 10-25-2026 22:48
 project: casa-de-leiloes
 project_key: NOKEY
 tracking_system: file-system
@@ -50,8 +50,8 @@ development_status:
   2-5-vitrine-pública-e-página-do-lote: done
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-carteira-e-depósito-simulado: backlog
+  epic-3: in-progress
+  3-1-carteira-e-depósito-simulado: done
   3-2-regras-de-aceitação-do-lance-com-hora-injetada: backlog
   3-3-fundamentos-de-integridade-do-histórico: backlog
   3-4-lance-transacional-com-travas-e-anti-sniping: backlog

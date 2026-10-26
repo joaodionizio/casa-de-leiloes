@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   isAuctioneerRoute,
+  isBidderRoute,
+  isRestrictedRoute,
   parseRoute,
   readNavState,
   routePath,
@@ -14,12 +16,13 @@ import {
 
 const LOT_ID = '2d484387-2509-5e8e-2c43-22f9981972eb'
 
-test('as cinco rotas conhecidas', () => {
+test('as seis rotas conhecidas', () => {
   assert.deepEqual(parseRoute('/'), { kind: 'vitrine' })
   assert.deepEqual(parseRoute(`/lots/${LOT_ID}`), { kind: 'lot', lotId: LOT_ID })
   assert.deepEqual(parseRoute('/login'), { kind: 'login' })
   assert.deepEqual(parseRoute('/auctioneer/lots'), { kind: 'my-lots' })
   assert.deepEqual(parseRoute('/auctioneer/lots/new'), { kind: 'create-lot' })
+  assert.deepEqual(parseRoute('/bidder/wallet'), { kind: 'wallet' })
 })
 
 test('o que não é rota conhecida vira "não encontrado", sem chamar a API', () => {
@@ -58,6 +61,7 @@ test('routePath e parseRoute fazem ida e volta', () => {
     { kind: 'login' },
     { kind: 'create-lot' },
     { kind: 'my-lots' },
+    { kind: 'wallet' },
   ]
   for (const route of routes) {
     assert.deepEqual(parseRoute(routePath(route)), route)
@@ -70,6 +74,39 @@ test('isAuctioneerRoute só vale para criar lote e meus lotes', () => {
   assert.equal(isAuctioneerRoute({ kind: 'vitrine' }), false)
   assert.equal(isAuctioneerRoute({ kind: 'login' }), false)
   assert.equal(isAuctioneerRoute({ kind: 'not-found' }), false)
+})
+
+test('/bidder/wallet é a carteira; variações viram não encontrado', () => {
+  assert.deepEqual(parseRoute('/bidder/wallet'), { kind: 'wallet' })
+  assert.deepEqual(parseRoute('/bidder/wallet?x=1#y'), { kind: 'wallet' })
+  assert.equal(routePath({ kind: 'wallet' }), '/bidder/wallet')
+  for (const path of ['/bidder/wallet/', '/bidder', '/bidder/', '/bidder/x', '/wallet']) {
+    assert.deepEqual(parseRoute(path), { kind: 'not-found' }, path)
+  }
+})
+
+test('isBidderRoute só vale para a carteira', () => {
+  assert.equal(isBidderRoute({ kind: 'wallet' }), true)
+  assert.equal(isBidderRoute({ kind: 'my-lots' }), false)
+  assert.equal(isBidderRoute({ kind: 'vitrine' }), false)
+  assert.equal(isBidderRoute({ kind: 'not-found' }), false)
+})
+
+test('isRestrictedRoute cobre as três áreas restritas e mais nada', () => {
+  assert.equal(isRestrictedRoute({ kind: 'create-lot' }), true)
+  assert.equal(isRestrictedRoute({ kind: 'my-lots' }), true)
+  assert.equal(isRestrictedRoute({ kind: 'wallet' }), true)
+  assert.equal(isRestrictedRoute({ kind: 'vitrine' }), false)
+  assert.equal(isRestrictedRoute({ kind: 'login' }), false)
+  assert.equal(isRestrictedRoute({ kind: 'lot', lotId: LOT_ID }), false)
+  assert.equal(isRestrictedRoute({ kind: 'not-found' }), false)
+})
+
+test('safeReturnPath: a carteira só volta para quem entrou como BIDDER', () => {
+  assert.equal(safeReturnPath('/bidder/wallet', 'BIDDER'), '/bidder/wallet')
+  assert.equal(safeReturnPath('/bidder/wallet', 'AUCTIONEER'), '/')
+  assert.equal(safeReturnPath('/bidder/wallet?next=https://evil.com', 'BIDDER'), '/bidder/wallet')
+  assert.equal(safeReturnPath('//evil.com/bidder/wallet', 'BIDDER'), '/')
 })
 
 test('safeReturnPath aceita a vitrine e o lote', () => {

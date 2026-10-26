@@ -115,6 +115,10 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
             "Esta obra não pode virar lote. Só são aceitas obras de domínio "
             "público com imagem no acervo do museu."
         ),
+        # Story 3.1: depósito que passaria do teto de saldo, emitido só pelo depósito.
+        "balance_limit_exceeded": (
+            "O depósito ultrapassaria o limite de saldo da carteira."
+        ),
     }
 
 
