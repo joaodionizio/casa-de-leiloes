@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mesa de avaliação — protótipo de UX ÁTRIO</title>
+  <link rel="stylesheet" href="css/hub.css">
+</head>
+<body>
+  <header class="hub-notice" role="note">
+    <strong>Protótipo de UX de referência.</strong>
+    Dados fictícios e cenários simulados só para avaliar visual e experiência. Nada aqui é regra de produção:
+    estado do lote, saldo, vencedor, fim e integridade vêm sempre do servidor. Não é código para copiar para <code>frontend/</code>.
+  </header>
+
+  <div class="hub-layout">
+    <aside class="hub-side" aria-label="Telas e cenários">
+      <h1 class="hub-title">Mesa de avaliação</h1>
+      <p class="hub-sub">ÁTRIO — Leilões de Arte</p>
+      <nav id="screen-nav" aria-label="Telas"></nav>
+    </aside>
+
+    <main class="hub-main" id="hub-main">
+      <section class="hub-bar" aria-label="Controles de avaliação">
+        <fieldset class="hub-group" id="role-group">
+          <legend>Papel</legend>
+          <label><input type="radio" name="role" value="visitante"> Visitante</label>
+          <label><input type="radio" name="role" value="licitante"> Licitante</label>
+          <label><input type="radio" name="role" value="leiloeiro"> Leiloeiro</label>
+        </fieldset>
+        <fieldset class="hub-group" id="frame-group">
+          <legend>Moldura</legend>
+          <label><input type="radio" name="frame" value="1280"> Desktop 1280</label>
+          <label><input type="radio" name="frame" value="820"> Tablet 820</label>
+          <label><input type="radio" name="frame" value="390"> Mobile 390</label>
+          <label><input type="radio" name="frame" value="320"> Mobile 320</label>
+          <label><input type="radio" name="frame" value="all"> Comparar as 4</label>
+        </fieldset>
+        <fieldset class="hub-group" id="img-group">
+          <legend>Imagens das obras</legend>
+          <label><input type="radio" name="img" value="ok"> Normais</label>
+          <label><input type="radio" name="img" value="algumas"> Algumas falham</label>
+          <label><input type="radio" name="img" value="quebradas"> Todas falham</label>
+        </fieldset>
+        <a class="hub-open" id="open-direct" href="#" target="_blank" rel="noopener">Abrir a tela em outra aba</a>
+      </section>
+
+      <p class="hub-now" id="now" role="status"></p>
+      <div class="hub-stage" id="stage"></div>
+
+      <section class="hub-info" aria-labelledby="story-h">
+        <h2 id="story-h">Entrega por story (só informação de avaliação)</h2>
+        <p class="hub-sub" id="story-intro"></p>
+        <table class="hub-table" id="story-table"></table>
+      </section>
+
+      <details class="hub-info">
+        <summary>Sobre contas e autenticação neste protótipo</summary>
+        <p>Não há autenticação nem API. O seletor <strong>Papel</strong> só muda o que a interface mostra. O formulário da tela de login não valida nada: ao enviar, leva à Vitrine como licitante. As contas semeadas do produto real ficam fora deste protótipo.</p>
+      </details>
+    </main>
+  </div>
+  <script src="js/hub.js"></script>
+</body>
+</html>

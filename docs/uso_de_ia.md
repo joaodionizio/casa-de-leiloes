@@ -615,3 +615,133 @@ pureza, 405 de domínio, verify exit 0, 1592 testes do back-end e 114 do front-e
 sem repetir testes ou nova revisão. O warning herdado Starlette/httpx segue fora do
 escopo. Alterei somente documentação/status, preservando o histórico, o Epic 3 em
 `in-progress` e a Story 3.3 em `backlog`. Sem Git, commit, push, deploy ou início da 3.3.
+
+
+## Story 3.3 — Integridade histórica pura (26/10/2026)
+
+Decidi implementar somente a Story 3.3 a partir da spec aprovada e dos companions,
+preservando P1–P20/A1–A5 e os ajustes S-01/S-02. Autorizei testes, mutações e
+verify completo; reservei a revisão independente para outra etapa. A entrega fica
+em `review`, sem `bmad-code-review` e sem `done`.
+
+A IA criou o módulo puro `bid_integrity.py`: três dataclasses congeladas com
+construtores nomeados e validação estrita, pseudônimo HMAC-SHA-256, bytes JSON v1,
+SHA-256 por lance, HMAC completo da âncora, compare_digest e verificação ordenada
+de cadeia. Acrescentou a matriz em `test_bid_integrity.py` (95 casos coletados)
+e ampliou a guarda de pureza existente sem alterar o detector de relógio da 3.2.
+Os nove golden vectors foram copiados como literais independentes da spec; os
+spies delegam à implementação real de HMAC, JSON e compare_digest.
+
+Exigi a receita de autenticar e vincular o estado anterior antes de extensão.
+A IA a demonstrou em composição local de teste: recálculo de histórico com
+assinatura antiga, alteração de count/hash, truncamento, resumo antigo sobre
+cadeia alterada e replay de âncora vazia de outro lote bloqueiam a extensão e
+não emitem nova âncora. Vazio do lote correto exige assinatura válida; ausência
+dela dá ValueError. Controles positivos emitem uma nova âncora válida. Isto não
+implementa a transação da 3.4 nem prova adulteração no PostgreSQL da 5.1.
+
+Resultados reais desta sessão:
+
+- Focados com regressões 3.1/3.2: **573 passed em 0,35 s**, exit 0; após as
+  mutações e restauração, **573 passed em 0,34 s**, exit 0.
+- **M1–M13** executadas isoladamente e mortas: ordenação/separadores JSON,
+  SHA-512, previous_hash ausente, aceitar uppercase, alias de 8 hex, igualdade
+  comum no HMAC, count omitido, microssegundos opcionais, secret vazio, bool,
+  sequência e links ignorados. Também executei as mutações pedidas de **ignorar
+  lot_id** e **genesis incorreto**. Todas geraram falha de comportamento (exit 1),
+  sem sintaxe/coleta; restauração em finally e cmp exit 0 em cada caso.
+  A tabela da seção 13 da story identifica os testes que mataram cada mutante.
+- `./verify.sh` **exit 0**: Ruff, formato de **73 arquivos**, PostgreSQL real de
+  teste, **1719 passed, 1 warning em 49,42 s**, ESLint, typecheck, **114 testes
+  frontend**, Vite e Docker build. O warning herdado de Starlette/httpx permanece.
+  Não houve E2E opt-in, pois não mudou interface.
+
+O primeiro comando focado parou por bloqueio de PostgreSQL no sandbox; com acesso
+local autorizado, a tentativa anterior à criação do módulo falhou na coleta por
+ModuleNotFoundError. Não apresento essa coleta como teste vermelho comportamental.
+As falhas comportamentais registradas são as mutações realmente executadas. Ruff
+apontou linhas longas no rascunho e removeu `.encode("utf-8")` no auto-fix UP012;
+a IA formatou os arquivos e restaurou a expressão explícita normativa com um
+noqa local antes da verificação final. Não houve alteração funcional do contrato.
+
+Usei cache uv temporário, valores locais fictícios publicados em verify.sh e o
+harness PostgreSQL existente. Nenhum `.env*`, credencial ou segredo operacional
+foi lido pelo agente. Logs temporários em `/private/tmp/atrio-3-3-verify.log` e
+`/private/tmp/atrio-3-3-mutations-dgnokzg3/`. Sem Git ou deploy, sem dependências,
+migration, endpoint, frontend ou persistência nova. A 3.4 não foi iniciada.
+
+Registrei a sincronização de Q3/P7/A1 em ARQUITETURA/CLAUDE/epics como pendência
+antes da integração 3.4: alias histórico persistido por evento, nunca recalculado
+na auditoria, formato de 16 hex e rotação transparente não suportada. Esses
+documentos foram preservados. Alias pode colidir; segredo comprometido e rollback
+integral de cadeia/âncora antigas válidas permanecem limites do desenho aprovado.
+A revisão independente continua pendente por minha instrução explícita.
+
+## Protótipo navegável de referência do front-end (26/10/2026)
+
+Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até
+ela e o que a IA fez.
+
+### Como a direção visual foi formada
+
+- Usei o Figma Make no início para prototipar os principais fluxos. Revisei e ajustei esse
+  primeiro protótipo e descartei parte da direção visual inicial, que parecia produto SaaS
+  ou plataforma de cursos.
+- Depois defini uma identidade própria para o produto, baseada na marca roxa do projeto, com
+  a obra como protagonista (hoje ÁTRIO — Leilões de Arte).
+- Usei IA como apoio para comparar alternativas, organizar feedback, identificar problemas e
+  formalizar as decisões. As decisões que aprovei viraram `DESIGN.md`, `EXPERIENCE.md` e
+  `VITRINE-BLUEPRINT.md`.
+- Como referências de leilão, destaco as três que o próprio desafio indica: Catawiki,
+  LiveAuctioneers e Superbid. Também observei padrões consolidados de descoberta e
+  organização de catálogos para validar decisões de escala e navegação. Não usei
+  exclusivamente as referências do desafio e não copiei identidade de nenhuma.
+
+### O que a IA fez nesta etapa
+
+- Usei a skill `bmad-ux` depois, para transformar essas decisões **já aprovadas** em um
+  protótipo navegável, e não para criar uma identidade nova. A IA leu os documentos
+  vinculantes, propôs o mapa de telas e as decisões abertas e parou para eu decidir antes de
+  gerar qualquer arquivo.
+- Gerou o protótipo em `ux-designs/casa-de-leiloes/`, em HTML, CSS e JavaScript simples:
+  **9 telas mais um hub de avaliação** (Vitrine, Login, Meus lotes, Criar lote, Sala,
+  Carteira, Meus arremates, Comprovante e Auditoria). O hub escolhe tela, cenário, papel e
+  larguras, e concentra a indicação de qual story entrega cada elemento, que não aparece nas
+  telas.
+- Baixou 10 obras reais de domínio público do Art Institute of Chicago, **apenas como assets
+  do protótipo**, registradas em `SOURCES.md`. A regra de produção do AD-22 não mudou: a
+  aplicação usa o IIIF por proxy e não armazena imagens de obras.
+- Usei o protótipo para testar estados, escala (por exemplo 12 ao vivo, 20 próximos, 50
+  encerrados, 120 lances), responsividade e acessibilidade básica.
+
+### O que eu decidi
+
+- D1 a D5 da etapa: posição do usuário na Sala (estado, último lance, quantidade e "Você" no
+  histórico, sem definir endpoint nem payload); `00:00` com "Confirmando encerramento com o
+  servidor…" e botão desabilitado; obras reais no protótipo; sem página de arquivo e sem
+  link sem destino; produto planejado até a Story 5.3, com informação de story só no hub.
+- Na aprovação final: formato do cronômetro só como apresentação (`MM:SS`, `HH:MM:SS`,
+  `2 d 04 h`); lote em destaque fora do rail "Ao vivo"; sem histórico de movimentos na
+  Carteira; auditoria adulterada sem apontar o lance divergente; sans com numerais tabulares
+  para valores dinâmicos; Sala em duas colunas no tablet como referência; conteúdo fictício
+  não vinculante. Estão em `ux-designs/casa-de-leiloes/PROTOTIPO.md`.
+
+### Verificações realmente executadas
+
+- Um script Playwright (Chromium) fez **284 carregamentos, de 71 combinações de tela e
+  cenário, em 320, 390, 820 e 1280 px**, verificando erros de console, requisições que
+  falham, rolagem horizontal, `alt`, rótulos, alvos de toque de 44 px e contraste calculado.
+- A primeira rodada encontrou problemas reais de layout e de alvo de toque (estouro
+  horizontal em 320 px, tabela de "Meus lotes" em 820 px, rail colado na borda, título
+  espremido nas linhas de encerrados, link com 21 px de altura), que foram corrigidos. A
+  rodada final **não reportou problemas dentro das verificações implementadas**.
+- **Não foram testados:** leitor de tela completo, navegação integral por teclado, Firefox,
+  Safari, impressão física nem dispositivo real.
+
+### Limites
+
+- O protótipo **não é código de produção** e não deve ser copiado para `frontend/`. Nenhuma
+  lógica simulada de API, autenticação, WebSocket, tempo ou regra de leilão foi transferida
+  para a aplicação real. Estados, textos, rotas, hashes e valores do protótipo são fictícios e
+  não vinculantes; as stories definem os contratos reais.
+- Não rodei `verify` nesta etapa: ela só adicionou documentação e o protótipo. Não houve Git.

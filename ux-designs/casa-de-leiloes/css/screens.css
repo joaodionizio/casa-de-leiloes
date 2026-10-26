@@ -1,0 +1,1212 @@
+/* Composição específica de cada tela. */
+
+/* ================= VITRINE ================= */
+.hero {
+  background: var(--color-canvas);
+  padding-block: 0 var(--space-4);
+}
+
+.hero-grid {
+  display: grid;
+  gap: var(--space-5);
+  padding-inline: 0;
+}
+
+.hero-art,
+.hero-info {
+  min-width: 0;
+}
+
+.hero-art .artwork {
+  --ratio: 4 / 3;
+}
+
+.hero-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-inline: var(--gutter);
+  padding-bottom: var(--space-4);
+}
+
+.hero-title {
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hero-artist {
+  font-size: 1.0625rem;
+  color: var(--color-ink);
+}
+
+.hero-figures {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  margin-block: var(--space-2);
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--color-border);
+}
+
+.hero-figures > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.hero-figures dd {
+  margin: 0;
+}
+
+.hero-cta {
+  align-self: stretch;
+}
+
+@media (min-width: 30rem) {
+  .hero-cta {
+    align-self: flex-start;
+    min-width: 14rem;
+  }
+}
+
+@media (min-width: 48rem) {
+  .hero {
+    padding-block: var(--space-5) var(--space-4);
+  }
+  .hero-grid {
+    grid-template-columns: 11fr 9fr;
+    gap: var(--space-6);
+    align-items: stretch;
+    padding-inline: var(--gutter);
+  }
+  .hero-art .artwork {
+    aspect-ratio: auto;
+    height: 100%;
+    min-height: 26rem;
+    max-height: 36rem;
+  }
+  .hero-info {
+    padding-inline: 0;
+    justify-content: center;
+  }
+  .hero-figures {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 75rem) {
+  .hero-grid {
+    grid-template-columns: 3fr 2fr;
+    gap: var(--space-7);
+  }
+  .hero-art .artwork {
+    height: min(36rem, 68vh);
+    min-height: 28rem;
+  }
+}
+
+.hero--empty {
+  padding-block: var(--space-7);
+}
+
+.skeleton-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-5);
+}
+
+.skeleton-row .lot-item {
+  gap: var(--space-2);
+}
+
+.section--closed {
+  padding-bottom: var(--space-8);
+}
+
+/* ================= SALA DO LOTE ================= */
+.room-wrap {
+  padding-block: var(--space-3) var(--space-8);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-brand);
+  text-underline-offset: 0.18em;
+}
+
+.room-conn {
+  margin-block: var(--space-3) 0;
+}
+
+/* Mobile: o painel "some" (display: contents) e seus filhos entram na grade da página
+   na ordem de DESIGN §9: estado + tempo, obra, título, lance, posição, ação, histórico, detalhes. */
+.room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.room-panel {
+  display: contents;
+}
+
+.room-status,
+.room-confirming {
+  order: 1;
+}
+.room-figure {
+  order: 2;
+}
+.room-title {
+  order: 3;
+}
+.room-bid {
+  order: 4;
+}
+.room-form {
+  order: 5;
+}
+.room-history {
+  order: 6;
+}
+.room-ficha {
+  order: 7;
+}
+
+.room-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-ink);
+}
+
+.room-time {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.room-confirming {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-warning);
+  background: var(--color-surface);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.room-figure .artwork {
+  --ratio: 4 / 3;
+}
+
+.room-title h1 {
+  font-size: clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem);
+  overflow-wrap: anywhere;
+}
+
+.room-artist {
+  margin-top: var(--space-2);
+  font-size: 1.0625rem;
+  color: var(--color-ink);
+}
+
+.room-bid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.room-figure-bid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.room-result {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--color-ink);
+}
+
+.room-position {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.room-position--leading {
+  border-left-color: var(--color-success);
+}
+
+.room-position--outbid {
+  border-left-color: var(--color-warning);
+}
+
+.room-position .lot-state {
+  font-size: 1.0625rem;
+}
+
+.room-position-detail {
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.room-min,
+.room-balance {
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.room-note {
+  font-size: 0.9375rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chip {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-ink);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.chip:hover {
+  background: var(--color-ink);
+  color: var(--color-surface);
+}
+
+.room-form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.room-form-row .btn {
+  min-height: 48px;
+}
+
+.room-feedback:empty {
+  display: none;
+}
+
+/* CTA fixo embaixo no mobile enquanto houver ação válida (DESIGN §9). */
+.room-form:not(.room-form--none) {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: var(--space-3) var(--gutter) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.room-form--none:has(.room-feedback:empty) {
+  display: none;
+}
+
+.room-form .field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.section-head--small {
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.section-head--small h2 {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.section-head--small h2 {
+  font-size: 1.25rem;
+}
+
+.section-head--small a {
+  font-size: 0.875rem;
+}
+
+.bid-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.bid-row {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr auto;
+  grid-template-areas: 'seq who money' 'seq time money';
+  column-gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.9375rem;
+}
+
+.bid-seq {
+  grid-area: seq;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bid-who {
+  grid-area: who;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bid-time {
+  grid-area: time;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bid-row .money {
+  grid-area: money;
+  font-size: 1rem;
+}
+
+.bid-row--top .money {
+  font-size: 1.125rem;
+}
+
+.bid-row--top .alias {
+  font-weight: 600;
+}
+
+.bid-row--me {
+  border-left: 3px solid var(--color-brand);
+  padding-left: var(--space-3);
+  margin-left: calc(var(--space-3) * -1);
+}
+
+.you {
+  color: var(--color-ink);
+}
+
+.bid-who .alias {
+  white-space: nowrap;
+}
+
+@media (max-width: 39.99rem) {
+  .bid-who .you {
+    display: block;
+  }
+}
+
+@media (min-width: 40rem) and (max-width: 47.99rem), (min-width: 64rem) {
+  .bid-row {
+    grid-template-columns: 2.75rem 1fr auto 8.5rem;
+    grid-template-areas: 'seq who time money';
+  }
+  .bid-row .money {
+    text-align: right;
+  }
+}
+
+/* Tablet e desktop: obra à esquerda; painel operacional estável (sticky) à direita. */
+@media (min-width: 48rem) {
+  .room-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(19rem, 1fr);
+    grid-template-rows: auto auto auto 1fr;
+    column-gap: var(--space-5);
+    align-items: start;
+  }
+  .room-figure {
+    grid-column: 1;
+    grid-row: 1;
+    order: 0;
+  }
+  .room-history {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .room-ficha {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .room-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    position: sticky;
+    top: var(--space-4);
+    padding: var(--space-5);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-top: 3px solid var(--color-ink);
+  }
+  .room-panel > * {
+    order: 0;
+  }
+  .room-status {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-block: 0 var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .room-time {
+    flex-direction: column;
+    gap: 0;
+  }
+  .room-figure .artwork {
+    max-height: 80vh;
+  }
+  .room-form:not(.room-form--none) {
+    position: static;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .room-form .field-label {
+    position: static;
+    width: auto;
+    height: auto;
+    clip: auto;
+    overflow: visible;
+  }
+}
+
+@media (min-width: 48rem) and (max-height: 760px) {
+  .room-panel {
+    position: static;
+  }
+}
+
+@media (min-width: 64rem) {
+  .room-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(22rem, 1fr);
+    column-gap: var(--space-7);
+  }
+}
+
+.room-panel .money--xl {
+  font-size: clamp(2rem, 4.2vw, 3.25rem);
+}
+
+/* ================= PÁGINAS DE LISTA E FORMULÁRIO ================= */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.lot-title-sm {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  color: var(--color-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.art-h {
+  font-size: 1.5rem;
+  margin-bottom: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+/* ---------- Login ---------- */
+.login {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: calc(100vh - var(--header-height) - 6rem);
+}
+
+.login-plate {
+  display: none;
+  background: var(--color-surface-subtle);
+  padding: var(--space-6);
+  align-items: center;
+  justify-content: center;
+}
+
+.login-plate figure {
+  width: min(26rem, 100%);
+}
+
+.login-plate .artwork {
+  background: var(--color-surface-subtle);
+}
+
+.login-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--gutter) var(--space-8);
+}
+
+.login-form-wrap {
+  width: min(24rem, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.login-submit {
+  width: 100%;
+}
+
+@media (min-width: 64rem) {
+  .login {
+    grid-template-columns: 1fr 1fr;
+  }
+  .login-plate {
+    display: flex;
+  }
+}
+
+/* ---------- Tabelas densas: "Meus lotes" e auditoria ---------- */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-4);
+  margin-bottom: var(--space-5);
+  border-block: 1px solid var(--color-border);
+}
+
+.data-table,
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.data-table th,
+.data-table td,
+.audit-table th,
+.audit-table td {
+  padding: var(--space-3) var(--space-3);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table thead th,
+.audit-table thead th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  border-bottom: 1px solid var(--color-ink);
+  position: sticky;
+  top: 0;
+  background: var(--color-canvas);
+  z-index: 2;
+}
+
+.data-table .group-row th {
+  padding-top: var(--space-6);
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.25rem;
+  color: var(--color-ink);
+  border-bottom: 1px solid var(--color-ink);
+  position: static;
+  background: transparent;
+}
+
+.lot-cell {
+  display: grid;
+  grid-template-columns: 3rem 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 14rem;
+}
+
+.lot-cell-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.c-count,
+.c-value .money {
+  font-variant-numeric: tabular-nums;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.row-actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.cancel-confirm {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-left: 3px solid var(--color-danger);
+  background: var(--color-surface);
+  font-size: 0.875rem;
+}
+
+.cancel-confirm p {
+  margin-bottom: var(--space-2);
+}
+
+/* Mobile: a tabela vira blocos densos (não cards decorativos). */
+@media (max-width: 63.99rem) {
+  .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .data-table,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td,
+  .data-table th {
+    display: block;
+  }
+  .data-table tr:not(.group-row) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: var(--space-4);
+    padding-block: var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .data-table td {
+    border: 0;
+    padding: var(--space-1) 0;
+  }
+  .data-table .c-art,
+  .data-table .c-action {
+    grid-column: 1 / -1;
+  }
+  .data-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .lot-cell {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .data-table tr:not(.group-row) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 47.99rem) {
+  .audit-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .audit-table,
+  .audit-table tbody,
+  .audit-table tr,
+  .audit-table td {
+    display: block;
+  }
+  .audit-table tr {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr auto;
+    grid-template-areas: 'seq who val' 'seq time val' 'det det det';
+    column-gap: var(--space-3);
+    padding-block: var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .audit-table td {
+    border: 0;
+    padding: 0;
+  }
+  .audit-table .a-seq { grid-area: seq; color: var(--color-muted); }
+  .audit-table .a-who { grid-area: who; }
+  .audit-table .a-val { grid-area: val; text-align: right; }
+  .audit-table .a-time { grid-area: time; font-size: 0.8125rem; color: var(--color-muted); }
+  .audit-table .a-det { grid-area: det; }
+}
+
+/* ---------- Criar lote ---------- */
+.stepper {
+  display: none;
+  gap: var(--space-5);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stepper li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+}
+
+.stepper .step-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid currentColor;
+  font-size: 0.8125rem;
+}
+
+.stepper .is-current {
+  color: var(--color-ink);
+  font-weight: 700;
+}
+
+.stepper .is-current .step-n {
+  background: var(--color-ink);
+  color: var(--color-surface);
+  border-color: var(--color-ink);
+}
+
+.stepper .is-done {
+  color: var(--color-ink);
+}
+
+.stepper-compact {
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+@media (min-width: 48rem) {
+  .stepper {
+    display: flex;
+  }
+  .stepper-compact {
+    display: none;
+  }
+}
+
+.create-body {
+  max-width: 60rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.confirm-grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 48rem) {
+  .confirm-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--space-6);
+    align-items: start;
+  }
+}
+
+.terms-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 40rem) {
+  .terms-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.published {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ---------- Carteira ---------- */
+.wallet-figures {
+  display: grid;
+  gap: var(--space-5);
+  padding-block: var(--space-5);
+  margin-block: var(--space-4) var(--space-3);
+  border-block: 1px solid var(--color-ink);
+}
+
+.wallet-main,
+.wallet-side > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wallet-side {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.wallet-side dd {
+  margin: 0;
+}
+
+.wallet-rule {
+  max-width: 40rem;
+  margin-bottom: var(--space-5);
+  color: var(--color-muted);
+}
+
+@media (min-width: 48rem) {
+  .wallet-figures {
+    grid-template-columns: 3fr 2fr;
+    gap: var(--space-7);
+    align-items: end;
+  }
+}
+
+.deposit {
+  max-width: 28rem;
+  padding-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.deposit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.deposit-form .field {
+  width: 100%;
+}
+
+/* ---------- Meus arremates ---------- */
+.win-group {
+  margin-top: var(--space-6);
+}
+
+.win-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.win-row {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: var(--space-3) var(--space-4);
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  align-items: start;
+}
+
+.win-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.win-detail {
+  font-size: 0.9375rem;
+}
+
+.win-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.win-actions a:not(.btn) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.copy-msg {
+  font-size: 0.875rem;
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+@media (min-width: 48rem) {
+  .win-row {
+    grid-template-columns: 4rem 1fr auto;
+    align-items: center;
+  }
+  .win-actions {
+    grid-column: 3;
+    justify-content: flex-end;
+  }
+}
+
+/* ---------- Comprovante ---------- */
+.receipt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: 46rem;
+  margin-inline: auto;
+  margin-bottom: var(--space-4);
+}
+
+.receipt {
+  max-width: 46rem;
+  margin-inline: auto;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.receipt-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 2px solid var(--color-ink);
+}
+
+.receipt-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.receipt-work {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: 1fr;
+}
+
+.receipt-value {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--color-border);
+}
+
+.receipt-foot {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+@media (min-width: 40rem) {
+  .receipt {
+    padding: var(--space-7);
+  }
+  .receipt-work {
+    grid-template-columns: 12rem 1fr;
+    align-items: center;
+  }
+}
+
+@media print {
+  .receipt {
+    border: 0;
+    padding: 0;
+  }
+  .page {
+    padding: 0;
+  }
+}
+
+/* ---------- Auditoria ---------- */
+.audit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 62rem;
+}
+
+.audit-lot {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.audit-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-7);
+}
+
+.audit-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.audit-summary dd {
+  margin: 0;
+}
+
+.audit-foot {
+  font-size: 0.875rem;
+}
+
+.audit-table .a-det {
+  width: 9rem;
+}
+
+.audit-table details[open] {
+  padding-bottom: var(--space-2);
+}
+
+.anchor {
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.c-date {
+  white-space: nowrap;
+}
+
+@media (min-width: 48rem) {
+  .data-table .row-actions {
+    flex-wrap: nowrap;
+  }
+  .lot-cell {
+    min-width: 12rem;
+  }
+}
+
+.section-head--small a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+@media (max-width: 47.99rem) {
+  .room-status {
+    flex-wrap: wrap;
+  }
+  .room-time .countdown--display {
+    font-size: 1.5rem;
+  }
+}
+
+/* "Meus lotes" em blocos: 3 colunas compactas no mobile, 5 no tablet. */
+@media (max-width: 63.99rem) {
+  .data-table tr:not(.group-row) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .data-table .c-value {
+    grid-column: span 2;
+  }
+  .data-table .group-row th {
+    padding-inline: 0;
+  }
+}
+
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .data-table tr:not(.group-row) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .data-table .c-value {
+    grid-column: auto;
+  }
+}

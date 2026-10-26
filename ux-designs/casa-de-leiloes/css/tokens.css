@@ -1,0 +1,53 @@
+/* Tokens do protótipo de UX.
+   Cores e fontes: nomes e valores idênticos a DESIGN.md §3 e §4 e a frontend/src/index.css.
+   Nada aqui cria identidade nova. Escala de espaço e foco são ajudas só do protótipo. */
+:root {
+  --color-brand: #863bff;
+  --color-brand-strong: #7e14ff;
+  --color-brand-soft: #ede6ff;
+  --color-brand-blue: #47bfff;
+
+  --color-ink: #18131f;
+  --color-text: #29242f;
+  --color-muted: #716a78;
+
+  --color-canvas: #f8f7f5;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f4f1f8;
+  --color-border: #ddd7e2;
+
+  --color-success: #2d7552;
+  --color-warning: #8b6418;
+  --color-danger: #9b2c2c;
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: Georgia, 'Times New Roman', serif;
+
+  /* Só o símbolo ÁTRIO usa estas duas cores (DESIGN.md §2, logotipo: lilás e violeta
+     intenso). Não são cores de interface. */
+  --mark-face-light: #a77bf6;
+  --mark-face-strong: #6c35e6;
+
+  /* Ajudas do protótipo. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+  --container: 75rem;
+  --gutter: 1.25rem;
+  --focus-ring: 3px solid var(--color-brand);
+  --header-height: 4rem;
+
+  line-height: 1.5;
+  color-scheme: light;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --gutter: 2rem;
+  }
+}
