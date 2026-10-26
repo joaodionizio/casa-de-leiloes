@@ -65,6 +65,7 @@ from app.errors import (
     error_response,
     error_responses,
 )
+from app.lot_time import LotPhase, lot_phase
 from app.money import MAX_CENTS, Cents
 from app.users import User
 
@@ -237,27 +238,6 @@ def resolve_schedule(
     if ends_at <= start:
         return ScheduleViolation.ENDS_AT_NOT_AFTER_START
     return Schedule(starts_at=start.astimezone(UTC), ends_at=ends_at.astimezone(UTC))
-
-
-class LotPhase(StrEnum):
-    """Fase temporal do lote (2.4 §7, Story 2.5 P2). Derivada, nunca persistida: fim
-    temporal não é liquidação, que só nasce na 4.3 (P8)."""
-
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    ENDED = "ended"
-
-
-def lot_phase(starts_at: datetime, ends_at: datetime, now: datetime) -> LotPhase:
-    """`now < starts_at` agendado; `starts_at <= now < ends_at` ao vivo; `now >=
-    ends_at` encerrado. Compara instantes: o offset de cada argumento não importa."""
-    if now.tzinfo is None:
-        raise ValueError("now must be timezone-aware")
-    if now < starts_at:
-        return LotPhase.SCHEDULED
-    if now < ends_at:
-        return LotPhase.LIVE
-    return LotPhase.ENDED
 
 
 # --- serviço, nível externo (só a criação manual) ---
