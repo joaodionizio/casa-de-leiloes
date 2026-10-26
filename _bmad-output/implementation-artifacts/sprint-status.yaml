@@ -54,7 +54,7 @@ development_status:
   3-1-carteira-e-depósito-simulado: done
   3-2-regras-de-aceitação-do-lance-com-hora-injetada: done
   3-3-fundamentos-de-integridade-do-histórico: done
-  3-4-lance-transacional-com-travas-e-anti-sniping: backlog
+  3-4-lance-transacional-com-travas-e-anti-sniping: done
   3-5-dar-lance-pela-sala-do-lote: backlog
   3-6-leiloeiro-cancela-lote-sem-lances: backlog
   epic-3-retrospective: optional

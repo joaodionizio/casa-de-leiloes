@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import artic, catalog, lots, seed
+from app.bid_integrity import GENESIS_HASH
 from app.config import BACKEND_DIR
 from app.security import hash_password, verify_password
 from app.seed import (
@@ -36,7 +37,9 @@ from tests.lot_support import (
     LOT_COLUMNS,
     count_lots,
     db_now,
+    empty_anchor,
     insert_lot,
+    integrity_secrets,
     lot_rows,
     statement_recorder,
 )
@@ -166,28 +169,49 @@ SEED_WITHOUT_APP_MAIN = (
 )
 
 
-def test_module_runs_alone_with_only_database_url(
-    test_database_url: str, clean_users: None, db_session_factory: sessionmaker[Session]
-) -> None:
-    """O seed não exige APP_ORIGIN nem JWT_SECRET e não importa `app.main`.
-
-    Tirar as variáveis do ambiente não basta: as configurações também leem o
-    `backend/.env`. Por isso o subprocesso confere `sys.modules` ao terminar.
-    """
+def seed_env(test_database_url: str, **overrides: str) -> dict[str, str]:
+    """O ambiente mínimo do seed: tira do ambiente o que ele não pode precisar e põe
+    `DATABASE_URL` e `AUDIT_HMAC_SECRET`. `overrides` sobrescreve ou acrescenta."""
     env = {
         key: value
         for key, value in os.environ.items()
-        if key not in ("APP_ORIGIN", "JWT_SECRET", "DATABASE_URL", "TEST_DATABASE_URL")
+        if key
+        not in (
+            "APP_ORIGIN",
+            "JWT_SECRET",
+            "DATABASE_URL",
+            "TEST_DATABASE_URL",
+            "AUDIT_HMAC_SECRET",
+            "PSEUDONYM_SECRET",
+        )
     }
     env["DATABASE_URL"] = test_database_url
+    env["AUDIT_HMAC_SECRET"] = os.environ["AUDIT_HMAC_SECRET"]
+    env.update(overrides)
+    return env
 
-    result = subprocess.run(
+
+def run_seed_subprocess(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [sys.executable, "-c", SEED_WITHOUT_APP_MAIN],
         cwd=BACKEND_DIR,
         env=env,
         capture_output=True,
         text=True,
     )
+
+
+def test_module_runs_alone_with_only_database_url_and_audit_secret(
+    test_database_url: str, clean_users: None, db_session_factory: sessionmaker[Session]
+) -> None:
+    """O seed exige `DATABASE_URL` e `AUDIT_HMAC_SECRET` (P4) e não exige `APP_ORIGIN`,
+    `JWT_SECRET` nem `PSEUDONYM_SECRET`; não importa `app.main`.
+
+    Tirar as variáveis do ambiente não basta: as configurações também leem o
+    `backend/.env`. Por isso o subprocesso confere `sys.modules` ao terminar, e
+    `PSEUDONYM_SECRET=""` (inválido se fosse lido) sobrescreve qualquer `.env` local.
+    """
+    result = run_seed_subprocess(seed_env(test_database_url, PSEUDONYM_SECRET=""))
 
     assert result.returncode != 42, "o seed importou app.main"
     assert result.returncode == 0, result.stderr
@@ -201,6 +225,29 @@ def test_module_runs_alone_with_only_database_url(
     assert len(wallet_rows(db_session_factory)) == 3
     assert {row[1:] for row in wallet_rows(db_session_factory)} == {(0, 0)}
     assert "wallet" not in (result.stderr + result.stdout).lower()
+    # Story 3.4: o demo nasceu com a âncora vazia assinada com o segredo do ambiente.
+    (row,) = lot_rows(db_session_factory)
+    lot = stored(row)
+    assert lot["anchor_hmac"] == empty_anchor(lot["id"])
+    assert (lot["bid_count"], lot["final_hash"]) == (0, GENESIS_HASH)
+
+
+@pytest.mark.parametrize("secret", ["", "curto", "x" * 31, "é" * 15 + "a"])
+def test_the_seed_fails_without_a_valid_audit_secret_and_never_echoes_it(
+    test_database_url: str,
+    clean_users: None,
+    db_session_factory: sessionmaker[Session],
+    secret: str,
+) -> None:
+    result = run_seed_subprocess(seed_env(test_database_url, AUDIT_HMAC_SECRET=secret))
+
+    assert result.returncode not in (0, 42)
+    output = result.stderr + result.stdout
+    if secret:
+        assert secret not in output
+    with db_session_factory() as session:
+        assert all_rows(session) == []  # falhou antes de abrir o banco
+    assert count_lots(db_session_factory) == 0
 
 
 def test_start_script_runs_migrations_then_seed_then_server() -> None:
@@ -220,7 +267,7 @@ def test_start_script_runs_migrations_then_seed_then_server() -> None:
 def run_full_seed(factory: sessionmaker[Session]) -> tuple[int, bool]:
     """O que `main()` faz: uma transação, um commit."""
     with factory() as session:
-        result = seed.run_seed(session)
+        result = seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
         session.commit()
     return result
 
@@ -336,6 +383,58 @@ def test_several_old_demos_and_one_open_demo_change_nothing(
     assert lot_rows(db_session_factory) == before
 
 
+def test_a_legacy_open_demo_without_anchor_does_not_count_and_is_never_signed(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    db_engine: Engine,
+) -> None:
+    """Primeiro boot da 3.4 com um demo legado aberto (`anchor_hmac NULL`): o legado não
+    conta, um demo assinado é criado e o legado fica exatamente como estava (P3)."""
+    seed_users_only(db_session_factory)
+    legacy = insert_lot(
+        db_session_factory,
+        anchored=False,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        ends_at=db_now(db_session_factory) + timedelta(hours=10),
+    )
+    before = [row for row in lot_rows(db_session_factory) if row[0] == legacy]
+
+    with statement_recorder(db_engine) as recorder:
+        assert run_full_seed(db_session_factory) == (0, True)
+
+    rows = lot_rows(db_session_factory)
+    assert [row for row in rows if row[0] == legacy] == before
+    assert stored(before[0])["anchor_hmac"] is None
+    signed = [stored(row) for row in rows if row[0] != legacy]
+    assert len(signed) == 1
+    assert signed[0]["anchor_hmac"] == empty_anchor(signed[0]["id"])
+    for statement in recorder.statements:
+        normalized = statement.lstrip().upper()
+        assert not normalized.startswith("UPDATE"), statement
+        assert not normalized.startswith("DELETE"), statement
+    # Boots seguintes: o demo assinado conta, nada é criado nem assinado.
+    assert run_full_seed(db_session_factory) == (0, False)
+    assert len(lot_rows(db_session_factory)) == 2
+
+
+def test_a_signed_demo_counts_as_open_even_if_its_signature_is_not_checked(
+    db_session_factory: sessionmaker[Session], clean_users: None
+) -> None:
+    """O predicado escolhe o demo, não autentica: `anchor_hmac IS NOT NULL` basta
+    (F-4). O lance continua passando pelo gate."""
+    seed_users_only(db_session_factory)
+    insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        anchor_hmac="f" * 64,
+        ends_at=db_now(db_session_factory) + timedelta(hours=1),
+    )
+
+    assert run_full_seed(db_session_factory) == (0, False)
+
+
 def test_an_open_manual_lot_does_not_count_as_the_demo(
     db_session_factory: sessionmaker[Session], clean_users: None
 ) -> None:
@@ -392,7 +491,7 @@ def test_the_demo_goes_through_the_shared_schedule_rule(
 
     with db_session_factory() as session:
         with pytest.raises(RuntimeError):
-            seed.run_seed(session)
+            seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
 
     assert count_lots(db_session_factory) == 0
     with db_session_factory() as session:
@@ -471,7 +570,7 @@ def test_the_seed_runs_in_read_committed(
     # O algoritmo depende disso: em REPEATABLE READ o segundo seed não veria o demo
     # que o primeiro acabou de confirmar.
     with db_session_factory() as session:
-        seed.run_seed(session)
+        seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
         isolation = session.execute(text("SHOW transaction_isolation")).scalar_one()
         session.rollback()
     assert isolation == "read committed"

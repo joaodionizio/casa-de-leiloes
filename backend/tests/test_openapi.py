@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,6 +37,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/lots/{lot_id}",
         "/api/wallet",
         "/api/wallet/deposit",
+        "/api/lots/{lot_id}/bids",
     ]
 
 
@@ -175,6 +178,7 @@ MINE_PATH = "/api/lots/mine"
 LOT_DETAIL_PATH = "/api/lots/{lot_id}"
 WALLET_PATH = "/api/wallet"
 DEPOSIT_PATH = "/api/wallet/deposit"
+BIDS_PATH = "/api/lots/{lot_id}/bids"
 LOT_FIELDS = sorted(
     [
         "id",
@@ -202,9 +206,11 @@ LOT_FIELDS = sorted(
 def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     paths = list(api_only.get("/api/openapi.json").json()["paths"])
 
-    # Story 3.1: a carteira vem depois dos lotes, imediatamente.
-    assert paths[-5:-2] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
-    assert paths[-2:] == [WALLET_PATH, DEPOSIT_PATH]
+    # Story 3.1: a carteira vem depois dos lotes, imediatamente. Story 3.4: o lance
+    # (`register_bid_routes`) vem depois da carteira.
+    assert paths[-6:-3] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-3:-1] == [WALLET_PATH, DEPOSIT_PATH]
+    assert paths[-1] == BIDS_PATH
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
 
@@ -424,4 +430,76 @@ def test_wallet_schemas_have_exactly_the_contract_fields(api_only: TestClient) -
     assert sorted(schemas["DepositRequest"]["properties"]) == ["amount_cents"]
     assert schemas["DepositRequest"]["required"] == ["amount_cents"]
     assert schemas["DepositRequest"]["additionalProperties"] is False
+    assert "HTTPValidationError" not in schemas
+
+
+# --- Story 3.4: o lance ---
+
+
+def test_place_bid_documents_201_and_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    operation = api_only.get("/api/openapi.json").json()["paths"][BIDS_PATH]["post"]
+
+    assert operation["responses"]["201"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PlaceBidResponse")
+    for status in ("401", "403", "404", "409", "422"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert operation["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PlaceBidRequest")
+    assert set(api_only.get("/api/openapi.json").json()["paths"][BIDS_PATH]) == {"post"}
+
+
+def test_bid_schemas_have_exactly_the_contract_fields_and_no_private_ones(
+    api_only: TestClient,
+) -> None:
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+
+    assert sorted(schemas["PlaceBidRequest"]["properties"]) == ["amount_cents"]
+    assert schemas["PlaceBidRequest"]["required"] == ["amount_cents"]
+    assert schemas["PlaceBidRequest"]["additionalProperties"] is False
+    assert sorted(schemas["PlaceBidResponse"]["properties"]) == [
+        "bid",
+        "lot",
+        "wallet",
+    ]
+    assert sorted(schemas["AcceptedBidResponse"]["properties"]) == [
+        "amount_cents",
+        "bidder_alias",
+        "placed_at",
+        "sequence",
+    ]
+    assert sorted(schemas["BidLotStateResponse"]["properties"]) == [
+        "anti_sniping_applied",
+        "current_bid_cents",
+        "ends_at",
+    ]
+    bid_schemas = json.dumps(
+        {
+            name: schemas[name]
+            for name in (
+                "PlaceBidRequest",
+                "PlaceBidResponse",
+                "AcceptedBidResponse",
+                "BidLotStateResponse",
+            )
+        }
+    )
+    for forbidden in (
+        "bidder_id",
+        "user_id",
+        "current_leader_id",
+        "auctioneer_id",
+        "previous_hash",
+        "current_hash",
+        "final_hash",
+        "anchor_hmac",
+        "canonical_version",
+        "is_demo",
+        "email",
+        "secret",
+    ):
+        assert forbidden not in bid_schemas, forbidden
     assert "HTTPValidationError" not in schemas

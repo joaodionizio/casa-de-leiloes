@@ -22,7 +22,7 @@ from app.wallet import (
     read_wallet,
 )
 from tests.auth_support import BIDDER_EMAIL, OTHER_BIDDER_EMAIL, seeded_id
-from tests.lot_support import statement_recorder
+from tests.lot_support import integrity_secrets, statement_recorder
 from tests.wallet_support import (
     delete_wallet,
     seed_users_with_wallets,
@@ -37,7 +37,7 @@ SEEDED_IDS = sorted(seed_user.id for seed_user in SEED_USERS)
 def run_full_seed(factory: sessionmaker[Session]) -> tuple[int, bool]:
     """O que `main()` faz: uma transação, um commit."""
     with factory() as session:
-        result = seed.run_seed(session)
+        result = seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
         session.commit()
     return result
 
@@ -181,7 +181,7 @@ def test_seed_does_not_log_a_wallet_count_before_the_commit(
     contagem de carteiras antes do commit."""
     with caplog.at_level(logging.DEBUG):
         with db_session_factory() as session:
-            seed.run_seed(session)
+            seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
             during = [r.getMessage() for r in caplog.records]
             session.rollback()
 

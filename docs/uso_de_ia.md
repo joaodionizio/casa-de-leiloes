@@ -697,6 +697,44 @@ concluir a Story 3.3. Este fechamento alterou só documentação e status, sem r
 testes, sem Git e sem iniciar a 3.4. A sincronização de Q3/P7/A1 continua pendente
 antes da integração da 3.4.
 
+## Story 3.4 — Lance transacional com travas e anti-sniping (26/10/2026)
+
+Decidi implementar somente a Story 3.4, a partir da spec aprovada (`/bmad-spec`, review
+adversarial, SR-01 a SR-09 corrigidos) e do `/bmad-build`. Pedi para não redesenhar, não
+tocar em `backend/.env.example`, não rodar Git e parar em `review`, sem `/bmad-code-review`.
+
+A IA (Claude Sonnet 5.5 nesta sessão; o pedido citava outro modelo) escreveu a migration
+`0005`, `app/bids.py` (modelo, gate, serviço, rota), as configurações de integridade, a âncora
+vazia em `create_lot` e no seed, e a matriz de testes em PostgreSQL real: migration, serviço,
+rota, concorrência (inclusive o controle negativo que provoca `40P01`), 23 adulterações
+G1–G23 mais G9b/G10b/G11b e a fixture `drop_checks`, que recusa CHECK fora de `lots` e `bids` e
+recria exatamente o que removeu.
+
+Verificações realmente executadas: `pytest` com 1970 testes passando e `./verify.sh` completo
+com exit 0. Executei 37 mutações dirigidas, uma por vez e restauradas; 35 morreram. As duas
+que sobreviveram foram analisadas, não escondidas: uma é equivalente (o ORM não inclui no
+`UPDATE` um atributo que não mudou) e a outra é defesa sem efeito observável hoje (o
+`rollback()` antes do serviço).
+
+Registro de um erro: a IA escreveu por engano um comando com `git status`; ele foi bloqueado e
+nada de Git foi executado. Não foi testado: PostgreSQL com carga real, falha de conexão depois
+do envio do `COMMIT` (indeterminada por natureza) nem o deploy no Render.
+
+### Review independente e fechamento da Story 3.4 (26/10/2026)
+
+O build foi feito com Claude Sonnet 5.5. Iniciei o review independente com
+GPT-6 Astra High; ele atingiu o limite de uso antes da consolidação, depois de
+encontrar um LOW, sem concluir toda a auditoria. Fiz a revisão focada complementar
+com um modelo mais econômico, cobrindo writers, HTTP/security, qualidade dos testes
+e mutation spot-check. Nenhuma falha MEDIUM+ foi encontrada; o único finding,
+F-01 LOW documental, foi corrigido no exemplo Docker do README. Resultado
+consolidado: 0 BLOCKER, 0 HIGH, 0 MEDIUM, nenhum LOW técnico; recomendação final:
+aprovada. Fechei a 3.4 como `done`, mantendo o Epic 3 `in-progress` e a 3.5 em `backlog`.
+
+Essa experiência me levou a reservar modelos High para tarefas de alto risco real
+e usar modelos Medium para verificações focadas e consolidação, em vez de usar
+High em todas as etapas.
+
 ## Protótipo navegável de referência do front-end (26/10/2026)
 
 Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até

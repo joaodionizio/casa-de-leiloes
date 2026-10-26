@@ -349,3 +349,19 @@ def test_bid_integrity_shared_constants() -> None:
         )
         >= 2
     )
+
+
+# --- Story 3.4: `bids.py` compõe os primitives; ele mesmo não lê relógio ---
+
+
+def test_bids_module_reads_no_clock_and_does_not_import_the_app_entrypoint() -> None:
+    bids_py = APP / "bids.py"
+    tree = parse(bids_py)
+
+    # Sem allowlist de imports (não é módulo de domínio), mas sem relógio Python.
+    assert clock_calls(tree) == []
+    assert "app.main" not in imported_modules(bids_py)
+    assert "time" not in imported_modules(bids_py)
+    source = bids_py.read_text(encoding="utf-8")
+    assert "clock_timestamp" not in source.replace("`clock_timestamp()`", "")
+    assert "CURRENT_TIMESTAMP" not in source.upper()

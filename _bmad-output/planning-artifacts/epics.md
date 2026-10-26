@@ -28,7 +28,7 @@ Regras desta divisão:
 - tabelas nascem na story que precisa delas;
 - os critérios dizem o que precisa funcionar, não como implementar além das ADs;
 - a arquitetura é vinculante: a divisão se ajusta às ADs, nunca o contrário.
-  Por isso, todo lance nasce íntegro (AD-7 passo 15, AD-13, AD-20, AD-21) já no
+  Por isso, todo lance nasce íntegro (AD-7 passos 13 a 17, AD-13, AD-20, AD-21) já no
   Épico 3;
 - quando uma story depende de uma questão aberta (Q1 a Q10 de
   `docs/ARQUITETURA.md`) ou de um detalhe ainda não decidido, isso está indicado
@@ -98,7 +98,7 @@ NFR6: Uso de IA descrito (onde, como, o que foi revisado).
 - AR2 (AD-3): dinheiro em centavos, `BIGINT`, sufixo `_cents`; CHECKs de não negativo e `committed_balance_cents <= total_balance_cents`; sem float.
 - AR3 (AD-4): React + Vite + TypeScript simples; contratos HTTP e eventos WebSocket tipados.
 - AR4 (AD-6, AD-26): hora do PostgreSQL (`clock_timestamp()`) lida depois da trava do lote, um instante por operação; o domínio recebe `now`.
-- AR5 (AD-7, AD-8): lance em uma única transação de 16 passos, incluindo o registro de auditoria; travas: lote, depois carteiras em `user_id` crescente.
+- AR5 (AD-7, AD-8): lance em uma única transação (18 passos desde o refinamento da Story 3.4, com autenticação do estado anterior antes das regras), incluindo o registro de auditoria; travas: lote, depois carteiras em `user_id` crescente.
 - AR6 (AD-9, AD-19): fechamento sob a mesma trava, idempotente, `UNIQUE(lot_id)` em `receipts`; scheduler + catch-up na inicialização e na tentativa de lance; leituras nunca liquidam; evento só depois do commit.
 - AR7 (AD-10, AD-25): WebSocket só para a sala; lances por REST; heartbeat do cliente; snapshot completo ao (re)conectar; um processo; Session curta em threadpool.
 - AR8 (AD-11, AD-29): JWT de 8 h em cookie HttpOnly, mesma origem; Argon2; CSRF por JSON + `Origin`/`Referer`; sem CORS permissivo; toda rota declara política de acesso.
@@ -1153,6 +1153,7 @@ Decididas na criação da story indicada, não aqui:
   removido na 2.2 (cookie real do JWT). Depois da 2.2, só o WebSocket técnico continua
   temporariamente; a 2.2 o classifica como rota pública na política de acesso até ele
   ser removido ou substituído na 4.1 (sala ao vivo).
-- 3.3: Q3 (`bidder_alias` persistido ou recalculado), agora necessária até 25/10.
+- 3.3: Q3 resolvida em 26/10/2026 (`bidder_alias` persistido em cada lance; a
+  auditoria nunca o recalcula); registro no AD-20 e na story da 3.3.
 - 4.1: significado exato de "posição do usuário nos lances".
 - Demais Q1 a Q10: indicadas em cada story.

@@ -1,6 +1,7 @@
 """Apoio dos testes de lotes (Story 2.4): corpo válido, leitura direta da tabela e
 um gravador de statements."""
 
+import os
 import re
 import uuid
 from collections.abc import Callable, Iterator
@@ -12,6 +13,8 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.bid_integrity import GENESIS_HASH, AnchorState, compute_anchor_hmac
 
 LOT_COLUMNS = [
     "id",
@@ -33,8 +36,32 @@ LOT_COLUMNS = [
     "ends_at",
     "is_demo",
     "created_at",
+    "current_bid_cents",
+    "current_leader_id",
+    "bid_count",
+    "final_hash",
+    "anchor_hmac",
 ]
 IMAGE_ID = "2d484387-2509-5e8e-2c43-22f9981972eb"
+
+
+def integrity_secrets() -> tuple[bytes, bytes]:
+    """`(audit, pseudonym)` em `bytes`, lidos do ambiente que o `conftest` preparou."""
+    return (
+        os.environ["AUDIT_HMAC_SECRET"].encode("utf-8"),
+        os.environ["PSEUDONYM_SECRET"].encode("utf-8"),
+    )
+
+
+def empty_anchor(lot_id: uuid.UUID, audit_hmac_secret: bytes | None = None) -> str:
+    """A âncora vazia assinada de um lote novo (`bid_count = 0`, genesis)."""
+    secret = (
+        audit_hmac_secret if audit_hmac_secret is not None else (integrity_secrets()[0])
+    )
+    return compute_anchor_hmac(
+        AnchorState(v=1, lot_id=lot_id, bid_count=0, final_hash=GENESIS_HASH),
+        audit_hmac_secret=secret,
+    )
 
 
 def iso(moment: datetime) -> str:
@@ -80,9 +107,15 @@ def lot_rows(factory: sessionmaker[Session]) -> list[tuple]:
         ]
 
 
-def insert_lot(factory: sessionmaker[Session], **columns: Any) -> uuid.UUID:
+def insert_lot(
+    factory: sessionmaker[Session], *, anchored: bool = True, **columns: Any
+) -> uuid.UUID:
     """Insere um lote por SQL direto, para estados que a API não cria (demo vencido,
-    lote de outro leiloeiro). Obrigatórios: `auctioneer_id`. O resto tem padrão."""
+    lote de outro leiloeiro). Obrigatórios: `auctioneer_id`. O resto tem padrão.
+
+    Por padrão o lote nasce apto a lance, com a âncora vazia válida do próprio `id`
+    (Story 3.4). `anchored=False` cria o lote legado, com `anchor_hmac` nulo, que
+    recusa lance. Um `anchor_hmac` explícito em `columns` vale sobre os dois."""
     now = db_now(factory)
     row: dict[str, Any] = {
         "id": uuid.uuid4(),
@@ -105,6 +138,8 @@ def insert_lot(factory: sessionmaker[Session], **columns: Any) -> uuid.UUID:
         "created_at": now,
     }
     row.update(columns)
+    if anchored and "anchor_hmac" not in row:
+        row["anchor_hmac"] = empty_anchor(row["id"])
     names = ", ".join(row)
     params = ", ".join(f":{name}" for name in row)
     with factory() as session:

@@ -6,14 +6,18 @@ from fastapi import FastAPI
 from app.access import AccessPolicy, api_route
 from app.artic import ArticClient
 from app.auth import register_auth_routes
+from app.bids import register_bid_routes
 from app.catalog import register_catalog_routes
 from app.config import (
     AuthSettings,
+    IntegritySettings,
     OriginSettings,
     SessionConfig,
     get_auth_settings,
+    get_integrity_settings,
     get_origin_settings,
     get_spa_settings,
+    integrity_config,
     session_cookie_for_origin,
 )
 from app.csrf import ApiWriteGuardMiddleware
@@ -31,11 +35,16 @@ def create_app(
     spa_dist_dir: Path | None = None,
     app_origin: str | None = None,
     jwt_secret: str | None = None,
+    audit_hmac_secret: str | None = None,
+    pseudonym_secret: str | None = None,
 ) -> FastAPI:
-    """Monta a aplicação. Sem argumentos, lê `SPA_DIST_DIR`, `APP_ORIGIN` e
-    `JWT_SECRET` da configuração; sem `APP_ORIGIN` ou sem um `JWT_SECRET` de pelo
-    menos 32 caracteres a criação falha, sem ecoar o valor (Story 2.1 D2, 2.2 P1).
-    Uma `APP_ORIGIN` `http` fora de localhost também impede a criação (2.2 P4)."""
+    """Monta a aplicação. Sem argumentos, lê `SPA_DIST_DIR`, `APP_ORIGIN`,
+    `JWT_SECRET`, `AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` da configuração; sem
+    `APP_ORIGIN` ou sem um `JWT_SECRET` de pelo menos 32 caracteres a criação falha,
+    sem ecoar o valor (Story 2.1 D2, 2.2 P1). Os dois segredos de integridade
+    precisam ter 32 bytes em UTF-8 e ser diferentes entre si e do `JWT_SECRET`
+    (Story 3.4, P5). Uma `APP_ORIGIN` `http` fora de localhost também impede a
+    criação (2.2 P4)."""
     if app_origin is None:
         app_origin = get_origin_settings().app_origin
     else:
@@ -46,6 +55,16 @@ def create_app(
     else:
         auth_settings = AuthSettings(_env_file=None, jwt_secret=jwt_secret)
     cookie_name, cookie_secure = session_cookie_for_origin(app_origin)
+
+    if audit_hmac_secret is None and pseudonym_secret is None:
+        integrity_settings = get_integrity_settings()
+    else:
+        integrity_settings = IntegritySettings(
+            _env_file=None,
+            audit_hmac_secret=audit_hmac_secret,
+            pseudonym_secret=pseudonym_secret,
+        )  # type: ignore[arg-type]  # str do chamador; o Pydantic converte
+    integrity = integrity_config(integrity_settings, auth_settings.jwt_secret)
 
     app = FastAPI(
         title="ÁTRIO",
@@ -61,6 +80,8 @@ def create_app(
         cookie_name=cookie_name,
         cookie_secure=cookie_secure,
     )
+    # Segredos de integridade em `bytes`, convertidos uma vez (Story 3.4).
+    app.state.integrity_config = integrity
     # Cliente da AIC (Story 2.3): sem rede na criação; os testes o substituem.
     app.state.artic_client = ArticClient()
 
@@ -75,6 +96,7 @@ def create_app(
     register_catalog_routes(app)
     register_lot_routes(app)
     register_wallet_routes(app)
+    register_bid_routes(app)
     register_infra_check_routes(app)
 
     if spa_dist_dir is None:

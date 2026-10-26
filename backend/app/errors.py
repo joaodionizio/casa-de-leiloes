@@ -40,6 +40,17 @@ CATALOG_UNAVAILABLE = "catalog_unavailable"
 ARTWORK_NOT_ELIGIBLE = "artwork_not_eligible"
 # Depósito que levaria o total da carteira acima do teto técnico (Story 3.1, P3).
 BALANCE_LIMIT_EXCEEDED = "balance_limit_exceeded"
+# Recusas de negócio do lance (Story 3.4, CA2): os valores são os de `BidRefusal`
+# (`app/bid_rules.py`); `errors.py` não importa módulo do app e um teste prova a
+# igualdade dos conjuntos. Saem só do `POST /api/lots/{lot_id}/bids`, com 422.
+LOT_NOT_STARTED = "lot_not_started"
+LOT_ENDED = "lot_ended"
+BELOW_MINIMUM = "below_minimum"
+ALREADY_WINNING = "already_winning"
+INSUFFICIENT_BALANCE = "insufficient_balance"
+# Histórico do lote que não se autentica (Story 3.4, P7): um código e uma mensagem só,
+# para toda categoria de falha; o detalhe técnico vai ao log interno.
+LOT_INTEGRITY_CONFLICT = "lot_integrity_conflict"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -65,6 +76,15 @@ MESSAGES = {
         "público com imagem no acervo do museu."
     ),
     BALANCE_LIMIT_EXCEEDED: "O depósito ultrapassaria o limite de saldo da carteira.",
+    LOT_NOT_STARTED: "Este lote ainda não começou.",
+    LOT_ENDED: "Este lote já foi encerrado.",
+    BELOW_MINIMUM: "Seu lance está abaixo do mínimo para este lote.",
+    ALREADY_WINNING: "Você já está ganhando este lote.",
+    INSUFFICIENT_BALANCE: "Saldo disponível insuficiente para este lance.",
+    LOT_INTEGRITY_CONFLICT: (
+        "Não foi possível verificar a integridade deste lote. "
+        "O lance não foi registrado."
+    ),
 }
 
 

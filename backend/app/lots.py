@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Response
+from fastapi import Depends, FastAPI, Request, Response
 from pydantic import (
     AfterValidator,
     AwareDatetime,
@@ -43,6 +43,7 @@ from sqlalchemy import (
     false,
     func,
     select,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -50,6 +51,7 @@ from sqlalchemy.sql.expression import CTE
 
 from app.access import NO_STORE, AccessPolicy, api_route, require_auctioneer
 from app.artic import IMAGE_ID_PATTERN, ArticClient, CatalogUnavailable
+from app.bid_integrity import GENESIS_HASH, AnchorState, compute_anchor_hmac
 from app.catalog import (
     MAX_EXTERNAL_ID,
     ArtworkDetail,
@@ -58,6 +60,7 @@ from app.catalog import (
     get_artwork,
     image_url_for,
 )
+from app.config import IntegrityConfig
 from app.db import Base, get_session
 from app.errors import (
     ARTWORK_NOT_ELIGIBLE,
@@ -154,7 +157,9 @@ def snapshot_from_detail(detail: ArtworkDetail) -> ArtworkSnapshot:
 
 
 class Lot(Base):
-    """Espelha a migration `0003`; o esquema dos testes vem sempre dela."""
+    """Espelha as migrations `0003` e `0005`; o esquema dos testes vem sempre delas.
+
+    `anchor_hmac` nulo é o lote legado, não autenticado: recusa lance (Story 3.4)."""
 
     __tablename__ = "lots"
     __table_args__ = (
@@ -173,6 +178,29 @@ class Lot(Base):
             "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
             name="image_id_format",
         ),
+        CheckConstraint(
+            f"current_bid_cents > 0 AND current_bid_cents <= {MAX_CENTS}",
+            name="current_bid_range",
+        ),
+        CheckConstraint(
+            "current_bid_cents >= starting_bid_cents",
+            name="current_bid_at_least_starting",
+        ),
+        CheckConstraint(
+            "(current_bid_cents IS NULL) = (current_leader_id IS NULL)",
+            name="current_bid_with_leader",
+        ),
+        CheckConstraint(
+            "(bid_count = 0) = (current_bid_cents IS NULL)",
+            name="bid_count_matches_current_bid",
+        ),
+        CheckConstraint("bid_count >= 0", name="bid_count_non_negative"),
+        CheckConstraint("final_hash ~ '^[0-9a-f]{64}$'", name="final_hash_format"),
+        CheckConstraint(
+            f"bid_count > 0 OR final_hash = '{GENESIS_HASH}'",
+            name="empty_lot_is_genesis",
+        ),
+        CheckConstraint("anchor_hmac ~ '^[0-9a-f]{64}$'", name="anchor_hmac_format"),
     )
 
     # Sem default no banco para `id` e `created_at`: a aplicação os fornece (o
@@ -198,6 +226,17 @@ class Lot(Base):
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_demo: Mapped[bool] = mapped_column(server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Estado de lance (Story 3.4). Só `create_lot` e `app.bids.place_bid` escrevem
+    # nestas colunas, o segundo sempre sob a trava do lote (`lock_lot`).
+    current_bid_cents: Mapped[int | None] = mapped_column(BigInteger)
+    current_leader_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    bid_count: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    final_hash: Mapped[str] = mapped_column(
+        Text, server_default=text(f"'{GENESIS_HASH}'")
+    )
+    anchor_hmac: Mapped[str | None] = mapped_column(Text)
 
 
 # --- regra pura (AD-26): recebe `now`, nunca lê o relógio ---
@@ -278,6 +317,24 @@ def database_now(session: Session) -> datetime:
     return session.execute(select(func.clock_timestamp())).scalar_one().astimezone(UTC)
 
 
+def lock_lot(session: Session, lot_id: uuid.UUID) -> Lot | None:
+    """Trava a linha do lote (`SELECT ... FOR UPDATE`) e devolve o estado confirmado
+    mais recente. Só a tabela `lots`, sem `JOIN`: a releitura depois da espera vale
+    para a linha travada, e a cadeia é lida num statement posterior (Story 3.4, D2).
+    `populate_existing` força a releitura mesmo que a `Session` já tenha o objeto."""
+    return session.scalars(
+        select(Lot)
+        .where(Lot.id == lot_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+
+
+def get_integrity_config(request: Request) -> IntegrityConfig:
+    config: IntegrityConfig = request.app.state.integrity_config
+    return config
+
+
 def create_lot(
     session: Session,
     *,
@@ -285,15 +342,26 @@ def create_lot(
     terms: LotTerms,
     auctioneer_id: uuid.UUID,
     now: datetime,
+    audit_hmac_secret: bytes,
     is_demo: bool = False,
 ) -> Lot | ScheduleViolation:
-    """Aplica a regra de horário e grava o lote. Sem rede: não recebe cliente HTTP
-    nem consulta o catálogo. Não faz commit: quem chama decide."""
+    """Aplica a regra de horário e grava o lote, já com a âncora vazia assinada
+    (`bid_count = 0`, hash genesis, HMAC do próprio `lot_id`). Sem rede: não recebe
+    cliente HTTP nem consulta o catálogo. Não faz commit: quem chama decide.
+
+    Só este caminho assina estado vazio, e o `id` vem do servidor: nenhum chamador
+    consegue assinar um lote que já existe. A HMAC é calculada antes de o objeto
+    existir; segredo inválido levanta `ValueError` sem ter adicionado nada."""
     schedule = resolve_schedule(terms.starts_at, terms.ends_at, now)
     if isinstance(schedule, ScheduleViolation):
         return schedule
+    lot_id = uuid.uuid4()
+    anchor_hmac = compute_anchor_hmac(
+        AnchorState(v=1, lot_id=lot_id, bid_count=0, final_hash=GENESIS_HASH),
+        audit_hmac_secret=audit_hmac_secret,
+    )
     lot = Lot(
-        id=uuid.uuid4(),
+        id=lot_id,
         auctioneer_id=auctioneer_id,
         **snapshot.model_dump(),
         starting_bid_cents=terms.starting_bid_cents,
@@ -302,6 +370,11 @@ def create_lot(
         ends_at=schedule.ends_at,
         is_demo=is_demo,
         created_at=now,
+        current_bid_cents=None,
+        current_leader_id=None,
+        bid_count=0,
+        final_hash=GENESIS_HASH,
+        anchor_hmac=anchor_hmac,
     )
     session.add(lot)
     session.flush()
@@ -514,6 +587,7 @@ def register_lot_routes(app: FastAPI) -> None:
         user: User = Depends(require_auctioneer),
         session: Session = Depends(get_session),
         client: ArticClient = Depends(get_artic_client),
+        integrity: IntegrityConfig = Depends(get_integrity_config),
     ) -> LotResponse | Response:
         # D1: guardo o id antes do rollback (que expira o `User`) e encerro a
         # leitura da autenticação antes da AIC. Nenhuma transação fica aberta
@@ -546,6 +620,7 @@ def register_lot_routes(app: FastAPI) -> None:
             terms=body,
             auctioneer_id=auctioneer_id,
             now=now,
+            audit_hmac_secret=integrity.audit_hmac_secret,
         )
         if isinstance(result, ScheduleViolation):
             session.rollback()

@@ -24,7 +24,7 @@ As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + 
 | AD-4 | React + Vite + TypeScript simples | JavaScript puro | Contratos HTTP e eventos do WebSocket tipados |
 | AD-5 | Anti-sniping: extensão cumulativa do fim atual (+2 min por lance em `0 < restante <= 2 min`) | `fim = momento do lance + 2 min` | O fim pode subir sem teto enquanto houver lances na janela; documentar no README |
 | AD-6 | Autoridade de hora: PostgreSQL, `clock_timestamp()` lido depois da trava do lote | Relógio do navegador; relógio da aplicação; hora lida antes da trava | Um único instante por operação |
-| AD-7 | Lance = uma única transação (16 passos) | Etapas como operações ou commits independentes, ou só validação na aplicação | Falha em qualquer passo desfaz tudo |
+| AD-7 | Lance = uma única transação (18 passos desde a Story 3.4: autentica o estado anterior antes das regras) | Etapas como operações ou commits independentes, ou só validação na aplicação | Falha em qualquer passo desfaz tudo; histórico não autenticado não aceita lance |
 | AD-8 | Travas: lote, depois carteiras em `user_id` crescente | Líder antigo primeiro; novo líder primeiro | Mesma ordem em lance e liquidação |
 | AD-9 | Fechamento e liquidação sob a mesma trava do lote, relendo `ends_at`; idempotente; `UNIQUE(lot_id)` em `receipts` | Decidir o encerramento com estado ou hora lidos antes da trava | Rodar duas vezes não repete débito, crédito, comprovante nem vencedor |
 | AD-10 | **Reaberta.** WebSocket para atualizações da sala; comandos por REST (`POST /api/lots/{lot_id}/bids`); heartbeat do cliente; snapshot completo ao (re)conectar; 1 processo, connection manager em memória | SSE para esta hospedagem específica | Mensagens do cliente contam como tráfego de entrada no Render gratuito; a reconexão passa a ser do cliente |
@@ -187,23 +187,41 @@ definitiva; horário capturado antes da aquisição da trava.
 **Decidi** que a aceitação de um lance é uma única unidade transacional:
 
 1. iniciar a transação;
-2. bloquear o lote;
-3. capturar o horário atual do banco (AD-6);
-4. validar estado e período;
-5. validar o lance mínimo;
-6. impedir o líder atual de cobrir o próprio lance;
-7. identificar as carteiras envolvidas;
-8. adquirir as travas necessárias (AD-8);
-9. validar o saldo disponível;
-10. liberar o saldo comprometido do líder anterior;
-11. comprometer o saldo do novo líder;
-12. atualizar o líder e o lance atual;
-13. aplicar o anti-sniping (AD-5), se necessário;
-14. registrar o lance;
-15. registrar os dados da auditoria (AD-13);
-16. confirmar a transação.
+2. bloquear o lote (`SELECT ... FOR UPDATE`);
+3. capturar o horário atual do banco (`clock_timestamp()`, AD-6);
+4. autenticar a cadeia, a âncora e a HMAC anteriores e vincular o estado
+   operacional do lote (lance atual e líder) ao último lance autenticado (AD-13);
+5. validar estado e período, lance mínimo e líder (regras pré-carteira);
+6. identificar as carteiras envolvidas;
+7. adquirir as travas das carteiras (AD-8);
+8. validar o saldo disponível;
+9. liberar o saldo comprometido do líder anterior;
+10. comprometer o saldo do novo líder;
+11. atualizar o líder e o lance atual;
+12. aplicar o anti-sniping (AD-5), se necessário, sobre o `ends_at` lido sob a trava;
+13. definir a sequência como `bid_count` autenticado + 1;
+14. gerar o pseudônimo (AD-20);
+15. montar a representação canônica (AD-21) com o mesmo instante do passo 3;
+16. calcular o hash e registrar o lance;
+17. calcular e gravar a nova âncora: quantidade, hash final e HMAC (AD-13);
+18. confirmar a transação.
 
-Nenhuma dessas operações pode ficar parcialmente aplicada.
+Nenhuma dessas operações pode ficar parcialmente aplicada: uma falha em qualquer
+passo desfaz tudo. Uma falha no passo 4 encerra a operação sem nenhum efeito.
+
+**Refinamento de 26/10/2026 (Story 3.4).** A versão original tinha 16 passos, com
+as regras logo depois da hora e o registro do lance num passo só. Acrescentei o
+passo 4 por dois motivos. Primeiro, nenhum histórico pode ser estendido antes de o
+estado anterior ser autenticado: senão, ao aceitar um lance legítimo, o serviço
+assinaria um histórico adulterado no banco (lavagem por reautenticação, achado S-01
+da Story 3.3). Segundo, o lance atual e o líder entram no mínimo, no "já está
+ganhando" e na liberação de saldo, e não são cobertos pela âncora; só podem ser
+usados depois de vinculados ao último lance autenticado. Desdobrei também o antigo
+"registrar o lance" nos passos 13 a 16. A contagem de passos não é contrato; a
+ordem e a atomicidade são. **Descartei** autenticar depois das regras pré-carteira
+(as recusas sairiam sobre estado não autenticado) e verificar depois de escrever
+(assinaria o estado adulterado). Detalhes em
+`_bmad-output/implementation-artifacts/3-4-lance-transacional-com-travas-e-anti-sniping.md`.
 
 **Descartei:** implementar as etapas do lance como operações ou commits
 independentes, ou confiar apenas em validações na camada de aplicação. Isso
@@ -364,6 +382,35 @@ uma prova que não pode ser recalculada apenas com acesso ao banco.
 - somente HMAC sem âncora de quantidade/hash final;
 - trigger como mecanismo principal. Um trigger contra UPDATE/DELETE pode entrar
   apenas como defesa adicional, se houver tempo.
+
+**Refinamento de 26/10/2026 (Stories 3.3 e 3.4), sem mudar a representação v1:**
+- **Antes de estender o histórico**, sob a trava do lote, autentico o estado
+  anterior: cadeia coerente para o lote; âncora com o mesmo `lot_id`, `bid_count`
+  igual à quantidade de lances e `final_hash` igual ao último hash (genesis sem
+  lances); HMAC válida. Falha responde 409 `lot_integrity_conflict`, com mensagem
+  genérica, sem efeito, sem reparar e sem reassinar.
+- **Vínculo operacional.** A HMAC protege o histórico canônico, mas o lance
+  canônico v1 não contém `current_leader_id` nem o identificador real do usuário.
+  Sem vínculo, adulterar esses ponteiros no lote desviaria a liberação de saldo para
+  a carteira errada. Por isso, com lances, exijo que o último lance tenha
+  `sequence = bid_count`, que o lance atual e o líder do lote sejam iguais aos dele e
+  que o pseudônimo recalculado **só do líder atual** seja igual ao alias autenticado
+  do último lance. Sem lances, lance atual e líder são vazios e a âncora é
+  exatamente `0`/genesis com HMAC válida. Isso não é auditoria: a auditoria usa o
+  alias gravado e nunca recalcula alias histórico (AD-20).
+- **Inicialização.** Todo lote novo nasce com âncora vazia (`0`, genesis) assinada
+  na mesma transação do `INSERT`. Lote anterior à Story 3.4 fica com âncora nula:
+  não autenticado e sem aceitar lance. Assinatura ausente nunca vale como estado
+  confiável. Nada reassina estado encontrado no banco (lance, boot, seed ou
+  migration). **Descartei** a migration com o segredo, a reassinatura no boot
+  (qualquer filtro seria dado manipulável do banco) e "âncora nula + zero lances =
+  confiável".
+- **Segredos operacionais.** `AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` têm pelo menos
+  32 bytes em UTF-8, são diferentes entre si e do `JWT_SECRET`, e a aplicação não
+  inicia sem isso. O tamanho não garante entropia: uso valores aleatórios fortes.
+  Os primitives puros continuam aceitando quaisquer `bytes` não vazios.
+- **Limitação.** A âncora v1 não autentica os termos do lote (inclusive `ends_at`)
+  nem os saldos das carteiras.
 
 ### AD-14. Hospedagem e deploy: Render gratuito, um único serviço
 **Decidi** manter o projeto sem custo financeiro e usar o Render no plano
@@ -533,6 +580,15 @@ front-end descobre o pseudônimo do usuário atual por um endpoint autenticado
 `PSEUDONYM_SECRET` é diferente do `AUDIT_HMAC_SECRET`.
 
 **Descartei:** pseudônimo global.
+
+**Refinamento de 26/10/2026 (Story 3.3, Q3).** O alias é `Licitante-` seguido dos
+primeiros 16 caracteres hexadecimais, em maiúsculas, do HMAC-SHA-256 (o exemplo de
+8 caracteres acima e no AD-21 é ilustrativo). Ele é **persistido em cada lance** e
+entra no hash; a auditoria usa o valor gravado e nunca recalcula nem reescreve
+alias histórico. Não há tabela de mapeamento. Os dois segredos são configuração
+estável: rotação transparente não é suportada. A Story 3.4 recalcula apenas o alias
+do líder atual, para o vínculo operacional do AD-13. **Descartei** recalcular o
+alias na auditoria (trocar o segredo mudaria bytes históricos).
 
 ### AD-21. Representação canônica do lance, versão v1
 **Decidi** definir a versão `v1`. Representação lógica: `v`, `lot_id`,
@@ -756,6 +812,9 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
 3. **`bidder_alias` na linha do lance.** O pseudônimo entra no hash (AD-21):
    persisto o alias em cada lance ou o recalculo na auditoria com o
    `PSEUDONYM_SECRET`? Recalcular faz a rotação do segredo quebrar a verificação.
+   **Resolvida na Story 3.3 (26/10/2026):** persisto o alias em cada lance; a
+   auditoria nunca o recalcula; sem tabela de mapeamento; rotação transparente não
+   suportada (refinamento no AD-20).
 4. **Ordem na inicialização.** O catch-up de fechamento (AD-19) roda antes do
    seed (AD-24) e antes de atender tráfego normal, e "lote demo realmente aberto"
    significa estado aberto e `ends_at` maior que o `clock_timestamp()`. Se o seed
@@ -768,6 +827,9 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    migrations → seed → servidor (`start.sh`). O catch-up de fechamento da 4.4 entra
    **antes** do seed, e a 3.6 acrescenta "e não cancelado" ao predicado. Um demo
    vencido e ainda não liquidado conta como encerrado (o seed cria outro).
+   **Story 3.4 (26/10/2026):** o predicado ganha "e autenticado" (`anchor_hmac IS
+   NOT NULL`): um demo anterior à 3.4, sem âncora, não conta como aberto, e o seed
+   cria um demo novo já assinado, sem tornar o antigo confiável.
    Descartei `SELECT ... FOR UPDATE` (não há linha para travar), a trava de sessão e
    `pg_try_advisory_lock` com desistência. Continua aberto: o catch-up em si (4.4) e
    a verificação no primeiro deploy com ele.
@@ -864,6 +926,13 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   Declarar no README.
 
 ## Histórico de alterações
+
+- Story 3.4, consolidação (26/10/2026): AD-7 refinado (18 passos; autenticação do
+  estado anterior depois da hora e antes das regras); AD-13 refinado (gate, vínculo
+  operacional do líder e do lance atual, âncora na criação, lote legado não
+  autenticado, regras dos segredos, limitação); AD-20 refinado (alias de 16 hex
+  persistido, rotação não suportada); Questão 3 marcada como resolvida na 3.3;
+  Questão 4 com o predicado do demo autenticado. Nenhuma decisão revertida.
 
 - Story 2.5, testes de navegador (25/10/2026): Questão 10 atualizada (ferramenta de teste
   do front-end). `node --test` segue no `verify` padrão para lógica pura; o Playwright

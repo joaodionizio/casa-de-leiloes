@@ -36,8 +36,19 @@ de 32 caracteres, ou com uma `APP_ORIGIN` `http://` fora de `localhost`,
 repositório. Os testes geram um valor aleatório a cada execução e não usam o do
 `.env`.
 
+`AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` protegem o histórico de lances (veja
+"Lances"). Cada um precisa ter **pelo menos 32 bytes em UTF-8**, os dois precisam ser
+**diferentes entre si e diferentes do `JWT_SECRET`**; 32 bytes não garantem entropia, então
+use valores aleatórios fortes (por exemplo `python -c "import secrets;
+print(secrets.token_urlsafe(48))"`, uma vez para cada). Sem eles, ou inválidos, a
+aplicação não inicia e a mensagem nunca mostra o valor. Ficam no meu `backend/.env`
+(as linhas `AUDIT_HMAC_SECRET=` e `PSEUDONYM_SECRET=` entram sem valor em
+`backend/.env.example`, que eu edito); nunca vão para o repositório, para o banco, para
+log, resposta ou payload. Os testes geram valores aleatórios a cada execução.
+
 Aplicar as migrations e semear as contas de demonstração no banco de
-desenvolvimento (o seed só precisa de `DATABASE_URL`):
+desenvolvimento (o seed precisa de `DATABASE_URL` e `AUDIT_HMAC_SECRET`, que assina a
+âncora vazia do lote demo; ele não lê `PSEUDONYM_SECRET`):
 
 ```bash
 cd backend && uv run alembic upgrade head
@@ -216,9 +227,14 @@ docker run --rm --network casa-de-leiloes_default -p 127.0.0.1:9000:9000 \
   -e PORT=9000 \
   -e APP_ORIGIN=http://localhost:9000 \
   -e JWT_SECRET=<um-valor-aleatorio-com-32-ou-mais-caracteres> \
+  -e AUDIT_HMAC_SECRET='<placeholder-sintetico-audit-substituir>' \
+  -e PSEUDONYM_SECRET='<placeholder-sintetico-pseudonym-substituir>' \
   -e DATABASE_URL=postgresql://casa:casa_local_dev@postgres:5432/casa_de_leiloes_dev \
   casa-de-leiloes
 ```
+
+Substitua os dois placeholders sintéticos por segredos aleatórios fortes, cada um
+com **pelo menos 32 bytes em UTF-8**, **diferentes entre si e de `JWT_SECRET`**.
 
 O `./verify.sh` constrói a imagem (`docker build`), mas não a executa.
 
@@ -247,6 +263,12 @@ adicionar no painel `APP_ORIGIN=https://casa-de-leiloes-i1xr.onrender.com` e
 painel e no meu `.env`). Sem qualquer uma das duas a criação da aplicação falha e o
 serviço não inicia. `APP_ORIGIN` não é segredo; `JWT_SECRET` é. A branch
 configurada no painel ainda é `epic-1`.
+
+**Pré-requisito do deploy da Story 3.4:** adicionar no painel `AUDIT_HMAC_SECRET` e
+`PSEUDONYM_SECRET`, cada um com pelo menos 32 bytes aleatórios fortes, diferentes entre si
+e do `JWT_SECRET`, **antes** de publicar. Sem o de auditoria o seed falha (`start.sh` usa
+`set -eu`) e o servidor não sobe; sem qualquer um dos dois a criação da aplicação falha.
+Veja "Lances" (rotação não suportada; lotes anteriores recusam lance).
 
 O valor de `DATABASE_URL` existe apenas no painel do Render. `PORT` é injetada
 pelo Render e `SPA_DIST_DIR` já vem da imagem. Não há CORS (API, SPA e WebSocket
@@ -456,10 +478,63 @@ a fase aparece na vitrine pública (veja "Vitrine e página do lote"), não aqui
 aberto: a obra 27992 ("A Sunday on La Grande Jatte — 1884"), de uma fixture versionada
 em `backend/app/seed_data/demo_artwork.json`, **sem consultar a AIC**. Começa na hora do
 banco e dura 72 horas, com lance inicial de R$ 100,00 e incremento de R$ 10,00, ligado ao
-leiloeiro semeado. "Aberto" quer dizer `is_demo` e `ends_at` no futuro. Se já existe um
-demo aberto, nada é criado; se todos encerraram, nasce um novo. O seed só faz `INSERT`
+leiloeiro semeado. "Aberto" quer dizer `is_demo`, `ends_at` no futuro **e `anchor_hmac`
+não nulo** (Story 3.4): um demo anterior à 3.4, sem âncora, não conta e não recebe lance;
+o seed cria um demo novo e autenticado e deixa o antigo exatamente como estava. Se já
+existe um demo aberto, nada é criado; se todos encerraram, nasce um novo. O seed só faz `INSERT`
 em `lots`: nunca altera nem apaga um lote antigo. Uma trava consultiva do PostgreSQL
 (`pg_advisory_xact_lock`) faz dois seeds simultâneos criarem no máximo um demo.
+
+## Lances
+
+`POST /api/lots/{lot_id}/bids` (só `BIDDER`; o `AUCTIONEER` recebe 403 sem tocar no lote).
+Corpo `{"amount_cents": n}`, inteiro de `1` a `9007199254740991`; qualquer outro campo, ou
+`float`, texto e booleano, é 422 `validation_error`. Um lance aceito é **uma única
+transação do PostgreSQL**: trava o lote (`SELECT ... FOR UPDATE`), lê **um** instante
+`clock_timestamp()` do banco (o navegador nunca decide a hora), autentica o histórico
+anterior, aplica as regras, trava as carteiras em `user_id` crescente, reserva o saldo do
+novo líder, devolve o do anterior, aplica o anti-sniping, grava o lance e a nova âncora, e
+confirma. Qualquer falha desfaz tudo.
+
+| Resposta | Quando |
+| --- | --- |
+| `201` | `{bid: {sequence, bidder_alias, amount_cents, placed_at}, lot: {current_bid_cents, ends_at, anti_sniping_applied}, wallet: {total, committed, available}}`. Nunca `bidder_id`, hashes, HMAC nem segredos. |
+| `422` + código | recusa de negócio, na precedência: `lot_not_started`, `lot_ended`, `below_minimum`, `already_winning`, `insufficient_balance`. Nada é gravado. |
+| `409 lot_integrity_conflict` | o histórico do lote não se autentica. Mensagem única; nada é gravado, reparado ou reassinado. |
+| `404` | lote inexistente. |
+
+Comportamentos que podem surpreender (lances):
+
+- **Anti-sniping cumulativo e sem teto:** um lance aceito com `0 < restante <= 2 min` soma 2
+  minutos ao fim **atual** (lido sob a trava). Depois do fim, o lote nunca reabre; o lance
+  recebe `lot_ended`. Esta etapa só recusa: não fecha nem liquida (isso é da Story 4.3/4.4).
+- **409 de integridade:** antes de qualquer regra, o servidor reconstrói a cadeia SHA-256
+  do lote, confere a âncora HMAC e vincula o líder e o lance atual ao último lance. Qualquer
+  adulteração (alteração, inserção, remoção do meio, truncamento, recálculo sem o segredo)
+  responde 409, mesmo que a regra de negócio recusaria o lance por outro motivo.
+- **Lotes anteriores à 3.4** ficam com `anchor_hmac` nulo: aparecem na vitrine, mas todo
+  lance neles responde 409 (inclusive o demo antigo, até vencer). Nenhum caminho (lance,
+  boot, seed, migration) assina o estado encontrado no banco; um comando manual de
+  autenticação de lotes legados não existe nesta entrega.
+- **Segredos no Render:** `AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` precisam existir no
+  painel **antes** do deploy da 3.4. Sem o de auditoria o seed falha e o servidor não sobe.
+  O seed não compara os três segredos; se dois forem iguais, o servidor falha logo depois.
+  Corrija trocando `PSEUDONYM_SECRET` ou `JWT_SECRET`.
+- **Rotação de segredos não é suportada.** Trocar `AUDIT_HMAC_SECRET` invalida todas as
+  âncoras já assinadas (todo lote, inclusive o demo, passa a responder 409; o demo continua
+  contando como "aberto" até vencer). Trocar `PSEUDONYM_SECRET` depois de existirem lances
+  também bloqueia esses lotes. Trocar o `JWT_SECRET` só derruba as sessões.
+- **Falha de rede depois do commit:** se a conexão cair depois de o servidor enviar o
+  `COMMIT`, o resultado é indeterminado para o cliente: o lance pode ter sido aceito.
+  Repetir pode responder `already_winning`. Não há chave de idempotência.
+- **Limites da âncora:** ela protege o histórico de lances. Restaurar a cadeia **e** a
+  âncora antigas e válidas não é detectado (não há âncora externa), e a âncora não cobre os
+  termos do lote (`ends_at`, lance inicial, incremento) nem os saldos das carteiras.
+- **Estado de lance no lote:** as colunas `current_bid_cents`, `current_leader_id`,
+  `bid_count`, `final_hash` e `anchor_hmac` só mudam num lance aceito. `downgrade` da
+  migration `0005` perde lances e esse estado (só desenvolvimento).
+- A leitura da cadeia a cada tentativa é O(n) e a fila na trava do lote não tem
+  `lock_timeout`: aceitável na escala do desafio.
 
 ## Vitrine e página do lote
 
@@ -516,8 +591,8 @@ dinheiro real). Valores em **centavos inteiros** (`BIGINT`, sufixo `_cents`), se
 | `POST /api/wallet/deposit` | só `BIDDER` | corpo `{"amount_cents": n}`; soma `n` ao total da **própria** carteira e devolve `200` com os mesmos três valores. |
 
 - **Saldo:** o disponível é sempre `total - comprometido`, calculado no servidor, e nunca
-  é gravado. O comprometido existe e vale `0` nesta etapa: quem o altera é o lance
-  (Story 3.4). O `AUCTIONEER` recebe 403 nas duas rotas e não tem tela de carteira.
+  é gravado. O comprometido é alterado só pelo lance (Story 3.4, veja
+  "Lances"): sobe com o lance do líder e volta ao disponível quando ele é superado. O `AUCTIONEER` recebe 403 nas duas rotas e não tem tela de carteira.
 - **Entrada estrita:** `amount_cents` é um inteiro de `1` a `9007199254740991`. Zero,
   negativo, `100.5`, `1e2`, texto, booleano, ausente, campo extra (inclusive `user_id`) e
   valor acima do teto dão 422 `validation_error`. A carteira alterada é sempre a do

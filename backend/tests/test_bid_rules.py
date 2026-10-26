@@ -304,8 +304,9 @@ def test_refusal_codes_are_exactly_the_five() -> None:
     }
 
 
-def test_refusal_codes_are_not_http_catalog_codes() -> None:
-    assert {r.value for r in BidRefusal} & set(MESSAGES) == set()
+def test_refusal_codes_are_http_catalog_codes() -> None:
+    # Story 3.4: "o contrato HTTP nasce com o endpoint". Cada recusa tem mensagem.
+    assert {r.value for r in BidRefusal} <= set(MESSAGES)
 
 
 # --- período, primeiro lance, lance seguinte, líder, saldo (CAP-3 a CAP-6) ---
