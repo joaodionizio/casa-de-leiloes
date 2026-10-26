@@ -6,15 +6,18 @@ from pathlib import Path
 
 import pytest
 
+import app.bid_integrity as bid_integrity
 import app.bid_rules as bid_rules
 import app.money as money
 
 APP = Path(__file__).resolve().parents[1] / "app"
 LOT_TIME = APP / "lot_time.py"
 BID_RULES = APP / "bid_rules.py"
+BID_INTEGRITY = APP / "bid_integrity.py"
 DOMAIN_MODULES = [
     pytest.param(LOT_TIME, id="lot_time"),
     pytest.param(BID_RULES, id="bid_rules"),
+    pytest.param(BID_INTEGRITY, id="bid_integrity"),
 ]
 
 INFRASTRUCTURE = {
@@ -238,3 +241,111 @@ def test_domain_modules_do_not_redefine_max_cents(path: Path) -> None:
 
 def test_bid_rules_uses_the_shared_money_ceiling() -> None:
     assert bid_rules.MAX_CENTS is money.MAX_CENTS
+
+
+def test_bid_integrity_imports_only_the_allowed_modules() -> None:
+    modules = imported_modules(BID_INTEGRITY)
+    assert modules <= {
+        "dataclasses",
+        "datetime",
+        "hashlib",
+        "hmac",
+        "json",
+        "re",
+        "uuid",
+        "app.money",
+        "app.lot_time",
+    }
+    assert {"app.money", "app.lot_time"} <= modules
+    assert imported_names(BID_INTEGRITY, "app.money") == {"MAX_CENTS"}
+    assert imported_names(BID_INTEGRITY, "app.lot_time") == {"require_aware"}
+    for node in ast.walk(parse(BID_INTEGRITY)):
+        if isinstance(node, ast.ImportFrom):
+            assert node.level == 0
+            assert all(alias.name != "*" for alias in node.names)
+
+
+def forbidden_builtin_references(tree: ast.AST) -> list[str]:
+    forbidden = {"open", "input", "__import__", "eval", "exec"}
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "builtins":
+                    aliases[alias.asname or alias.name] = "builtins"
+        elif isinstance(node, ast.ImportFrom) and node.module == "builtins":
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = alias.name
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            name = aliases.get(node.id, node.id)
+            if name in forbidden:
+                found.append(name)
+        elif (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Load)
+            and isinstance(node.value, ast.Name)
+            and aliases.get(node.value.id) == "builtins"
+            and node.attr in forbidden
+        ):
+            found.append(node.attr)
+    return found
+
+
+@pytest.mark.parametrize("path", DOMAIN_MODULES)
+def test_domain_modules_avoid_io_and_dynamic_execution(path: Path) -> None:
+    assert forbidden_builtin_references(parse(path)) == []
+
+
+@pytest.mark.parametrize("name", ["open", "input", "__import__", "eval", "exec"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "{name}('x')",
+        "factory = {name}",
+        "import builtins as b\nb.{name}('x')",
+        "from builtins import {name} as f\nf('x')",
+    ],
+)
+def test_builtin_detector_positive(name: str, source: str) -> None:
+    assert forbidden_builtin_references(ast.parse(source.format(name=name))) == [name]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "value = bid.timestamp",
+        "result = require_aware('timestamp', value)",
+        "value = json.dumps(payload)",
+    ],
+)
+def test_builtin_detector_negative(source: str) -> None:
+    assert forbidden_builtin_references(ast.parse(source)) == []
+
+
+def test_bid_integrity_shared_constants() -> None:
+    assert bid_integrity.MAX_CENTS is money.MAX_CENTS
+    definitions = [
+        node
+        for node in ast.walk(parse(BID_INTEGRITY))
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(t, ast.Name) and t.id == "GENESIS_HASH" for t in node.targets
+        )
+    ]
+    assert len(definitions) == 1
+    # Uma única fonte produtiva dos zeros; validação de vazio/cadeia a consome.
+    value = definitions[0].value
+    assert isinstance(value, ast.BinOp) and isinstance(value.op, ast.Mult)
+    assert isinstance(value.left, ast.Constant) and value.left.value == "0"
+    assert isinstance(value.right, ast.Constant) and value.right.value == 64
+    assert (
+        sum(
+            isinstance(node, ast.Name)
+            and node.id == "GENESIS_HASH"
+            and isinstance(node.ctx, ast.Load)
+            for node in ast.walk(parse(BID_INTEGRITY))
+        )
+        >= 2
+    )

@@ -677,6 +677,26 @@ documentos foram preservados. Alias pode colidir; segredo comprometido e rollbac
 integral de cadeia/âncora antigas válidas permanecem limites do desenho aprovado.
 A revisão independente continua pendente por minha instrução explícita.
 
+### Code review, correção do F-01 e fechamento da Story 3.3 (26/10/2026)
+
+A revisão independente apontou um único finding, F-01 (LOW): os testes não
+distinguiam `type(x) is int` de `isinstance(x, int)` com tratamento separado de
+`bool`, então uma subclasse de `int` passaria numa regressão futura. O código
+produtivo já estava correto. Aprovei corrigir só isso; a IA acrescentou testes com
+subclasses locais de `int`, `str` e `bytes` (a spec exige tipos exatos) e provou
+por mutação temporária que a suíte passa a falhar. Restaurou o módulo por cópia,
+sem alterar produção e sem Git.
+
+Re-review final: F-01 corrigido, nenhuma regressão, qualidade dos novos testes
+adequada, `test_bid_integrity.py` com 105 passed, subclasses em 10 testes / 13
+asserções, mutações de int/str/bytes mortas e nenhum arquivo produtivo alterado.
+Último `./verify.sh` completo após a correção: 1729 passed no back-end, 114 no
+front-end, Ruff, typecheck, build do Vite e Docker build aprovados, com 1 warning
+herdado de Starlette/httpx. Com a recomendação **APROVADA PARA DONE**, decidi
+concluir a Story 3.3. Este fechamento alterou só documentação e status, sem rodar
+testes, sem Git e sem iniciar a 3.4. A sincronização de Q3/P7/A1 continua pendente
+antes da integração da 3.4.
+
 ## Protótipo navegável de referência do front-end (26/10/2026)
 
 Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até
