@@ -26,15 +26,19 @@ Registro as exceções históricas, sem criar aprovações retroativas fictícia
 
 | Épico | Registro atual | Evidência e pendência |
 | --- | --- | --- |
-| 1 | `done`, corrigido nesta auditoria | 1.1–1.4 concluídas; deploy/redeploy e validação pública documentados na 1.4. Cabeçalho da 1.4 sincronizado. Review agregado original não localizado; integração retrospectiva pendente. |
-| 2 | `done` histórico, preservado | Stories concluídas localmente; incorporação à `main` informada pelo usuário. Deploy correspondente postergado por falha de processo; review agregado original não localizado. Registro não prova fechamento operacional. |
-| 3 | `in-progress` | 3.1–3.6 `done`; aguarda gates abaixo e recuperação conjunta 2+3. |
+| 1 | `done` | 1.1–1.4 concluídas; deploy/redeploy original preservado; review agregado original não localizado, integração retrospectiva posteriormente aprovada. |
+| 2 | `done` | Deploy original postergado por falha de processo; recuperação conjunta 2+3 concluída segundo confirmação manual; review retrospectivo aprovado, sem inventar review agregado original. |
+| 3 | `done` | 3.1–3.6 e gates concluídos; review/correção/re-review/verify, merge/push manuais e deploy/smoke confirmados pelo usuário; `main`, commit publicado `3d3ea97`. |
+
+Atualização factual registrada em 27/10/2026, sem mudança das regras abaixo.
+Evidências e limites: [recuperação 2+3](DEPLOY-RECUPERACAO-EPICS-2-3.md).
 
 Os reviews por story existentes continuam válidos. Não encontrei artefatos
 formais equivalentes a reviews agregados dos Epics 1 e 2; isso registra ausência
 de evidência, sem afirmar que todo e qualquer review histórico foi inexistente.
-Não farei deploy retroativo isolado do Epic 2: decidi recuperar **Epic 2 + Epic 3**
-em uma publicação após os reviews e o merge do Epic 3.
+Não fiz deploy retroativo isolado do Epic 2: recuperei **Epic 2 + Epic 3**
+em uma publicação após os reviews e o merge do Epic 3, conforme confirmação
+manual registrada no fechamento.
 
 ## 2. Checklist obrigatório, em ordem
 
@@ -131,8 +135,9 @@ Uso `bmad-code-review` em nova sessão com as regras locais, ou review independe
 equivalente com esse mesmo escopo. A skill local trabalha sobre arquivos atuais:
 explicito no pedido a comparação fornecida por mim para o review agregado.
 Review só reporta findings; correções exigem minha decisão em etapa posterior.
-Não rodo esses reviews nesta auditoria administrativa, pois o candidato/diff
-final ainda não foi confirmado.
+Na auditoria administrativa inicial, não rodei esses reviews porque o
+candidato/diff final não havia sido confirmado. Os reviews de integração
+executados posteriormente preservam seus próprios limites de comparação.
 
 Prompt-base para cada execução:
 
@@ -149,7 +154,7 @@ triagem humana, correções aprovadas e re-review. Sem correção automática,
 sem mudar status, sem Git/gh/PR, deploy, .env* ou segredos.
 ```
 
-Estrutura mínima do artefato (os três pendentes já a adotam):
+Estrutura mínima do artefato (adotada pelos três relatórios):
 
 - Status explícito: PENDENTE / EM REVISÃO / CORREÇÕES / APROVADO / BLOQUEADO.
 - Data, sessão, modelo efetivo, independência, confirmação humana do candidato.

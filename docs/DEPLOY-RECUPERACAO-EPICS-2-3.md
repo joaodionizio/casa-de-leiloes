@@ -1,30 +1,37 @@
 # Deploy manual de recuperação — Epics 2 + 3
 
-Preparado em 26/10/2026; **PENDENTE, NÃO EXECUTADO**. Decidi fazer uma única
-recuperação conjunta: o Epic 2 foi concluído localmente e incorporado à `main`
-(informação minha), mas seu deploy foi postergado por falha de processo.
-Não publico o Epic 2 isoladamente. O Epic 3 continua `in-progress` até concluir
-este checklist e registrar evidências, conforme o
-[processo canônico](FECHAMENTO-DE-EPICO.md).
+Preparado em 26/10/2026; fechamento documental em 27/10/2026.
+**RECUPERAÇÃO EXECUTADA — EPIC 3 CONCLUÍDO.** Fiz manualmente o merge do Epic 3,
+o push da `main`, a configuração do Render, o deploy conjunto 2+3, a validação
+do ambiente público e o smoke dos fluxos entregues; confirmei a aplicação
+publicada funcionando. O deploy do Epic 2 **não aconteceu no fechamento original**:
+foi postergado por falha de processo e recuperado nesta publicação conjunta.
+Não houve deploy isolado retroativo do Epic 2.
 
-## Antes: gates técnicos e preparação manual
+A evidência operacional é minha confirmação manual fornecida neste pedido;
+a IA apenas a registrou. Não informei horário de execução, ID de deploy, logs,
+IDs de lotes, valores observados nem resultado individual dos cenários abaixo.
+A data acima é do registro documental, não um timestamp inventado de deploy.
+Aplico o [processo canônico](FECHAMENTO-DE-EPICO.md), sem alterar seus gates.
 
-- [ ] Confirmo a branch Epic 3 final, todas as stories 3.x `done`, documentação
-  sincronizada e estudo concluído quando aplicável (registro/confirmo a evidência).
-- [ ] Review agregado do Epic 3 aprovado em sessão/modelo independente,
-  com alvo/comparação confirmados por mim e artefato preenchido.
-- [ ] Reviews retrospectivos de integração dos Epics 1 e 2 concluídos no mesmo
-  candidato; achados relevantes corrigidos e re-review quando necessário.
-- [ ] `./verify.sh` completo verde **após a última correção**, com PostgreSQL
-  de teste isolado; `VERIFY_E2E=1 ./verify.sh` verde para a UI deste fechamento.
-  Registro saídas reais. O último verify histórico da 3.6 precede a correção
-  final de assertions; ele não é prova de nova execução do candidato final.
-- [ ] Git/commits, push e merge do Epic 3 feitos manualmente por mim; `main`
-  remota atualizada e conteúdo final correspondente ao revisado/verificado.
-- [ ] Confirmo no painel a branch de produção `main` e o commit a publicar.
-  A configuração efetiva atual do painel não foi inspecionada pelo agente.
-- [ ] Verifico todas as variáveis abaixo antes de iniciar o deploy. Preservo
-  segredos já usados; nenhuma rotação faz parte desta recuperação.
+## Gates técnicos e preparação — conclusão registrada
+
+- [x] Stories 3.1–3.6 `done`, conferidas no sprint.
+- [x] Review agregado do Epic 3 concluído; F-01 MEDIUM corrigido e aprovado no
+  re-review; LOW opcional de cobertura do effect da sala aceito, não bloqueante.
+- [x] Reviews retrospectivos de integração dos Epics 1 e 2 aprovados; LOW
+  documental do Epic 2 resolvido. Não alego review do diff histórico original.
+- [x] `VERIFY_E2E=1 ./verify.sh` completo final após a correção, anterior ao merge:
+  exit 0 segundo evidência fornecida; pytest **2036 passed**, npm test
+  **160 passed**, Playwright **189 passed, 5 skipped**; Ruff, format, ESLint,
+  tsc, Vite build e Docker build passaram. Não reexecutei testes nesta tarefa.
+- [x] Merge manual do Epic 3 e push da `main` confirmados pelo usuário.
+- [x] Produção na branch **`main`**, commit publicado **`3d3ea97`**.
+- [x] Configuração do Render executada manualmente pelo usuário.
+
+Estudo individual, confirmação de cada variável e comparação histórica:
+**não individualizado na evidência manual**. A confirmação geral não é uma
+inspeção independente pela IA desses detalhes.
 
 ## Render: configuração e variáveis
 
@@ -34,7 +41,7 @@ URL pública registrada no primeiro deploy:
 | Item | Verificação manual |
 | --- | --- |
 | Serviço | Web Service Docker existente, Dockerfile da raiz, sem Root Directory que exclua frontend/backend |
-| Branch | `main`; substituir a antiga `epic-1` se ainda estiver configurada |
+| Branch | `main`, commit publicado `3d3ea97`, confirmados manualmente |
 | Auto-Deploy | Desabilitado; publicação manual |
 | Health Check Path | `/health` |
 | Comando | `CMD` da imagem; sem Docker Command próprio nem Pre-Deploy Command |
@@ -61,19 +68,20 @@ Sem `AUDIT_HMAC_SECRET` válido, o seed para o startup. O seed não valida
 portanto seed concluído sozinho não prova configuração válida. A rotação de
 segredos de integridade não é suportada e pode bloquear lotes já assinados.
 
-## Deploy: executar manualmente depois dos gates
+## Deploy executado — detalhes do roteiro original
 
-- [ ] No serviço do Render, confirmo novamente `main` e o commit final remoto.
-- [ ] Uso **Manual Deploy → Deploy latest commit**. Essa opção publica o commit
-  mais recente da branch vinculada. Fonte: [documentação oficial do Render](https://render.com/docs/deploys).
-- [ ] Acompanho build da imagem única (React/Vite e Python) e startup.
-- [ ] Confirmo `alembic upgrade head` concluído até **`0006`**. A cadeia atual é
-  `0001` baseline → `0002` users → `0003` lots → `0004` wallets → `0005` bids →
-  `0006` lot_cancellation. Não exijo reaplicação de revisões já aplicadas.
-- [ ] Confirmo `python -m app.seed` concluído, antes do uvicorn.
-- [ ] Confirmo uvicorn em `0.0.0.0` na porta fornecida e serviço `Live`.
-- [ ] Se migration, seed, import/configuração ou startup falhar, interrompo o
-  fechamento e registro a falha sem segredos. Não apago banco nem faço downgrade.
+- [x] Deploy de recuperação conjunto dos Epics 2 + 3 executado manualmente.
+- [x] Aplicação publicada funcionando na URL registrada.
+
+Preservo os detalhes do roteiro sem marcá-los como resultados observados:
+
+- Opção **Manual Deploy → Deploy latest commit** utilizada: **não individualizado na evidência manual**.
+- Build e acompanhamento do startup: **não individualizado na evidência manual**.
+- Revisão Alembic observada em produção: **não individualizado na evidência manual**.
+  A cadeia atual do projeto termina em **`0006`**: `0001` baseline → `0002` users
+  → `0003` lots → `0004` wallets → `0005` bids → `0006` lot_cancellation.
+- Seed antes do uvicorn, porta e estado `Live` do painel: **não individualizado na evidência manual**.
+- Logs de falhas ou interrupções: não fornecidos; não invento ocorrências nem logs.
 
 O seed usa fixture local, sem AIC: cria contas ausentes (1 leiloeiro, 2
 licitantes), garante carteira zerada apenas para quem não tem, preserva saldos
@@ -83,7 +91,12 @@ e nasce um demo autenticado. O seed não cria lances nem redefine senhas/saldos.
 
 ## Smoke público: infraestrutura e Epic 2
 
-Executo somente depois de o serviço ficar disponível, pela URL pública. Uso
+**Smoke público concluído segundo minha confirmação manual.** Cada item específico
+não assinalado abaixo tem resultado **não individualizado na evidência manual**;
+a caixa vazia indica ausência de evidência individual, não um gate geral pendente.
+Os cenários e valores são o roteiro preparado, sem alegação de execução individual.
+
+Roteiro original: executo depois de o serviço ficar disponível, pela URL pública. Uso
 contas demo do README, em perfis de navegador separados; identifico os lotes
 criados para o smoke e registro seus IDs públicos. São operações reais em dados
 de demonstração; não há limpeza por SQL nem adulteração do banco de produção.
@@ -113,6 +126,9 @@ de demonstração; não há limpeza por SQL nem adulteração do banco de produ�
   Não colo cookies ou cabeçalhos autenticados em logs/evidências.
 
 ## Smoke público: Epic 3
+
+Resultado de cada cenário abaixo: **não individualizado na evidência manual**.
+Os valores de R$ 90/100/110/200 são exemplos do roteiro, não valores observados.
 
 Para tornar valores reproduzíveis, crio um lote novo com lance inicial
 **R$ 100,00** e incremento **R$ 10,00**, início já alcançado e fim a mais de
@@ -166,25 +182,25 @@ Network; não preciso inventar endpoints de diagnóstico.
 
 ## Evidências e conclusão
 
-- [ ] Registro data/hora em America/Maceio, branch/commit confirmado por mim,
-  URL, revisão Alembic observada, seed/startup/Live, comando/resultado do verify
-  final, links dos três reviews e de re-reviews, resultados dos cenários acima.
-- [ ] Registro falhas, limitações e cenários não executados. Cold start só ganha
-  número se medido; não houve medição nesta tarefa. O primeiro deploy registrou
-  expiração do PostgreSQL em 23/11/2026; confirmo a situação atual no painel.
-- [ ] Atualizo o registro de fechamento no artefato de auditoria, README/uso
-  de IA/deferred-work conforme necessário, sem substituir as evidências da 1.4.
-- [ ] Confirmo todos os gates cumpridos e só então autorizo `epic-3: done`,
-  commit/push documental manual e início do próximo épico por instrução minha.
+- [x] Registrei review → correção → verify → merge → deploy → smoke → epic done.
+- [x] Registrei os limites da confirmação geral, preservando cenários sem prova individual.
+- [x] Sincronizei auditoria, README, uso de IA, deferred-work e sprint neste fechamento.
+- [x] Epic 3 `done` autorizado pelo pedido explícito de encerramento do usuário.
 
 | Evidência de execução | Registro |
 | --- | --- |
-| Responsável/data/fuso | PENDENTE |
-| Commit final da `main` e commit efetivamente publicado | PENDENTE |
-| Reviews/re-reviews e decisão humana | PENDENTE |
-| Verify final e E2E | PENDENTE |
-| Migrations/seed/uvicorn/Live | PENDENTE |
-| HTTP, UI, API, cookies e papéis | PENDENTE |
-| Depósitos/lances/saldos/anti-sniping/cancelamento | PENDENTE |
-| Falhas/limitações/cenários não executados | PENDENTE |
-| Autorização final para `done` | PENDENTE |
+| Responsável operacional | Usuário: merge, push, configuração do Render, deploy, validação e smoke manuais |
+| Data/hora operacional e ID de deploy | não individualizado na evidência manual |
+| Branch / commit publicado | `main` / `3d3ea97`, confirmados pelo usuário |
+| URL / funcionamento | https://casa-de-leiloes-i1xr.onrender.com — aplicação publicada funcionando, conforme confirmação manual |
+| Reviews/re-reviews | [Epic 1](../_bmad-output/implementation-artifacts/code-review-epic-1.md) retrospectivo aprovado; [Epic 2](../_bmad-output/implementation-artifacts/code-review-epic-2.md) retrospectivo aprovado; [Epic 3](../_bmad-output/implementation-artifacts/code-review-epic-3.md) aprovado após correção/re-review de F-01 MEDIUM, LOW opcional aceito |
+| Verify final e E2E | `VERIFY_E2E=1 ./verify.sh`, exit 0, posterior à correção e anterior ao merge: pytest 2036, npm test 160, Playwright 189 passed/5 skipped; Ruff, format, ESLint, tsc, Vite e Docker build passaram; evidência fornecida, sem nova execução |
+| Migrations/seed/uvicorn/Live observados | não individualizado na evidência manual; head atual do projeto `0006` |
+| Smoke público | Concluído manualmente pelo usuário para os fluxos entregues; ambiente público validado |
+| HTTP, UI, API, cookies, papéis e cada cenário de negócio | não individualizado na evidência manual |
+| Cold start, validade atual do plano, falhas específicas e cenários não executados | não individualizado na evidência manual |
+| Encerramento | Epic 3 concluído; deploy tardio do Epic 2 recuperado conjuntamente |
+
+Não substituo as evidências originais da Story 1.4 nem apresento a confirmação
+geral como logs de cada cenário. Não fiz novo deploy nem smoke nesta sessão.
+Epic 4 pode ser iniciado após o commit administrativo manual deste fechamento.

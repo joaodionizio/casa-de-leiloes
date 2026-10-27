@@ -188,3 +188,16 @@ Somente a lacuna **LOW opcional** descrita na seção 7: falta de teste discrimi
 **F-01 APROVADO COM LOW OPCIONAL**
 
 Fechei tecnicamente o MEDIUM F-01 neste re-review; a melhoria de cobertura não bloqueia os próximos gates. Isso não declara fechamento do Epic 3: ele permanece **`in-progress`**, sem Git, deploy, backend, Epic 4 ou alteração de status. Registro encerrado.
+
+---
+
+Nota administrativa final — registro em 27/10/2026: **Gate de fechamento concluído
+posteriormente: verify, merge e deploy/smoke.** O re-review acima aprovou F-01
+MEDIUM; LOW opcional de cobertura aceito, não bloqueante. Conforme evidência
+fornecida, verify final verde (pytest 2036, npm test 160, Playwright 189 passed/
+5 skipped e demais etapas aprovadas); merge/push da `main` e deploy/smoke foram
+executados manualmente pelo usuário, commit publicado `3d3ea97`, aplicação
+funcionando em <https://casa-de-leiloes-i1xr.onrender.com>. Epic 3 `done`.
+Esta nota registra o encerramento posterior; não altera os findings nem os
+vereditos históricos. Detalhes operacionais não individualizados estão no
+[registro de recuperação](../../docs/DEPLOY-RECUPERACAO-EPICS-2-3.md).

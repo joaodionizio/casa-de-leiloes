@@ -7,7 +7,8 @@
   `epic-1: in-progress` e 1.4 `review`. O sprint já tinha 1.4 `done`; corrigi o
   cabeçalho da story e Epic 1 para `done`, com base nas evidências públicas da
   própria 1.4. Não executei novo deploy nem inventei review agregado histórico;
-  integração retrospectiva dos Epics 1/2 segue pendente no processo canônico.
+  integração retrospectiva dos Epics 1/2 concluída e aprovada posteriormente,
+  conforme registro final abaixo.
 
 ## Deferred from: code review of 2-2-login-papéis-e-política-de-acesso.md (24/10/2026)
 
@@ -90,17 +91,27 @@ Obrigações para as próximas stories (`spec-story-3-4-lance-transacional/curre
 
 ## Auditoria administrativa de processo — 26/10/2026
 
-- **Deploy Epic 2 pendente:** conclusão local e incorporação à `main` informadas
-  pelo usuário; deploy postergado por falha de processo. Recuperação **2+3**,
-  sem deploy isolado do Epic 2, seguindo `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`.
-- **Reviews agregados:** não localizei artefatos formais originais dos Epics 1/2.
-  Reviews por story são preservados; executar integração retrospectiva 1/2 e
-  agregado normal do Epic 3 no candidato confirmado, antes do merge/deploy.
-  Os três `code-review-epic-N.md` são templates pendentes, não reviews realizados.
-- **Epic 3 permanece `in-progress`:** verify completo final, estudo quando
-  aplicável, reviews/correções/re-review, merge manual, deploy, smoke público e
-  evidências ainda exigem confirmação/execução. A correção final de assertions
-  da 3.6 teve testes focados; não afirmo verify completo posterior.
+- **Deploy Epic 2 — RESOLVIDO no fechamento registrado em 27/10/2026:** o deploy
+  não aconteceu no fechamento original por falha de processo. O usuário confirmou
+  recuperação conjunta **2+3**, merge/push manuais da `main`, commit publicado
+  `3d3ea97`, configuração do Render, validação pública, aplicação funcionando e
+  smoke concluído. Não houve deploy retroativo isolado do Epic 2. Evidências:
+  `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`; detalhes dos cenários não individualizados.
+- **Reviews — RESOLVIDO:** agregado Epic 3 aprovado após correção/re-review de
+  F-01 MEDIUM; retrospectivos de integração Epics 1/2 aprovados; LOW documental
+  do Epic 2 resolvido. Limites históricos de comparação preservados nos relatórios.
+- **Verify final — RESOLVIDO:** `VERIFY_E2E=1 ./verify.sh` pós-correção e anterior
+  ao merge, exit 0 conforme evidência fornecida: pytest 2036, npm test 160,
+  Playwright 189 passed/5 skipped; Ruff, format, ESLint, tsc, Vite/Docker build
+  passaram. Não executei verify nesta atualização documental.
+- **Fechamento Epic 3 — RESOLVIDO:** stories 3.1–3.6 e Epic 3 `done`, após
+  reviews/correções/verify e confirmação manual de merge/deploy/smoke.
+- **LOW opcional preservado:** teste discriminante do uso da entry capturada
+  pelo passive effect da sala, conforme re-review final do Epic 3, seção 7.
+  Aceito como não bloqueante; não implementado nesta tarefa.
+- **Dívidas futuras preservadas:** rotação de secrets, idempotência/COMMIT ambíguo,
+  lock/statement timeout, settlement, auditoria pública e demais itens anteriores
+  continuam com os limites e obrigações documentados. Epics 4–6 em backlog.
 - **Notas de transição acima preservadas como histórico:** a 3.6 já reutiliza o
   gate `authenticate_previous_state`, filtra cancelados nas leituras e no seed,
   e grava `cancelled_at` sob a trava do lote. As previsões "Para a Story 3.6" e

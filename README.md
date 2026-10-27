@@ -241,40 +241,39 @@ O `./verify.sh` constrói a imagem (`docker build`), mas não a executa.
 
 ## Deploy no Render
 
-**Estado documental em 26/10/2026:** o primeiro deploy e redeploy foram validados
-na Story 1.4. O Epic 2 foi concluído localmente e incorporado à `main` (informação
-do usuário), mas o deploy correspondente foi postergado por falha de processo.
-O Epic 3 tem as stories concluídas e permanece **`in-progress`**, aguardando
-verify final, reviews, correções, merge manual e validação pública. Não há
-alegação de deploy dos Epics 2 ou 3 nesta revisão.
+**Estado documental em 27/10/2026: Epic 3 entregue e encerrado.** O primeiro
+deploy e redeploy foram validados na Story 1.4. O deploy do Epic 2 foi postergado
+por falha de processo e **recuperado agora pelo deploy conjunto dos Epics 2 + 3**.
+Registrei os reviews retrospectivos dos Epics 1/2 e o review agregado do Epic 3,
+com F-01 MEDIUM corrigido, re-review aprovado e LOW opcional de cobertura aceito.
+O verify completo final anterior ao merge ficou verde. Fiz manualmente o merge,
+o push da `main`, a configuração do Render, o deploy de recuperação e o smoke
+público; confirmei a aplicação publicada funcionando.
 
-Decidi fazer um único **deploy de recuperação Epic 2 + Epic 3**, depois do review
-agregado do Epic 3 e dos reviews retrospectivos de integração dos Epics 1 e 2.
-O [checklist manual completo](docs/DEPLOY-RECUPERACAO-EPICS-2-3.md) concentra
-pré-requisitos, variáveis, migrations/seed/startup, smoke público e evidências.
-O [processo canônico de fechamento](docs/FECHAMENTO-DE-EPICO.md) rege os gates,
-a autorização de `done` e o início do próximo épico.
+Produção usa **`main`**, commit publicado **`3d3ea97`**, em
+<https://casa-de-leiloes-i1xr.onrender.com>.
+O [registro de recuperação e evidências](docs/DEPLOY-RECUPERACAO-EPICS-2-3.md)
+distingue minha confirmação manual dos itens não individualizados. A IA não
+acessou o painel nem repetiu deploy/smoke neste fechamento documental.
+O [processo canônico](docs/FECHAMENTO-DE-EPICO.md) continua regendo os gates.
+WebSocket da sala, liquidação e comprovante (Epic 4), auditoria pública (Epic 5)
+e demais funcionalidades futuras continuam fora desta entrega.
 
-URL pública registrada: <https://casa-de-leiloes-i1xr.onrender.com>.
-O estado efetivo atual do painel e o commit publicado precisam de confirmação
-manual; esta atualização não acessou o Render nem validou a aplicação publicada.
-
-### Configuração esperada para produção após o merge do Epic 3
+### Configuração de produção
 
 | Item | Configuração |
 | --- | --- |
 | Serviço | Web Service Docker existente; `Dockerfile` da raiz, um processo uvicorn, SPA + API na mesma origem |
-| Banco | PostgreSQL existente do Render; disponibilidade/validade a confirmar no painel |
-| Branch de produção | **`main`**, após merge manual do Epic 3; verificar/corrigir no painel se ainda apontar para `epic-1` |
-| Auto-Deploy | Desabilitado; deploy manual |
-| Publicação | **Manual Deploy → Deploy latest commit**, depois de confirmar o commit final da `main` remota |
-| Health Check Path | `/health` |
-| Startup | `CMD` da imagem (`./scripts/start.sh`), sem Docker Command próprio, sem Pre-Deploy Command |
+| Banco | PostgreSQL existente do Render; validade do plano não individualizada na evidência manual |
+| Branch de produção | **`main`**, commit publicado **`3d3ea97`**, conforme confirmação manual |
+| Auto-Deploy | Desabilitado no roteiro; opção efetiva não individualizada na evidência manual |
+| Publicação | Deploy de recuperação 2+3 executado manualmente pelo usuário; opção exata do painel não individualizada |
+| Health Check Path | `/health`, conforme roteiro; resposta individual não registrada neste fechamento |
+| Startup | `CMD` da imagem (`./scripts/start.sh`), sem Docker Command próprio, sem Pre-Deploy Command, conforme contrato documentado |
 
-A opção publica o commit mais recente da branch vinculada; referência:
-[Deploying on Render](https://render.com/docs/deploys). O painel atual não foi
-inspecionado pelo agente. Região Virginia (US East), PostgreSQL 18 e planos
-Free são o registro do primeiro deploy, não uma inspeção nova da conta.
+Referência operacional: [Deploying on Render](https://render.com/docs/deploys).
+Região Virginia (US East), PostgreSQL 18 e planos Free são o registro do primeiro
+deploy, sem nova inspeção da conta pela IA.
 
 ### Variáveis operacionais atuais
 
@@ -317,7 +316,10 @@ e não impede o novo demo assinado. Não cria lances nem pré-carrega saldo.
 
 ### Validação pública e limites
 
-Uso o checklist de recuperação para validar `/health`, SPA/JS/CSS/deep-link,
+Confirmei manualmente o smoke público dos fluxos entregues e a aplicação
+funcionando. Resultados individuais do checklist: **não individualizado na
+evidência manual**; não atribuo sucesso a cada cenário. O roteiro cobre
+`/health`, SPA/JS/CSS/deep-link,
 API JSON, login/logout/cookie/papéis, criação de lote, vitrine, carteira/depósito,
 lances/recusas, saldos entre dois bidders, anti-sniping, histórico recente e
 cancelamento sem lances. O histórico da sala não verifica a cadeia; a auditoria

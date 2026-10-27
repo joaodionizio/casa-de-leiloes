@@ -1,6 +1,32 @@
 # Uso de IA no desenvolvimento — ÁTRIO (antes Casa de Leilões)
 
-## Evolução do processo e estado atual — 26/10/2026
+## Fechamento oficial do Epic 3 — registro em 27/10/2026
+
+Registrei o review agregado do Epic 3, a correção de F-01 MEDIUM e o re-review
+aprovado; aceitei o LOW opcional de cobertura do effect da sala como não
+bloqueante. Os reviews retrospectivos de integração dos Epics 1/2 foram aprovados,
+com LOW documental do Epic 2 resolvido. Não os apresento como reviews dos diffs
+históricos originais nem reabri os findings nesta sessão.
+
+A evidência final fornecida, pós-correção e anterior ao merge, é
+`VERIFY_E2E=1 ./verify.sh`, exit 0: pytest 2036 passed, npm test 160 passed,
+Playwright 189 passed/5 skipped; Ruff, format, ESLint, tsc, Vite e Docker build
+passaram. A IA não reexecutou verify neste fechamento documental.
+
+Fiz **manualmente** merge do Epic 3, push da `main`, configuração do Render,
+deploy de recuperação 2+3, validação pública e smoke dos fluxos entregues.
+Confirmei aplicação funcionando em <https://casa-de-leiloes-i1xr.onrender.com>,
+branch `main`, commit publicado `3d3ea97`. **O deploy foi meu, não da IA.**
+O deploy do Epic 2 foi tardio: não aconteceu no fechamento original e foi
+recuperado agora conjuntamente com o Epic 3. Resultados individuais do checklist,
+timestamp/ID/logs de deploy: **não individualizado na evidência manual**.
+
+Autorizei Epic 3 `done`, com stories 3.1–3.6 `done`. Pedi à IA somente registro
+e consistência documental; ela preservou código, migrations, secrets e os
+findings históricos. Retrospectives continuam opcionais e Epics 4–6 em backlog.
+Epic 4 pode ser iniciado após o commit administrativo manual deste fechamento.
+
+## Evolução do processo — registro histórico de 26/10/2026
 
 Os registros por story abaixo são cronológicos. Frases como "ficou em review",
 "Epic 3 in-progress" ou "3.3 backlog" descrevem aquela sessão; fechamentos
@@ -50,16 +76,17 @@ Decidi corrigir documentação/status e centralizar os gates em
 `docs/FECHAMENTO-DE-EPICO.md`, com checklist manual em
 `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`. O Epic 2 foi concluído localmente e
 incorporado à `main` (informação minha); seu deploy foi postergado por falha de
-processo. A recuperação será conjunta 2+3. Não existe evidência formal localizada
+processo. Naquele momento, planejei a recuperação conjunta 2+3, agora concluída conforme
+o registro de fechamento acima. Não existe evidência formal localizada
 de reviews agregados originais dos Epics 1/2: os reviews por story permanecem
 válidos, e preparei integração retrospectiva 1/2 e review normal do Epic 3.
-Os arquivos `code-review-epic-1/2/3.md` são **templates pendentes**, sem review
-executado ou aprovação.
+Na auditoria inicial, os arquivos `code-review-epic-1/2/3.md` eram templates
+sem execução; os reviews foram posteriormente executados e aprovados.
 
 A Story 1.4 tinha evidências públicas e sprint `done`, mas cabeçalho `review`;
 sincronizei o cabeçalho e Epic 1 `done`, sem fingir que o review agregado original
 foi realizado. Preservei Epic 2 `done` histórico com a dívida operacional
-explícita. Epic 3 continua **`in-progress`** até todos os gates, mesmo com as
+explícita. Naquela sessão, mantive Epic 3 **`in-progress`** até todos os gates, mesmo com as
 stories 3.x concluídas; não iniciei Epic 4. Retrospective BMAD é opcional.
 
 A tarefa administrativa foi executada no Codex, modelo efetivo **GPT-6.1 Sol**
@@ -72,8 +99,8 @@ opção de deploy manual. O painel e o ambiente público não foram inspecionado
 Fiz apenas conferência estática/documental e comparação de arquivos locais;
 não executei `verify`, pytest, Playwright ou mutações nesta tarefa. O harness
 de integração recria o schema do banco de teste, e testes destrutivos estavam
-fora da autorização desta auditoria. O verify completo final e os smokes
-continuam gates pendentes, sem reutilizar números históricos como resultado
+fora da autorização desta auditoria. Naquela auditoria, o verify completo final e os smokes
+ainda eram gates a executar (hoje concluídos), sem reutilizar números históricos como resultado
 novo. Nenhum código de aplicação, migration, segredo ou regra de negócio foi
 alterado; nenhum Git, PR ou deploy foi executado e nenhum `.env*` foi lido.
 
@@ -954,4 +981,6 @@ ela e o que a IA fez.
   infraestrutura de componente no projeto, então o efeito em si não é exercitado.
 - `VERIFY_E2E=1 ./verify.sh` posterior à correção: exit 0; 2036 backend, 160 front, 189
   Playwright (5 skipped); Ruff, format, ESLint, tsc, Vite e docker build passaram.
-- Sem Git, sem backend. Epic 3 segue `in-progress`; re-review pendente.
+- Sem Git, sem backend naquela correção. Epic 3 ficou `in-progress` e o re-review
+  foi realizado depois: F-01 aprovado com LOW opcional, conforme relatório e
+  fechamento oficial acima.
