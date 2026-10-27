@@ -1,5 +1,7 @@
 # Contrato de domínio — Story 3.2
 
+> **Nota de revisão da decisão (27/10/2026).** Esta spec foi escrita e implementada com a AD-5 anterior (`ends_at + 2 min`, nunca `now + 2 min`). Revisei a AD-5 em 27/10/2026: a regra vigente é `novo fim = now + 2 min` (mesmo `now` lido sob a trava; exatamente 2 min restantes: sem mudança e flag falsa). O texto abaixo permanece como registro do que eu decidi na época e **não foi reescrito**. Ver `docs/ARQUITETURA.md`, AD-5.
+
 Os trechos de código abaixo são **referência normativa** de forma, ordem e mensagens; o
 implementador ajusta só o estilo (docstrings em português, comentários no padrão de
 `lots.py`/`wallet.py`). Nomes, assinaturas, campos, ordem dos passos e mensagens de

@@ -11,6 +11,8 @@ sources:
   - ../../implementation-artifacts/3-2-regras-de-aceitação-do-lance-com-hora-injetada.md
 ---
 
+> **Nota de revisão da decisão (27/10/2026).** Esta spec foi escrita e implementada com a AD-5 anterior (`ends_at + 2 min`, nunca `now + 2 min`). Revisei a AD-5 em 27/10/2026: a regra vigente é `novo fim = now + 2 min` (mesmo `now` lido sob a trava; exatamente 2 min restantes: sem mudança e flag falsa). O texto abaixo permanece como registro do que eu decidi na época e **não foi reescrito**. Ver `docs/ARQUITETURA.md`, AD-5.
+
 > **Contrato canônico.** Esta SPEC e os arquivos em `companions:` formam o contrato
 > completo da Story 3.2. P1 a P13 e C1 foram decididas pelo Joaodionizio antes desta spec
 > e **não são reabertas** (`decisions.md` §1). D1 a D14 detalham essas decisões dentro do

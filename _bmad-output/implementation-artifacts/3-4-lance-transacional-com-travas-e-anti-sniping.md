@@ -5,6 +5,12 @@ Status: done
 Chave do sprint: `3-4-lance-transacional-com-travas-e-anti-sniping`
 Épico: 3 (Carteira e lances íntegros). Criação: 26/10/2026. Consolidação: 26/10/2026.
 
+> **Nota de revisão da decisão (27/10/2026).** A AD-5 foi revisada por mim em
+> 27/10/2026: a regra passou a ser `novo fim = now + 2 min` (renovação a partir do lance;
+> com exatamente 2 min restantes não há mudança). Este documento registra o que eu decidi
+> e implementei em 26/10/2026 (Story 3.4) com a regra anterior (`ends_at + 2 min`); **não o reescrevi**. A
+> regra vigente está em `docs/ARQUITETURA.md`, AD-5.
+
 > **Decisões consolidadas em 26/10/2026.** Decidi P1–P9 (§12) antes da spec. Nenhuma
 > decisão bloqueante resta para `/bmad-spec`. A documentação já foi sincronizada
 > (`docs/ARQUITETURA.md`: AD-7, AD-13, AD-20, Q3, Q4; `CLAUDE.md`; três linhas

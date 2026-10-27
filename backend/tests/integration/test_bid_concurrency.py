@@ -226,15 +226,14 @@ def test_the_second_bid_arriving_over_http_sees_the_first(
     assert_invariants(seeded)
 
 
-# --- T-SNIPE (3): o segundo lê o fim que o primeiro estendeu ---
+# --- T-SNIPE (3): o segundo lê o fim que o primeiro renovou ---
 
 
-def test_the_second_bid_reads_the_end_extended_by_the_first_and_does_not_extend_again(
+def test_the_second_bid_reads_the_end_renewed_by_the_first_and_renews_again(
     seeded: sessionmaker[Session], db_engine: Engine
 ) -> None:
     ends_at = db_now(seeded) + timedelta(seconds=60)
     lot_id = live_lot(seeded, ends_at=ends_at)
-    stored_end = lot_state(seeded, lot_id)["ends_at"]
     outcome: list[Any] = []
 
     first = overlapped(
@@ -244,13 +243,18 @@ def test_the_second_bid_reads_the_end_extended_by_the_first_and_does_not_extend_
         b_service(seeded, lot_id, BOB, 11_000, outcome),
     )
 
+    # AD-5 (revisada em 27/10/2026): o fim de A é `A.placed_at + 2 min`. B, que esperou
+    # a trava e leu o instante depois do commit de A, vê menos de 2 min restantes e
+    # renova de novo, a partir do próprio instante.
     assert first.anti_sniping_applied is True
+    assert first.ends_at == first.placed_at + timedelta(minutes=2)
     (second,) = outcome
     assert isinstance(second, PlacedBid)
-    # Restava mais de 2 min depois da extensão de A: B não estende, e persiste o de A.
-    assert second.anti_sniping_applied is False
-    assert second.ends_at == stored_end + timedelta(minutes=2)
-    assert lot_state(seeded, lot_id)["ends_at"] == stored_end + timedelta(minutes=2)
+    assert second.placed_at > first.placed_at
+    assert second.anti_sniping_applied is True
+    assert second.ends_at == second.placed_at + timedelta(minutes=2)
+    assert second.ends_at > first.ends_at
+    assert lot_state(seeded, lot_id)["ends_at"] == second.ends_at
 
 
 # --- T-CLOCK (b): a hora vem depois da espera pela trava ---

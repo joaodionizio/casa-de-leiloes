@@ -18,6 +18,8 @@ companions:
 sources: []
 ---
 
+> **Nota de revisão da decisão (27/10/2026).** Esta spec foi escrita e implementada com a AD-5 anterior (`ends_at + 2 min`, nunca `now + 2 min`). Revisei a AD-5 em 27/10/2026: a regra vigente é `novo fim = now + 2 min` (mesmo `now` lido sob a trava; exatamente 2 min restantes: sem mudança e flag falsa). O texto abaixo permanece como registro do que eu decidi na época e **não foi reescrito**. Ver `docs/ARQUITETURA.md`, AD-5.
+
 > **Contrato canônico.** Este SPEC e os `companions:` são o contrato completo para
 > construir, testar e validar a Story 3.4. A story consolidada continua companion
 > (P1–P9 e critérios CA1–CA14 vinculantes). Nada foi implementado.

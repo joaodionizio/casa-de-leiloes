@@ -80,8 +80,10 @@ que não mudam a arquitetura.
 - AD-4 React + Vite + TypeScript simples e explicável: interface/type, unions
   simples, `Promise<T>`, contratos HTTP e eventos WebSocket tipados. Evitar
   generics complexos, conditional/mapped types. Sem JavaScript puro.
-- AD-5 Anti-sniping: lance válido com `0 < restante <= 2 min` soma 2 min ao fim
-  atual; depois do fim nunca reabre. README: "Comportamentos que podem surpreender".
+- AD-5 Anti-sniping (revisada em 27/10/2026): lance válido com `0 < restante <= 2 min`
+  leva o fim a `now + 2 min` (mesmo `now` da trava); com exatamente 2 min não há
+  mudança e a flag fica falsa; depois do fim nunca reabre. README: "Comportamentos que
+  podem surpreender".
 - AD-6 Hora: `clock_timestamp()` do PostgreSQL, lido depois da trava do lote,
   um único instante por operação. O navegador nunca decide.
 - AD-7 Lance: uma única transação, 18 passos (ver ARQUITETURA.md). Depois da trava e
@@ -178,7 +180,7 @@ que não mudam a arquitetura.
 BMAD em português, artefatos em `_bmad-output/`, implementação story a story. PRD
 dispensado: o enunciado já é a especificação (registrar o motivo).
 - Review agregado independente obrigatório antes do merge; fonte canônica: `docs/FECHAMENTO-DE-EPICO.md`.
-- Epic 3 `in-progress` até gates, deploy 2+3 e smoke/evidências. Retrospective BMAD opcional.
+- Epic 3 está `done` no `sprint-status.yaml` (gates, deploy 2+3 e smoke registrados). Retrospective BMAD opcional.
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
 IDs históricos preservados; detalhes e decisões fechadas na arquitetura.

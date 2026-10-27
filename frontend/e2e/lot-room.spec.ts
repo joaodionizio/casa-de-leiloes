@@ -118,14 +118,14 @@ test.describe('lance', () => {
     await expect(page.getByLabel('Valor do lance')).toHaveValue('')
   })
 
-  test('anti-sniping: o prazo prorrogado aparece em fim, aviso e contagem', async ({ page }) => {
+  test('anti-sniping: o prazo renovado aparece em fim, aviso e contagem', async ({ page }) => {
     await mockApi(page, bidder({ bid: 'anti_sniping' }))
     await openRoom(page)
     const before = await page.locator('.lot-page-when').innerText()
 
     await bidAmount(page, '110,00')
 
-    await expect(page.getByText('Prazo prorrogado em 2 minutos.')).toBeVisible()
+    await expect(page.getByText('Prazo renovado: 2 minutos a partir do seu lance.')).toBeVisible()
     await expect(page.locator('.lot-page-when')).not.toHaveText(before)
   })
 
@@ -417,11 +417,11 @@ test.describe('rodadas de leitura', () => {
     const room = api.hold(ROOM)
     await bidAmount(page, '110,00')
 
-    // Fim prorrogado (12:02:10) menos o instante do lance (12:00:09): 2 min 1 s.
-    await expect(page.getByText('Prazo prorrogado em 2 minutos.')).toBeVisible()
-    await expect(page.getByRole('timer')).toHaveText('02:01')
-    await page.clock.runFor(1_000)
+    // Fim renovado (12:02:09) = instante do lance (12:00:09) + 2 min: a contagem parte de 2:00.
+    await expect(page.getByText('Prazo renovado: 2 minutos a partir do seu lance.')).toBeVisible()
     await expect(page.getByRole('timer')).toHaveText('02:00')
+    await page.clock.runFor(1_000)
+    await expect(page.getByRole('timer')).toHaveText('01:59')
     room.release()
     await expect(page.locator('.bid-minimum')).toHaveText('R$ 120,00')
   })

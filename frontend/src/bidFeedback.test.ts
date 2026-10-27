@@ -26,11 +26,11 @@ test('só a recusa por saldo oferece o link da carteira', () => {
   assert.equal(refusalNotice('below_minimum').walletLink, false)
 })
 
-test('sucesso em reais e aviso de prorrogação', () => {
+test('sucesso em reais e aviso de renovação do prazo', () => {
   assert.equal(successText(125000, false), 'Lance de R$ 1.250,00 registrado.')
   assert.equal(
     successText(125000, true),
-    'Lance de R$ 1.250,00 registrado. Prazo prorrogado em 2 minutos.',
+    'Lance de R$ 1.250,00 registrado. Prazo renovado: 2 minutos a partir do seu lance.',
   )
 })
 

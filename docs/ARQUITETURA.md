@@ -25,7 +25,7 @@ As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + 
 | AD-2 | PostgreSQL, SQLAlchemy 2.x síncrono (Session), Alembic, psycopg 3 | MongoDB; MySQL; SQLAlchemy assíncrono | Garantias no banco; o WebSocket assíncrono lê o banco em threadpool (AD-25) |
 | AD-3 | Dinheiro em inteiros, em centavos, BIGINT, sufixo `_cents` | float | CHECK é imediata por UPDATE: a ordem das atualizações na liquidação não pode violar `committed_balance_cents <= total_balance_cents` |
 | AD-4 | React + Vite + TypeScript simples | JavaScript puro | Contratos HTTP e eventos do WebSocket tipados |
-| AD-5 | Anti-sniping: extensão cumulativa do fim atual (+2 min por lance em `0 < restante <= 2 min`) | `fim = momento do lance + 2 min` | O fim pode subir sem teto enquanto houver lances na janela; documentar no README |
+| AD-5 | Anti-sniping: renovação do prazo (lance válido em `0 < restante <= 2 min` leva o fim a `momento do lance + 2 min`). **Revisada em 27/10/2026** | `fim atual + 2 min` (minha decisão original, descartada em 27/10/2026) | O fim pode subir sem teto enquanto houver lances na janela; com exatamente 2 min restantes não há mudança; documentar no README |
 | AD-6 | Autoridade de hora: PostgreSQL, `clock_timestamp()` lido depois da trava do lote | Relógio do navegador; relógio da aplicação; hora lida antes da trava | Um único instante por operação |
 | AD-7 | Lance = uma única transação (18 passos desde a Story 3.4: autentica o estado anterior antes das regras) | Etapas como operações ou commits independentes, ou só validação na aplicação | Falha em qualquer passo desfaz tudo; histórico não autenticado não aceita lance |
 | AD-8 | Travas: lote, depois carteiras em `user_id` crescente | Líder antigo primeiro; novo líder primeiro | Mesma ordem em lance e liquidação |
@@ -137,29 +137,52 @@ menor curva inicial, mas escolhi TypeScript porque o custo adicional é aceitáv
 antes do início da implementação e os contratos explícitos agregam valor neste
 projeto.
 
-### AD-5. Anti-sniping: extensão cumulativa do horário final atual
+### AD-5. Anti-sniping: renovação do prazo a partir do lance (revisada em 27/10/2026)
 O enunciado diz: "lance aceito nos últimos 2 minutos estende o fim do lote
 para +2 minutos". A frase permite duas interpretações:
 
 - A) novo fim = momento do lance + 2 minutos
 - B) novo fim = horário final atual + 2 minutos
 
-**Decidi** a opção B. Se um lance válido for aceito quando
-`0 < tempo restante <= 2 minutos` (janela inclusiva), somo 2 minutos ao horário
-final atual (`ends_at`) do lote.
+**Decisão vigente (27/10/2026).** **Decidi** a opção A. Se um lance válido for
+aceito quando `0 < ends_at - now <= 2 minutos` (janela inclusiva), o término alvo
+passa a ser `now + 2 minutos`, com o mesmo `now` lido de `clock_timestamp()` depois
+da trava do lote (AD-6, AD-26). Cada novo lance válido dentro da janela renova o
+prazo para dois minutos depois do próprio lance, sem teto.
+
+- O lote nunca reabre depois de encerrado: `now >= ends_at` é recusa `lot_ended`.
+- Se `now + 2 minutos` for igual ao `ends_at` atual (restam exatamente 2 minutos),
+  não há alteração efetiva do término e `anti_sniping_applied` permanece falso.
+  Para restante estritamente menor que 2 minutos, o alvo é maior que o fim atual,
+  então o fim sobe e a flag é verdadeira. O fim nunca diminui.
+- Lance recusado nunca altera o fim.
+- `ends_at` não faz parte da representação canônica v1 (AD-21) nem da cadeia
+  SHA-256/âncora HMAC (AD-13): esta mudança não toca nenhuma delas.
+- Não faço nenhuma alteração retroativa em lotes ou lances já persistidos; só os
+  lances aceitos depois desta revisão seguem a regra nova.
 
 **Exemplo:**
-- fim atual 20:00; lance válido às 19:59; novo fim 20:02
-- fim atual 20:02; lance válido às 20:01; novo fim 20:04
-- e assim sucessivamente
+- fim atual 20:00; lance válido às 19:59; novo fim 20:01
+- fim atual 20:01; lance válido às 20:00:30; novo fim 20:02:30
+- fim atual 20:00; lance válido às 19:58 (exatamente 2 min restantes): o fim
+  continua 20:00 e `anti_sniping_applied` é falso
+- fim atual 20:00; lance válido às 19:57: fora da janela, o fim não muda
 
-Um lance recebido depois do encerramento nunca reabre o lote.
+**Por quê:** inicialmente interpretei a frase do enunciado como a opção B. Depois
+de refletir de novo sobre o comportamento esperado de um anti-sniping, mudei para a
+opção A. Como o enunciado continua ambíguo, a escolha fica documentada aqui e no
+README, em "Comportamentos que podem surpreender".
 
-**Por quê:** escolhi a interpretação de extensão cumulativa do horário final.
-Como o enunciado é ambíguo, a escolha fica documentada aqui e no README, em
-"Comportamentos que podem surpreender".
+**Descartei:** `novo fim = horário final atual + 2 minutos` (opção B).
 
-**Descartei:** `novo fim = momento_do_lance + 2 minutos`.
+**Histórico da decisão.** Até 26/10/2026 a AD-5 dizia o contrário, e a
+implementação das Stories 3.2 e 3.4 seguiu isso: eu havia **decidido** a opção B
+(extensão cumulativa do horário final atual: `ends_at + 2 minutos`) e **descartado**
+`novo fim = momento_do_lance + 2 minutos`. Troquei de interpretação em 27/10/2026,
+antes da Story 4.1. A regra antiga valeu enquanto esteve em vigor: as Stories 3.2 e
+3.4 e o deploy 2+3 (commit `3d3ea97`) a refletem, e os artefatos delas
+permanecem como registro do que eu decidi na época, com nota de revisão. Lances já
+gravados e `ends_at` já persistidos não são reescritos.
 
 ### AD-6. Fonte de hora: o PostgreSQL
 **Decidi** que a autoridade para decisões críticas de tempo é o PostgreSQL.
@@ -201,7 +224,7 @@ definitiva; horário capturado antes da aquisição da trava.
 9. liberar o saldo comprometido do líder anterior;
 10. comprometer o saldo do novo líder;
 11. atualizar o líder e o lance atual;
-12. aplicar o anti-sniping (AD-5), se necessário, sobre o `ends_at` lido sob a trava;
+12. aplicar o anti-sniping (AD-5: alvo `now + 2 min`, com o `now` do passo 3), se necessário;
 13. definir a sequência como `bid_count` autenticado + 1;
 14. gerar o pseudônimo (AD-20);
 15. montar a representação canônica (AD-21) com o mesmo instante do passo 3;
@@ -921,7 +944,7 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   README.
 - **Limitação commit/publicação (AD-25):** declarar no README.
 - **Logout (AD-29):** sem sessão no banco, o token copiado vale até expirar.
-- **Anti-sniping (AD-5):** sem teto de extensões. Declarar no README.
+- **Anti-sniping (AD-5):** sem teto de renovações. Declarar no README.
 - **CHECK × liquidação (AD-3 e AD-9):** a CHECK é verificada a cada UPDATE;
   debitar o total e liberar o comprometido precisam ocorrer sem estado
   intermediário inválido.

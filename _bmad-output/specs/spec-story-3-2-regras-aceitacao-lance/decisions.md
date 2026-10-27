@@ -1,5 +1,7 @@
 # Decisões — Story 3.2
 
+> **Nota de revisão da decisão (27/10/2026).** Esta spec foi escrita e implementada com a AD-5 anterior (`ends_at + 2 min`, nunca `now + 2 min`). Revisei a AD-5 em 27/10/2026: a regra vigente é `novo fim = now + 2 min` (mesmo `now` lido sob a trava; exatamente 2 min restantes: sem mudança e flag falsa). O texto abaixo permanece como registro do que eu decidi na época e **não foi reescrito**. Ver `docs/ARQUITETURA.md`, AD-5.
+
 ## 1. Decisões do Joaodionizio (P1 a P13 e C1, fechadas em 25/10/2026; não reabrir)
 
 Registro completo, com as alternativas descartadas, em

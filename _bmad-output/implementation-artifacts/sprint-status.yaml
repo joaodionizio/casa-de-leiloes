@@ -68,6 +68,8 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: backlog
+  # Story 4.1 criada em 27/10/2026; aguarda decisões humanas Q2 (Origin) e Q10 (rota WS).
+  # Documento 4-1 correspondente: PRECISA DE DECISÕES; sem liberação de spec/build.
   4-1-sala-ao-vivo-por-websocket-snapshot-e-atualizações: backlog
   4-2-heartbeat-e-reconexão-automática: backlog
   4-3-fechamento-liquidação-idempotente-e-comprovante-base: backlog

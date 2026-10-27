@@ -46,7 +46,7 @@ export function failureBelongsToField(failure: KnownBidFailure): boolean {
 
 export function successText(amountCents: number, antiSniping: boolean): string {
   const base = `Lance de ${formatCents(amountCents)} registrado.`
-  return antiSniping ? `${base} Prazo prorrogado em 2 minutos.` : base
+  return antiSniping ? `${base} Prazo renovado: 2 minutos a partir do seu lance.` : base
 }
 
 export type SyncOutcome = 'complete' | 'partial'

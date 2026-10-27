@@ -634,7 +634,8 @@ export async function mockApi(
         api.bidResponses += 1
         const extended = mode === 'anti_sniping'
         if (extended) {
-          state.endsAt = new Date(Date.parse(state.endsAt) + 120_000)
+          // AD-5 (revisada em 27/10/2026): o novo fim é `placed_at` + 2 min.
+          state.endsAt = new Date(Date.parse(placed.placed_at) + 120_000)
             .toISOString()
             .replace('.000Z', 'Z')
         }

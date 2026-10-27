@@ -5,6 +5,12 @@ Status: done
 Chave do sprint: `3-2-regras-de-aceitação-do-lance-com-hora-injetada`
 Épico: 3 (Carteira e lances íntegros). Data de criação: 25/10/2026.
 
+> **Nota de revisão da decisão (27/10/2026).** A AD-5 foi revisada por mim em
+> 27/10/2026: a regra passou a ser `novo fim = now + 2 min` (renovação a partir do lance;
+> com exatamente 2 min restantes não há mudança). Este documento registra o que eu decidi
+> e implementei em 25/10/2026 (Story 3.2) com a regra anterior (`ends_at + 2 min`); **não o reescrevi**. A
+> regra vigente está em `docs/ARQUITETURA.md`, AD-5.
+
 > **Leitura desta story (25/10/2026).** Decidi P1 a P13 em 25/10/2026, antes de
 > qualquer spec ou código. As decisões vigentes estão em **"Decisões fechadas (P1 a
 > P13)"**, e as regras, os critérios, a matriz de testes e as tarefas abaixo já as

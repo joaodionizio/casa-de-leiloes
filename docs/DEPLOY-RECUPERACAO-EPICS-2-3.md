@@ -158,7 +158,10 @@ alterados por outra sessão.
 - [ ] Para anti-sniping, uso outro lote novo de janela curta; com `phase=live`
   e `0 < ends_at - as_of <= 2 min` na leitura, envio lance válido com saldo.
   Confirmo na resposta 201 `anti_sniping_applied=true` e `ends_at` anterior
-  **+120 segundos**. Registro o antes/depois real; se passou do fim antes do
+  **+120 segundos**.
+  _(Nota de revisão, 27/10/2026: este roteiro foi escrito para a AD-5 anterior
+  e o deploy 2+3 a refletia. Pela AD-5 vigente, o esperado é `ends_at` igual ao
+  `placed_at` do lance **+120 segundos**. Não reescrevi a evidência já registrada.)_ Registro o antes/depois real; se passou do fim antes do
   aceite, a recusa é correta e repito com margem. Lote nunca reabre.
 - [ ] `/api/lots/<id>/bids` público: histórico recente (até 50), valor/hora,
   sequência e aliases `Licitante-` + 16 hex; lance atual coincide com o último.

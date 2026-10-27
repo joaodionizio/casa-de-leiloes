@@ -969,6 +969,29 @@ ela e o que a IA fez.
   não vinculantes; as stories definem os contratos reais.
 - Não rodei `verify` nesta etapa: ela só adicionou documentação e o protótipo. Não houve Git.
 
+## Criação BMAD da Story 4.1 — 27/10/2026
+
+- Usei GPT-6.1 Sol Medium para criar a story documental de sala ao vivo por
+  WebSocket, com snapshot inicial e atualização somente após commit, a partir do
+  pedido explícito de create-story. Não iniciei spec nem implementação.
+- Confrontei stories/specs 3.4 e 3.5 com backend e frontend vivos, testes,
+  infraestrutura de echo do Epic 1 e documentos vinculantes de UX. Usei uma
+  análise auxiliar de frontend, conforme a instrução de paralelização da skill.
+- Registrei D1–D10 como recomendações, contrato público mínimo, concorrência,
+  integração REST/WS/201, critérios de aceite, riscos e plano de testes. Mantive
+  a 4.2 fora do escopo, inclusive heartbeat, timeout e reconexão automática.
+- Identifiquei duas decisões reservadas a mim por CLAUDE/arquitetura ainda
+  abertas: Q2 (Origin no handshake) e Q10 (rota WS). A story ficou
+  **PRECISA DE DECISÕES** e `backlog`; acrescentei comentário no sprint sem
+  iniciar Epic 4, sem marcar ready-for-dev e sem alterar ADs.
+- Validei a completude documental com o checklist de create-story. Os resolvers
+  BMAD rodaram com cache uv em `/tmp` após o cache padrão não permitir escrita.
+  Consultei documentação primária de FastAPI, AnyIO e Vite para as APIs propostas.
+  Não executei testes, verify, banco ou deploy; nenhum resultado histórico foi
+  apresentado como nova execução. Não executei Git, não li `.env*` e não alterei
+  secrets. Os únicos arquivos editados foram a nova story, este registro e o
+  comentário de tracking.
+
 ## Correção do F-01 (MEDIUM) do review agregado do Epic 3 — 26/10/2026
 
 - O review agregado apontou que a sala podia ficar bloqueada: o `POST` pendente terminava
@@ -984,3 +1007,18 @@ ela e o que a IA fez.
 - Sem Git, sem backend naquela correção. Epic 3 ficou `in-progress` e o re-review
   foi realizado depois: F-01 aprovado com LOW opcional, conforme relatório e
   fechamento oficial acima.
+
+## Revisão da AD-5 (anti-sniping) antes da Story 4.1 — 27/10/2026
+
+- Decisão minha: reli o enunciado e mudei a interpretação do anti-sniping de
+  `ends_at + 2 min` para `novo fim = now + 2 min` (mesmo `clock_timestamp()` lido sob a
+  trava). A janela continua `0 < restante <= 2 min`; com exatamente 2 min o fim não muda
+  e `anti_sniping_applied` fica falso; o lote nunca reabre.
+- A IA implementou só essa mudança: `backend/app/bid_rules.py` (constante renomeada para
+  `ANTI_SNIPING_RENEWAL`), testes unitários e de integração, e a sincronização
+  documental (`ARQUITETURA.md` com a decisão nova e a anterior descartada, `CLAUDE.md`,
+  README, DESIGN.md, nota datada nos artefatos das Stories 3.2/3.4, em `epics.md` e no
+  roteiro de deploy 2+3). A nota administrativa do Epic 3 em `CLAUDE.md` foi corrigida
+  para `done`. Nada retroativo em lotes ou lances; a representação canônica v1 e a
+  cadeia SHA/HMAC não mudaram.
+- Não implementei a Story 4.1. A IA não executou Git e não leu `.env*`.

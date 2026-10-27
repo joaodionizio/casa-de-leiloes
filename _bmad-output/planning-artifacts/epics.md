@@ -621,6 +621,8 @@ Para que eu saiba exatamente por que ele foi aceito ou recusado.
 **Quando** a regra calcula o novo fim
 **Então** o novo fim é o fim atual + 2 minutos; com restante maior que 2 minutos, o fim não muda.
 
+> _Nota de revisão (27/10/2026): critério escrito e implementado com a AD-5 anterior. A AD-5 vigente é `novo fim = now + 2 min` (exatamente 2 min restantes: sem mudança). Ver `docs/ARQUITETURA.md`._
+
 **Dado** `now >= ends_at`
 **Quando** a regra avalia
 **Então** recusa como lote encerrado (nunca reabre).
@@ -686,6 +688,8 @@ Para que o leilão nunca fique inconsistente, mesmo com lances simultâneos, e t
 **Dado** um lance aceito com `0 < restante <= 2 min`
 **Quando** a transação confirma
 **Então** `ends_at` passa a ser o fim anterior + 2 minutos, cumulativamente e sem teto.
+
+> _Nota de revisão (27/10/2026): critério escrito e implementado com a AD-5 anterior. A AD-5 vigente é `novo fim = now + 2 min` (a mesma lida sob a trava), renovável e sem teto. Ver `docs/ARQUITETURA.md`._
 
 **Dado** a operação de lance
 **Quando** ela roda
