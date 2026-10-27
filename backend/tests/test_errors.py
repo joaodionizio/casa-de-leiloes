@@ -126,10 +126,14 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
         "below_minimum": "Seu lance está abaixo do mínimo para este lote.",
         "already_winning": "Você já está ganhando este lote.",
         "insufficient_balance": "Saldo disponível insuficiente para este lance.",
+        # Story 3.6: o lote cancelado recusa o lance; a mensagem do conflito de
+        # integridade vira neutra (D5) e `lot_has_bids` é do cancelamento.
+        "lot_cancelled": "Este lote foi cancelado.",
         "lot_integrity_conflict": (
-            "Não foi possível verificar a integridade deste lote. "
-            "O lance não foi registrado."
+            "Não foi possível concluir a operação porque a integridade do lote "
+            "não pôde ser confirmada."
         ),
+        "lot_has_bids": "Este lote não pode ser cancelado porque já recebeu lances.",
     }
 
 

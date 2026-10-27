@@ -467,10 +467,12 @@ e é quem decide. "Revisar lote" revalida os horários antes da revisão.
 No dinheiro, `655.3` é recusado com a dica de usar vírgula (`655,30`): o ponto só vale como
 milhar.
 
-**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): todos os lotes do leiloeiro da
-sessão, do mais recente para o mais antigo, sem paginação e sem limite. É leitura pura
-(só `SELECT`), não consulta a AIC e não calcula "ao vivo", "agendado" nem "encerrado":
-a fase aparece na vitrine pública (veja "Vitrine e página do lote"), não aqui.
+**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): `{as_of, items}` com todos os lotes
+do leiloeiro da sessão, **inclusive os cancelados**, do mais recente para o mais antigo,
+sem paginação e sem limite. É leitura pura (só `SELECT`) e não consulta a AIC. Cada item
+traz, além dos campos da criação, `cancelled_at`, `bid_count` (contagem persistida, só uma
+dica de tela) e `phase` (`scheduled`, `live` ou `ended`), calculada no servidor com o
+`as_of` do banco. Um lote cancelado mostra o selo "Cancelado" no lugar da fase.
 
 ### Lote demo
 
@@ -568,6 +570,34 @@ Comportamentos que podem surpreender (sala):
   ainda pode gravar outro lance.
 - O formulário só valida o **formato** do valor; abaixo do mínimo ou acima do saldo o pedido
   vai ao servidor, que decide.
+
+### Cancelar lote (Story 3.6)
+
+`POST /api/lots/{lot_id}/cancel` (só `AUCTIONEER`, **sem corpo**; a identidade é a da
+sessão) cancela um lote **seu**, que **ainda não recebeu lances** e **ainda não terminou**.
+Responde `200 {id, cancelled_at}`. Na mesma transação do lance (trava do lote → hora do
+banco → dono → integridade → regras), o cancelamento escreve só `lots.cancelled_at`: não
+toca em carteiras, em lances nem na âncora. Cancelar de novo um lote íntegro devolve o
+mesmo `200` com o instante original, sem nova escrita. Recusas: `403` (outro leiloeiro ou
+`BIDDER`), `404`, `409 lot_integrity_conflict`, `422 lot_has_bids`, `422 lot_ended`.
+
+Comportamentos que podem surpreender (cancelamento):
+
+- **Cancelado some do público.** Fora da vitrine, e `GET /api/lots/{id}`, `/bids` e
+  `/bids/mine` respondem `404`. O dono continua vendo o lote em "Meus lotes", com o selo
+  "Cancelado". Não existe `phase = cancelled`: a fase continua sendo só temporal.
+- **Lote anterior à 3.4 (sem âncora autenticada) não é cancelável:** a decisão "sem lances"
+  usa a contagem autenticada pelo mesmo gate do lance, e esse lote responde `409`. Não há
+  reparo, reassinatura nem comando administrativo nesta entrega; ele fica na vitrine até
+  vencer. Cancelar o lote demo faz o próximo boot criar outro.
+- **`cancelled_at` não é autenticado pela âncora v1** (como `ends_at` e o dono). Quem edita
+  o banco à mão pode esconder ou reexibir um lote; isso não move saldo.
+- **Sem aviso em tempo real:** a sala já aberta não é avisada (não há WebSocket até o Épico
+  4). Um lance em lote cancelado responde `422 lot_cancelled` e a tela diz "Este lote foi
+  cancelado."; uma leitura pública **posterior** (atualizar ou voltar à sala) responde `404`
+  e pode mostrar "Lote não encontrado.". Isso não significa que o cancelamento falhou.
+- **Erro de rede ou 5xx no cancelamento** é resultado incerto: a tela não afirma sucesso nem
+  falha, relê a lista uma vez e nunca reenvia sozinha.
 
 ## Vitrine e página do lote
 

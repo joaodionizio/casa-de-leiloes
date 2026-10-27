@@ -106,13 +106,14 @@ test('POST: o 201 é o único aceite; corpo inválido é ambíguo', () => {
   assert.deepEqual(classifyBidResponse(201, null), { ok: false, failure: 'ambiguous' })
 })
 
-test('POST: as cinco recusas de negócio vêm do code, não da mensagem', () => {
+test('POST: as seis recusas de negócio vêm do code, não da mensagem', () => {
   for (const code of [
     'below_minimum',
     'insufficient_balance',
     'already_winning',
     'lot_not_started',
     'lot_ended',
+    'lot_cancelled',
   ]) {
     assert.deepEqual(classifyBidResponse(422, { status: 422, code, message: '<b>x</b>' }), {
       ok: false,

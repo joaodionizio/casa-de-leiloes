@@ -135,6 +135,7 @@ test.describe('lance', () => {
     ['already_winning', 'Você já está ganhando este lote.'],
     ['lot_not_started', 'Este lote ainda não começou.'],
     ['lot_ended', 'Este lote já foi encerrado.'],
+    ['lot_cancelled', 'Este lote foi cancelado.'],
   ]
   for (const [mode, text] of refusals) {
     test(`recusa ${mode}: texto pelo code e valor mantido`, async ({ page }) => {

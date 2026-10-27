@@ -58,8 +58,8 @@ BOB = seeded_id(OTHER_BIDDER_EMAIL)
 INTEGRITY_BODY = {
     "status": 409,
     "code": "lot_integrity_conflict",
-    "message": "Não foi possível verificar a integridade deste lote. "
-    "O lance não foi registrado.",
+    "message": "Não foi possível concluir a operação porque a integridade do lote "
+    "não pôde ser confirmada.",
 }
 F = IntegrityFailure
 OTHER_HASH = "c" * 64

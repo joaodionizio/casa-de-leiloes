@@ -765,6 +765,37 @@ High em todas as etapas.
   tarefas normais e reviews focados usam Medium/Sonnet quando suficientes. Implementador
   e reviewer são independentes quando possível.
 
+## Story 3.6 — Leiloeiro cancela lote sem lances (26/10/2026)
+
+- **Preparação:** story e spec aprovadas por mim antes do build (D1 a D7 fechadas).
+- **O que a IA fez:** o Claude Sonnet 5.5 implementou a migration `0006`, o módulo
+  `app/lot_cancellation.py` (reusa a trava, a hora e o gate da 3.4 por import), o
+  `lot_cancelled` no lance, os filtros de cancelado nas leituras públicas e no seed, o novo
+  read model de `GET /api/lots/mine`, o painel "Meus lotes" com confirmação inline, o único
+  novo código da sala, os testes (integração, concorrência C1/C2/C3, migration, `node --test`
+  e Playwright) e a nota do README. Não tocou em Git nem em `.env*`.
+- **O que revisei/decidi:** as decisões vinham da spec; a revisão do código é minha, antes do
+  commit. O build não abriu decisão nova.
+- **Onde a IA errou durante o trabalho:** o primeiro `verify` falhou no Ruff por duas linhas
+  longas na docstring da migration (eu só tinha checado `app/`); o primeiro C3 reutilizava o
+  mesmo licitante entre rodadas e quebrava o invariante de carteira por causa do reset do
+  próprio teste, então passou a usar um licitante novo por rodada.
+- **Mutações executadas** (uma por vez, restauração conferida com `cmp`): M1 (decidir
+  `lot_has_bids` com o `bid_count` lido antes do `FOR UPDATE`), M2 (sem trava), M3 (sem gate),
+  M4 (ignora `lot_has_bids`), M5 (sem dono), M6 (sem `lot_ended`), M7 (relógio do Python, duas
+  variantes), M8 (já cancelado antes do gate), M9 (filtro movido para `WHERE` ou removido, em
+  quatro variantes, só nas consultas com `LEFT JOIN`) e uma extra (`lot_cancelled` antes do
+  gate). Todas reprovaram ao menos um teste.
+- **Verificação:** `VERIFY_E2E=1 ./verify.sh`, exit 0: pytest 2036 passaram, `npm test`
+  158 passaram, Playwright 189 passaram; Ruff, format, ESLint, `tsc`, build do Vite e docker
+  build OK.
+- **Code review e correção:** o review independente não encontrou HIGH/MEDIUM. O LOW F-01
+  (C2 e C3 sem o snapshot de todas as carteiras) foi corrigido só nos testes, sem tocar em
+  código produtivo. O arquivo `test_lot_cancellation_concurrency.py` rodou 3 vezes depois
+  do ajuste: 5 passaram em cada uma. O `verify` completo não foi repetido (só assertions de
+  teste mudaram).
+- **Status:** Story 3.6 `done`; Epic 3 segue `in-progress`. Sem Git, sem deploy.
+
 ## Protótipo navegável de referência do front-end (26/10/2026)
 
 Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até

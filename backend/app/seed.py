@@ -132,14 +132,18 @@ def acquire_seed_lock(session: Session) -> None:
 def seed_demo_lot(session: Session, now: datetime, *, audit_hmac_secret: bytes) -> bool:
     """Cria um lote demo se não houver um realmente aberto; devolve se criou.
 
-    "Aberto" (Q4 + P3) = `is_demo`, `ends_at > now` e `anchor_hmac` não nulo. O
+    "Aberto" (Q4 + P3) = `is_demo`, `ends_at > now`, `anchor_hmac` não nulo e não
+    cancelado (Story 3.6): um demo cancelado não conta e nunca é reativado. O
     predicado escolhe o demo, não autentica: o lance nele passa pelo gate como em
     qualquer lote. Nunca faz `UPDATE` nem `DELETE` e nunca assina lote encontrado.
     """
     open_demo = session.scalar(
         select(
             exists().where(
-                Lot.is_demo.is_(True), Lot.ends_at > now, Lot.anchor_hmac.is_not(None)
+                Lot.is_demo.is_(True),
+                Lot.ends_at > now,
+                Lot.anchor_hmac.is_not(None),
+                Lot.cancelled_at.is_(None),
             )
         )
     )

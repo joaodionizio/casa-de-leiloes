@@ -418,6 +418,41 @@ def test_a_legacy_open_demo_without_anchor_does_not_count_and_is_never_signed(
     assert len(lot_rows(db_session_factory)) == 2
 
 
+def test_a_cancelled_open_demo_does_not_count_and_is_never_reactivated(
+    db_session_factory: sessionmaker[Session],
+    clean_users: None,
+    db_engine: Engine,
+) -> None:
+    """Story 3.6: o demo cancelado ainda dentro do prazo não conta como aberto. O boot
+    cria outro, válido, e o cancelado fica exatamente como estava (sem limpar
+    `cancelled_at`); um boot seguinte não duplica."""
+    seed_users_only(db_session_factory)
+    now = db_now(db_session_factory)
+    cancelled = insert_lot(
+        db_session_factory,
+        auctioneer_id=DEMO_AUCTIONEER_ID,
+        is_demo=True,
+        ends_at=now + timedelta(hours=10),
+        cancelled_at=now,
+    )
+    before = [row for row in lot_rows(db_session_factory) if row[0] == cancelled]
+
+    with statement_recorder(db_engine) as recorder:
+        assert run_full_seed(db_session_factory) == (0, True)
+
+    rows = lot_rows(db_session_factory)
+    assert [row for row in rows if row[0] == cancelled] == before
+    assert stored(before[0])["cancelled_at"] is not None
+    (fresh,) = [stored(row) for row in rows if row[0] != cancelled]
+    assert fresh["is_demo"] is True and fresh["cancelled_at"] is None
+    assert fresh["anchor_hmac"] == empty_anchor(fresh["id"])
+    for statement in recorder.statements:
+        normalized = statement.lstrip().upper()
+        assert not normalized.startswith(("UPDATE", "DELETE")), statement
+    assert run_full_seed(db_session_factory) == (0, False)
+    assert len(lot_rows(db_session_factory)) == 2
+
+
 def test_a_signed_demo_counts_as_open_even_if_its_signature_is_not_checked(
     db_session_factory: sessionmaker[Session], clean_users: None
 ) -> None:

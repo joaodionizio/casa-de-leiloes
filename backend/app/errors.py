@@ -48,9 +48,13 @@ LOT_ENDED = "lot_ended"
 BELOW_MINIMUM = "below_minimum"
 ALREADY_WINNING = "already_winning"
 INSUFFICIENT_BALANCE = "insufficient_balance"
+LOT_CANCELLED = "lot_cancelled"
 # Histórico do lote que não se autentica (Story 3.4, P7): um código e uma mensagem só,
 # para toda categoria de falha; o detalhe técnico vai ao log interno.
 LOT_INTEGRITY_CONFLICT = "lot_integrity_conflict"
+# Cancelamento recusado porque o lote já recebeu lance (Story 3.6): sai só do
+# `POST /api/lots/{lot_id}/cancel`, com 422.
+LOT_HAS_BIDS = "lot_has_bids"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -81,10 +85,13 @@ MESSAGES = {
     BELOW_MINIMUM: "Seu lance está abaixo do mínimo para este lote.",
     ALREADY_WINNING: "Você já está ganhando este lote.",
     INSUFFICIENT_BALANCE: "Saldo disponível insuficiente para este lance.",
+    LOT_CANCELLED: "Este lote foi cancelado.",
+    # Neutra e reutilizável (Story 3.6, D5): serve ao lance e ao cancelamento.
     LOT_INTEGRITY_CONFLICT: (
-        "Não foi possível verificar a integridade deste lote. "
-        "O lance não foi registrado."
+        "Não foi possível concluir a operação porque a integridade do lote "
+        "não pôde ser confirmada."
     ),
+    LOT_HAS_BIDS: "Este lote não pode ser cancelado porque já recebeu lances.",
 }
 
 

@@ -35,6 +35,9 @@ class BidRefusal(StrEnum):
     BELOW_MINIMUM = "below_minimum"
     ALREADY_WINNING = "already_winning"
     INSUFFICIENT_BALANCE = "insufficient_balance"
+    # Story 3.6, D4: não vem das regras puras. `place_bid` a devolve depois do gate,
+    # para o lote cancelado, antes de qualquer regra de aceitação.
+    LOT_CANCELLED = "lot_cancelled"
 
 
 # --- validação por dono (P7, P10): cada invariante vive num só lugar ---

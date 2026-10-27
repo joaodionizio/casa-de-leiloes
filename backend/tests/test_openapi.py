@@ -39,6 +39,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/wallet/deposit",
         "/api/lots/{lot_id}/bids",
         "/api/lots/{lot_id}/bids/mine",
+        "/api/lots/{lot_id}/cancel",
     ]
 
 
@@ -181,6 +182,7 @@ WALLET_PATH = "/api/wallet"
 DEPOSIT_PATH = "/api/wallet/deposit"
 BIDS_PATH = "/api/lots/{lot_id}/bids"
 MY_BIDS_PATH = "/api/lots/{lot_id}/bids/mine"
+CANCEL_PATH = "/api/lots/{lot_id}/cancel"
 LOT_FIELDS = sorted(
     [
         "id",
@@ -209,10 +211,12 @@ def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     paths = list(api_only.get("/api/openapi.json").json()["paths"])
 
     # Story 3.1: a carteira vem depois dos lotes, imediatamente. Story 3.4: o lance
-    # (`register_bid_routes`) vem depois da carteira.
-    assert paths[-7:-4] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
-    assert paths[-4:-2] == [WALLET_PATH, DEPOSIT_PATH]
-    assert paths[-2:] == [BIDS_PATH, MY_BIDS_PATH]
+    # (`register_bid_routes`) vem depois da carteira. Story 3.6: o cancelamento vem por
+    # último.
+    assert paths[-8:-5] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-5:-3] == [WALLET_PATH, DEPOSIT_PATH]
+    assert paths[-3:-1] == [BIDS_PATH, MY_BIDS_PATH]
+    assert paths[-1] == CANCEL_PATH
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
 
@@ -265,7 +269,14 @@ def test_lot_schemas_have_exactly_the_contract_fields(api_only: TestClient) -> N
     ]
     assert schemas["CreateLotRequest"]["additionalProperties"] is False
     assert sorted(schemas["LotResponse"]["properties"]) == LOT_FIELDS
-    assert sorted(schemas["MyLotsResponse"]["properties"]) == ["items"]
+    assert sorted(schemas["MyLotsResponse"]["properties"]) == ["as_of", "items"]
+    assert sorted(schemas["MyLotsResponse"]["required"]) == ["as_of", "items"]
+    # Story 3.6, D7: o item da lista do dono é o `LotResponse` mais três campos; a
+    # criação (201) continua com o `LotResponse`.
+    assert sorted(schemas["MyLotResponse"]["properties"]) == sorted(
+        [*LOT_FIELDS, "cancelled_at", "bid_count", "phase"]
+    )
+    assert len(schemas["MyLotResponse"]["properties"]) == len(LOT_FIELDS) + 3
     assert "HTTPValidationError" not in schemas
 
 
@@ -274,7 +285,7 @@ def test_no_lot_schema_exposes_the_owner_or_the_demo_flag(
 ) -> None:
     schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
 
-    for name in ("CreateLotRequest", "LotResponse", "MyLotsResponse"):
+    for name in ("CreateLotRequest", "LotResponse", "MyLotResponse", "MyLotsResponse"):
         properties = set(schemas[name]["properties"])
         assert {"is_demo", "auctioneer_id", "is_public_domain", "status"}.isdisjoint(
             properties
@@ -544,3 +555,26 @@ def test_bid_schemas_have_exactly_the_contract_fields_and_no_private_ones(
     ):
         assert forbidden not in bid_schemas, forbidden
     assert "HTTPValidationError" not in schemas
+
+
+# --- Story 3.6: cancelamento ---
+
+
+def test_cancel_documents_200_without_a_body_and_the_real_error_envelope(
+    api_only: TestClient,
+) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    operation = paths[CANCEL_PATH]["post"]
+
+    assert set(paths[CANCEL_PATH]) == {"post"}
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/CancelLotResponse")
+    for status in ("401", "403", "404", "409", "422"):
+        assert response_ref(operation, status) == ERROR_REF
+    assert "requestBody" not in operation  # sem corpo: o dono vem da sessão
+    assert [p["name"] for p in operation["parameters"]] == ["lot_id"]
+
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+    assert sorted(schemas["CancelLotResponse"]["properties"]) == ["cancelled_at", "id"]
+    assert sorted(schemas["CancelLotResponse"]["required"]) == ["cancelled_at", "id"]

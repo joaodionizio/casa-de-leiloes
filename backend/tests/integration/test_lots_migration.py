@@ -91,6 +91,7 @@ def test_lots_table_has_the_agreed_columns_types_and_nullability(
         "current_bid_cents",
         "current_leader_id",
         "anchor_hmac",
+        "cancelled_at",  # Story 3.6: nulo = não cancelado
     }
     for name in LOT_COLUMNS:
         assert columns[name]["nullable"] is (name in nullable), name

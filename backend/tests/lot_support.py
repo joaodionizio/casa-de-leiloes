@@ -41,6 +41,7 @@ LOT_COLUMNS = [
     "bid_count",
     "final_hash",
     "anchor_hmac",
+    "cancelled_at",  # Story 3.6 (migration 0006)
 ]
 IMAGE_ID = "2d484387-2509-5e8e-2c43-22f9981972eb"
 

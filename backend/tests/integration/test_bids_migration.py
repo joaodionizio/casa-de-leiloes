@@ -107,7 +107,8 @@ def test_lots_gets_the_five_columns_after_the_existing_ones(db_engine: Engine) -
     columns = {c["name"]: c for c in inspect(db_engine).get_columns("lots")}
 
     assert list(columns) == LOT_COLUMNS
-    assert LOT_COLUMNS[-5:] == NEW_LOT_COLUMNS
+    # A 0006 (Story 3.6) acrescenta `cancelled_at` depois destas cinco.
+    assert LOT_COLUMNS[-6:-1] == NEW_LOT_COLUMNS
     for name in ("current_bid_cents", "current_leader_id", "anchor_hmac"):
         assert columns[name]["nullable"] is True, name
         assert columns[name]["default"] is None, name
@@ -588,7 +589,7 @@ def test_downgrade_removes_only_what_the_migration_created(
     inspector = inspect(db_engine)
     assert "bids" not in inspector.get_table_names()
     assert {"lots", "users", "wallets"} <= set(inspector.get_table_names())
-    assert [c["name"] for c in inspector.get_columns("lots")] == LOT_COLUMNS[:-5]
+    assert [c["name"] for c in inspector.get_columns("lots")] == LOT_COLUMNS[:-6]
     assert sorted(c["name"] for c in inspector.get_check_constraints("lots")) == [
         "ck_lots_ends_after_starts",
         "ck_lots_external_id_positive",

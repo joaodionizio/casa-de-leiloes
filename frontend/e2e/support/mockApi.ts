@@ -167,6 +167,7 @@ export type BidMode =
   | 'already_winning'
   | 'lot_not_started'
   | 'lot_ended'
+  | 'lot_cancelled'
   | 'integrity'
   | 'validation'
   | 'unauthorized'
@@ -175,7 +176,44 @@ export type BidMode =
   | 'network'
   | 'invalid201'
 
+// Lista do leiloeiro (Story 3.6): o item de `GET /api/lots/mine`. O mock guarda o estado
+// por lote e o altera quando o cancelamento "grava"; não reimplementa as regras do servidor.
+export interface MockMyLot {
+  id: string
+  title: string | null
+  artist_display: string | null
+  starts_at: string
+  ends_at: string
+  phase: Phase
+  bid_count: number
+  cancelled_at: string | null
+}
+
+export type CancelMode =
+  | 'ok'
+  | 'has_bids'
+  | 'ended'
+  | 'integrity'
+  | 'forbidden'
+  | 'not_found'
+  | 'unauthorized'
+  | 'server_error'
+  | 'network'
+  | 'invalid_body'
+
+export const CANCELLED_AT = '2026-10-25T14:31:00.654321Z'
+
 export interface MockOptions {
+  // Lotes do leiloeiro em `GET /api/lots/mine` (padrão: nenhum).
+  myLots?: MockMyLot[]
+  // Resposta do `POST /api/lots/{id}/cancel`; `ok` grava `cancelled_at` no estado do mock.
+  cancel?: CancelMode
+  // Atraso do `POST`, para o teste do envio pendente.
+  cancelDelayMs?: number
+  // Nos erros ambíguos: o servidor chegou a gravar o cancelamento antes de falhar?
+  cancelAppliedOnError?: boolean
+  // Releituras `GET /api/lots/mine` depois do primeiro `POST`: 503.
+  mineRereadFail?: boolean
   rooms?: Record<string, RoomSeed>
   bid?: BidMode
   // Atraso do `POST` do lance, para o teste do envio pendente.
@@ -209,6 +247,8 @@ export interface MockOptions {
 }
 
 export interface MockApi {
+  // Ids dos lotes de cada `POST /api/lots/{id}/cancel` recebido.
+  cancelPosts: string[]
   // Corpos dos `POST /api/lots/{id}/bids` recebidos.
   bidPosts: Array<{ lotId: string; body: unknown }>
   // Pedidos recebidos, no formato "GET /api/lots".
@@ -302,7 +342,10 @@ export async function mockApi(
   const failsAfterPost = (what: 'room' | 'mine' | 'wallet') =>
     bidAttempted && (options.rereadFail === what || options.rereadFail === 'all')
   const holds = new Map<string, Promise<boolean>>()
+  const myLots = (options.myLots ?? []).map((lot) => ({ ...lot }))
+  let cancelAttempted = false
   const api: MockApi = {
+    cancelPosts: [],
     bidPosts: [],
     requests: [],
     count: (request) => api.requests.filter((item) => item === request).length,
@@ -411,9 +454,76 @@ export async function mockApi(
       return json(route, 200, walletSnapshot(owner))
     }
     if (pathname === '/api/lots/mine' && method === 'GET') {
-      return session?.role === 'AUCTIONEER'
-        ? json(route, 200, { items: [] })
-        : json(route, session === null ? 401 : 403, errorBody(403, 'forbidden'))
+      if (session?.role !== 'AUCTIONEER') {
+        return json(route, session === null ? 401 : 403, errorBody(403, 'forbidden'))
+      }
+      if (cancelAttempted && options.mineRereadFail === true) {
+        return json(route, 503, errorBody(503, 'internal_error'))
+      }
+      return json(route, 200, {
+        as_of: AS_OF,
+        items: myLots.map((lot) => ({
+          id: lot.id,
+          external_id: 27_000,
+          title: lot.title,
+          artist_display: lot.artist_display,
+          date_display: null,
+          medium_display: null,
+          dimensions: null,
+          department_title: null,
+          artwork_type_title: null,
+          credit_line: null,
+          source_url: 'https://www.artic.edu/artworks/27000',
+          image_id: '2d484387-2509-5e8e-2c43-22f9981972eb',
+          image_url: '/api/catalog/images/2d484387-2509-5e8e-2c43-22f9981972eb',
+          starting_bid_cents: 10_000,
+          min_increment_cents: 1_000,
+          starts_at: lot.starts_at,
+          ends_at: lot.ends_at,
+          created_at: lot.starts_at,
+          cancelled_at: lot.cancelled_at,
+          bid_count: lot.bid_count,
+          phase: lot.phase,
+        })),
+      })
+    }
+    const cancelPath = pathname.match(/^\/api\/lots\/([0-9a-f-]{36})\/cancel$/)
+    if (cancelPath !== null && method === 'POST') {
+      api.cancelPosts.push(cancelPath[1])
+      cancelAttempted = true
+      if (options.cancelDelayMs !== undefined) {
+        await new Promise((resolve) => setTimeout(resolve, options.cancelDelayMs))
+      }
+      const target = myLots.find((lot) => lot.id === cancelPath[1])
+      const mode = options.cancel ?? 'ok'
+      const refusals: Partial<Record<CancelMode, [number, string]>> = {
+        has_bids: [422, 'lot_has_bids'],
+        ended: [422, 'lot_ended'],
+        integrity: [409, 'lot_integrity_conflict'],
+        forbidden: [403, 'forbidden'],
+        not_found: [404, 'not_found'],
+        unauthorized: [401, 'unauthorized'],
+      }
+      const refusal = refusals[mode]
+      if (refusal !== undefined) {
+        return json(route, refusal[0], {
+          status: refusal[0],
+          code: refusal[1],
+          message: 'MENSAGEM DO SERVIDOR QUE A TELA NÃO DEVE USAR',
+        })
+      }
+      const record = () => {
+        if (target !== undefined) target.cancelled_at = CANCELLED_AT
+      }
+      if (mode === 'server_error' || mode === 'network') {
+        if (options.cancelAppliedOnError === true) record()
+        return mode === 'network'
+          ? route.abort('failed')
+          : json(route, 500, errorBody(500, 'internal_error'))
+      }
+      record()
+      if (mode === 'invalid_body') return json(route, 200, { id: 'outro', cancelled_at: null })
+      return json(route, 200, { id: cancelPath[1], cancelled_at: CANCELLED_AT })
     }
     if (pathname === '/api/lots' && method === 'GET') {
       return json(route, 200, {
@@ -484,6 +594,7 @@ export async function mockApi(
           already_winning: [422, 'already_winning'],
           lot_not_started: [422, 'lot_not_started'],
           lot_ended: [422, 'lot_ended'],
+          lot_cancelled: [422, 'lot_cancelled'],
           integrity: [409, 'lot_integrity_conflict'],
           validation: [422, 'validation_error'],
           unauthorized: [401, 'unauthorized'],

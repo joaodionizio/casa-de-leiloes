@@ -14,6 +14,7 @@ test('cada recusa tem o texto exato contratado', () => {
   assert.equal(refusalNotice('already_winning').text, 'Você já está ganhando este lote.')
   assert.equal(refusalNotice('lot_not_started').text, 'Este lote ainda não começou.')
   assert.equal(refusalNotice('lot_ended').text, 'Este lote já foi encerrado.')
+  assert.equal(refusalNotice('lot_cancelled').text, 'Este lote foi cancelado.')
   assert.equal(
     refusalNotice('integrity').text,
     'Não foi possível verificar a integridade deste lote. O lance não foi registrado.',

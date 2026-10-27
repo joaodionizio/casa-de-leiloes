@@ -21,6 +21,7 @@ const REFUSAL_TEXT: Record<KnownBidFailure, string> = {
   already_winning: 'Você já está ganhando este lote.',
   lot_not_started: 'Este lote ainda não começou.',
   lot_ended: 'Este lote já foi encerrado.',
+  lot_cancelled: 'Este lote foi cancelado.',
   integrity:
     'Não foi possível verificar a integridade deste lote. O lance não foi registrado.',
   validation: 'Informe um valor válido em reais.',

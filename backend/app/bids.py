@@ -14,7 +14,8 @@ statements de escrita: `UPDATE wallets`, `INSERT bids` e **um** `UPDATE lots` fi
 nunca é gravado em duas partes). O serviço não faz commit nem rollback: a rota decide.
 
 Premissa (`current-state.md` §4): toda escrita em `bids` e no estado de lance do lote
-passa pela trava do lote. As futuras 3.6, 4.3 e 6.6 a herdam, com o mesmo gate.
+passa pela trava do lote. A 3.6 (cancelamento, `app.lot_cancellation`) a herda, com o
+mesmo gate; as futuras 4.3 e 6.6 também.
 
 Este módulo não importa `app.main`.
 """
@@ -37,6 +38,7 @@ from sqlalchemy import (
     SmallInteger,
     Text,
     UniqueConstraint,
+    and_,
     func,
     select,
     true,
@@ -283,6 +285,8 @@ def place_bid(
     )
     if isinstance(authenticated, IntegrityConflict):
         return authenticated
+    if lot.cancelled_at is not None:  # Story 3.6, D4: depois do gate, antes das regras
+        return BidRefusal.LOT_CANCELLED
     current = authenticated.current
 
     state = LotBidState(  # 5: regras pré-carteira sobre o estado autenticado
@@ -457,7 +461,9 @@ def public_room_statement(lot_id: uuid.UUID) -> Select[Any]:
             recent.c.placed_at,
         )
         .select_from(clock)
-        .outerjoin(Lot, Lot.id == lot_id)
+        # O cancelado (Story 3.6, D3) fica fora na condição do JOIN, nunca num WHERE:
+        # o `as_of` e o caso vazio sobrevivem.
+        .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
         .outerjoin(recent, true())
         .order_by(recent.c.sequence.desc().nulls_last())
     )
@@ -519,8 +525,10 @@ def my_bids_statement(lot_id: uuid.UUID, bidder_alias: str) -> Select[Any]:
         .limit(1)
         .scalar_subquery()
     )
+    # Sem JOIN: aqui o `WHERE` é o correto, e o lote cancelado (Story 3.6, D3) vira
+    # zero linhas, isto é, 404.
     return select(count.label("my_bid_count"), last.label("last_bid_cents")).where(
-        Lot.id == lot_id
+        Lot.id == lot_id, Lot.cancelled_at.is_(None)
     )
 
 

@@ -40,11 +40,11 @@ from sqlalchemy import (
     Select,
     String,
     Text,
+    and_,
     false,
     func,
     select,
     text,
-    true,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.sql.expression import CTE
@@ -157,9 +157,14 @@ def snapshot_from_detail(detail: ArtworkDetail) -> ArtworkSnapshot:
 
 
 class Lot(Base):
-    """Espelha as migrations `0003` e `0005`; o esquema dos testes vem sempre delas.
+    """Espelha as migrations `0003`, `0005` e `0006`; o esquema dos testes vem sempre
+    delas.
 
-    `anchor_hmac` nulo é o lote legado, não autenticado: recusa lance (Story 3.4)."""
+    `anchor_hmac` nulo é o lote legado, não autenticado: recusa lance (Story 3.4).
+    `cancelled_at` (Story 3.6) nulo = não cancelado. Toda escrita em `bids`, no estado
+    de lance **e em `cancelled_at`** passa pela trava do lote (`lock_lot`); só o
+    serviço de cancelamento (`app.lot_cancellation`) escreve `cancelled_at`, e nada o
+    limpa. A âncora v1 não o cobre."""
 
     __tablename__ = "lots"
     __table_args__ = (
@@ -237,6 +242,7 @@ class Lot(Base):
         Text, server_default=text(f"'{GENESIS_HASH}'")
     )
     anchor_hmac: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # --- regra pura (AD-26): recebe `now`, nunca lê o relógio ---
@@ -405,8 +411,19 @@ class LotResponse(BaseModel):
     created_at: datetime
 
 
+class MyLotResponse(LotResponse):
+    """Item da lista do leiloeiro (Story 3.6, D7): o `LotResponse` mais o cancelamento,
+    a contagem persistida (dica de UX, não autenticada) e a fase temporal. O 201 da
+    criação continua usando o `LotResponse`."""
+
+    cancelled_at: datetime | None
+    bid_count: int
+    phase: LotPhase
+
+
 class MyLotsResponse(BaseModel):
-    items: list[LotResponse]
+    as_of: datetime
+    items: list[MyLotResponse]
 
 
 def lot_response(lot: Lot) -> LotResponse:
@@ -429,6 +446,17 @@ def lot_response(lot: Lot) -> LotResponse:
         starts_at=lot.starts_at.astimezone(UTC),
         ends_at=lot.ends_at.astimezone(UTC),
         created_at=lot.created_at.astimezone(UTC),
+    )
+
+
+def my_lot_response(lot: Lot, as_of: datetime) -> MyLotResponse:
+    return MyLotResponse(
+        **lot_response(lot).model_dump(),
+        cancelled_at=(
+            None if lot.cancelled_at is None else lot.cancelled_at.astimezone(UTC)
+        ),
+        bid_count=lot.bid_count,
+        phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
     )
 
 
@@ -484,9 +512,36 @@ def _clock_cte() -> CTE:
 
 def public_snapshot_statement() -> Select:
     """O único statement da vitrine: o instante e todos os lotes no mesmo snapshot.
-    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes."""
+    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes. O
+    cancelado (Story 3.6, D3) é excluído na condição do JOIN, nunca num `WHERE`: o
+    `WHERE` apagaria a linha do `as_of` quando só há lotes cancelados."""
     clock = _clock_cte()
-    return select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, true())
+    return (
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, Lot.cancelled_at.is_(None))
+    )
+
+
+def my_lots_statement(auctioneer_id: uuid.UUID) -> Select:
+    """O statement da lista do leiloeiro (Story 3.6, D7): o instante e os lotes do dono
+    no mesmo snapshot, **inclusive os cancelados**. Parte do CTE, então há `as_of` mesmo
+    sem lotes; a ordem é a de sempre, `created_at DESC, id DESC`."""
+    clock = _clock_cte()
+    return (
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, Lot.auctioneer_id == auctioneer_id)
+        .order_by(Lot.created_at.desc().nulls_last(), Lot.id.desc().nulls_last())
+    )
+
+
+def read_my_lots_snapshot(
+    session: Session, auctioneer_id: uuid.UUID
+) -> tuple[datetime, list[Lot]]:
+    rows = session.execute(my_lots_statement(auctioneer_id)).all()
+    as_of = rows[0].as_of.astimezone(UTC)
+    return as_of, [row.Lot for row in rows if row.Lot is not None]
 
 
 def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
@@ -498,11 +553,13 @@ def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
 def read_public_lot_snapshot(
     session: Session, lot_id: uuid.UUID
 ) -> tuple[datetime, Lot | None]:
-    # A condição do id fica no JOIN, nunca num WHERE: o WHERE apagaria a linha do
-    # `as_of` quando o lote não existe.
+    # A condição do id (e a do cancelamento, D3) fica no JOIN, nunca num WHERE: o WHERE
+    # apagaria a linha do `as_of` quando o lote não existe ou está cancelado.
     clock = _clock_cte()
     row = session.execute(
-        select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, Lot.id == lot_id)
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
     ).one()
     return row.as_of.astimezone(UTC), row.Lot
 
@@ -645,14 +702,15 @@ def register_lot_routes(app: FastAPI) -> None:
         user: User = Depends(require_auctioneer),
         session: Session = Depends(get_session),
     ) -> MyLotsResponse:
-        # Leitura pura (AD-19): só SELECT, só o dono da sessão, sem a AIC, sem limite.
-        lots = session.scalars(
-            select(Lot)
-            .where(Lot.auctioneer_id == user.id)
-            .order_by(Lot.created_at.desc(), Lot.id.desc())
-        ).all()
+        # Leitura pura (AD-19): um SELECT, só o dono da sessão, sem a AIC, sem limite.
+        # Inclui os cancelados (D3); a fase vem do `as_of` do banco, não do navegador.
+        as_of, lots = read_my_lots_snapshot(session, user.id)
+        result = MyLotsResponse(
+            as_of=as_of, items=[my_lot_response(lot, as_of) for lot in lots]
+        )
+        session.rollback()
         response.headers["Cache-Control"] = "no-store"
-        return MyLotsResponse(items=[lot_response(lot) for lot in lots])
+        return result
 
     @api_route(
         app,

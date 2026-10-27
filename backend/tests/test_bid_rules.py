@@ -294,13 +294,16 @@ def test_scheduled_lot_with_a_current_bid_is_not_corruption() -> None:
     assert result is BidRefusal.LOT_NOT_STARTED
 
 
-def test_refusal_codes_are_exactly_the_five() -> None:
+def test_refusal_codes_are_exactly_the_five_rules_plus_lot_cancelled() -> None:
+    # Story 3.6, D4: `lot_cancelled` é devolvido por `place_bid` depois do gate; as
+    # regras puras continuam produzindo só os cinco anteriores.
     assert {r.value for r in BidRefusal} == {
         "lot_not_started",
         "lot_ended",
         "below_minimum",
         "already_winning",
         "insufficient_balance",
+        "lot_cancelled",
     }
 
 

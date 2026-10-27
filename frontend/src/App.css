@@ -2089,3 +2089,40 @@ h2[tabindex='-1']:focus-visible {
 .lot-page-details {
   margin-top: 1rem;
 }
+
+/* Cancelar lote (Story 3.6): confirmação inline na linha, sem modal. O estado é sempre
+   texto ("Cancelado"); a cor só reforça. Alvos de toque de ~44 px. */
+.my-lots-notice {
+  margin: 0 0 1rem;
+}
+
+.lot-row-status {
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lot-cancelled-mark {
+  color: var(--color-danger);
+}
+
+.lot-row-actions {
+  grid-column: 1 / -1;
+}
+
+.lot-cancel-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.lot-cancel-confirm p {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lot-row-actions .button {
+  min-height: 2.75rem;
+}

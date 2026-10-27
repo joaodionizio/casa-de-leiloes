@@ -52,6 +52,7 @@ export type KnownBidFailure =
   | 'already_winning'
   | 'lot_not_started'
   | 'lot_ended'
+  | 'lot_cancelled' // Story 3.6
   | 'integrity' // 409 lot_integrity_conflict
   | 'validation' // 422 validation_error
   | 'forbidden' // 403 forbidden (papel)
@@ -195,6 +196,7 @@ const BUSINESS_CODES: Record<string, KnownBidFailure> = {
   already_winning: 'already_winning',
   lot_not_started: 'lot_not_started',
   lot_ended: 'lot_ended',
+  lot_cancelled: 'lot_cancelled',
 }
 
 // Classifica uma resposta já lida do POST. Separado do `fetch` para o teste puro.
