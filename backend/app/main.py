@@ -22,8 +22,8 @@ from app.config import (
 )
 from app.csrf import ApiWriteGuardMiddleware
 from app.errors import register_error_handlers
-from app.infra_check import register_infra_check_routes
 from app.lot_cancellation import register_lot_cancellation_routes
+from app.lot_room import register_room_routes
 from app.lots import register_lot_routes
 from app.spa import register_spa_routes, validate_spa_dist_dir
 from app.wallet import register_wallet_routes
@@ -99,7 +99,7 @@ def create_app(
     register_wallet_routes(app)
     register_bid_routes(app)
     register_lot_cancellation_routes(app)
-    register_infra_check_routes(app)
+    register_room_routes(app, app_origin)
 
     if spa_dist_dir is None:
         spa_dist_dir = get_spa_settings().spa_dist_dir

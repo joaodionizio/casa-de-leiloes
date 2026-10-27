@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,8 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Mount
 from starlette.websockets import WebSocketDisconnect
 
+from app import lot_room
+from app.bids import PublicBidRoomResponse
 from app.csrf import (
     ApiWriteGuardMiddleware,
     effective_path,
@@ -551,15 +554,37 @@ def test_websocket_policy_is_not_changed_by_the_guard(
 ) -> None:
     app, _ = build_app(monkeypatch)  # APP_ORIGIN https://casa.example, Host testserver
     client = TestClient(app)
-    with client.websocket_connect("/api/infra-check/ws") as websocket:  # sem Origin
-        websocket.send_text("ping")
-        assert websocket.receive_text() == "echo:ping"
+    lot = "00000000-0000-4000-8000-000000000001"
+    reads: list[object] = []
+
+    def read(identifier: object) -> PublicBidRoomResponse:
+        reads.append(identifier)
+        return PublicBidRoomResponse(
+            as_of=datetime.now(UTC),
+            phase="live",
+            ends_at=datetime.now(UTC),
+            current_bid_cents=None,
+            minimum_next_bid_cents=10000,
+            bid_count=0,
+            bids=[],
+        )
+
+    # The lot exists for the read, so the refusal below can only come from Origin; the
+    # HTTP write guard itself leaves the WebSocket to the public room policy.
+    monkeypatch.setattr(lot_room, "read_room", read)
+    with client.websocket_connect(
+        f"/ws/lots/{lot}", headers={"origin": "https://casa.example"}
+    ) as accepted:
+        assert accepted.receive_json()["type"] == "room_snapshot"
+    assert len(reads) == 1
+    reads.clear()
     with pytest.raises(WebSocketDisconnect) as rejected:
         with client.websocket_connect(
-            "/api/infra-check/ws", headers={"origin": "https://evil.example"}
+            f"/ws/lots/{lot}", headers={"origin": "https://evil.example"}
         ):
             pass
     assert rejected.value.code == 1008
+    assert reads == []
 
 
 @pytest.mark.parametrize(

@@ -330,8 +330,8 @@ liquidação, comprovante ou meus arremates neste fechamento.
 não substitui smoke de API com dados, autenticação e frontend publicados.
 Sem sessão/papel/origem corretos, requests de escrita podem ser recusados antes
 do domínio. A SPA usa o cookie `__Host-auction_session` em HTTPS; o cookie técnico
-da 1.4 já foi removido na 2.2. O WebSocket técnico `/api/infra-check/ws` ainda
-existe até a 4.1; não é uma sala ao vivo.
+da 1.4 já foi removido na 2.2. O WebSocket técnico `/api/infra-check/ws` foi removido na Story 4.1; a sala real usa
+`/ws/lots/{lot_id}` (implementação local; smoke público desta versão pendente).
 
 O primeiro deploy registrou Alembic `0001`, uvicorn na porta fornecida, serviço
 `Live`, HTTP/cookie/WebSocket e redeploy sem reaplicar a migration. O WebSocket
@@ -342,8 +342,8 @@ Não as apresento como validação dos Epics 2/3.
 
 O plano gratuito pode ter cold start; só registro tempo após medição real.
 O primeiro painel mostrou expiração do PostgreSQL em 23/11/2026: confirmar a
-situação atual manualmente. Persistem limites reais: sala sem atualização
-entre navegadores até Epic 4, imagens externas com placeholder, ausência de
+situação atual manualmente. Persistem limites reais: ausência de reconexão automática na sala (4.2),
+imagens externas com placeholder, ausência de
 idempotência de POST e de rotação de segredos de integridade; detalhes nas
 seções de cada fluxo e em "Comportamentos que podem surpreender".
 
@@ -554,9 +554,28 @@ Comportamentos que podem surpreender (sala):
   monotônico do navegador; pode superestimar o tempo restante. **O servidor continua sendo
   a autoridade** para aceitar ou recusar o lance: chegar a `0:00` não bloqueia o envio e
   causa uma única releitura por valor de `ends_at`.
-- **A sala não atualiza sozinha** (não há polling nem WebSocket até o Épico 4): outra pessoa
-  só aparece depois de "Atualizar sala", do zero da contagem ou do seu próprio lance. A linha
-  "Situação atualizada às HH:MM:SS" mostra a hora do `/bids` lido.
+- **A sala atualiza por WebSocket público** (`/ws/lots/{lot_id}`): ao conectar recebe
+  snapshot completo; cada lance confirmado substitui preço, mínimo, líder por alias,
+  histórico e fim. Lance continua exclusivamente por POST REST. `Origin` presente
+  precisa corresponder à `APP_ORIGIN`; ausente é aceito, sem JWT na URL.
+- **Um processo, sem entrega garantida:** o manager mantém filas limitadas em memória
+  (8 mensagens por conexão), sem Redis/outbox. Se o processo morrer entre commit e
+  publicação, a escrita permanece confirmada e o evento pode se perder. Cliente lento
+  é isolado. Falha de publicação nunca desfaz um lance aceito.
+- **O `201` do lance pode demorar por causa da publicação:** a publicação pós-commit roda
+  antes da resposta e espera a trava da sala daquele lote, uma vaga no limitador de
+  leituras e a releitura do estado. Com muitas conexões novas no mesmo lote, ou um banco
+  lento, a resposta chega mais tarde; se o navegador desistir antes, a tela trata o lance
+  como incerto (a escrita já está confirmada). Nesta entrega não há timeout de publicação
+  nem teto de conexões na sala pública; ambos ficam para a Story 4.2, junto da Q1.
+- **Sem heartbeat ou reconexão automática nesta entrega (4.2):** queda detectada mostra
+  atualizações indisponíveis e mantém o último estado marcado como desatualizado. Se o
+  navegador avisar que ficou **offline**, a tela também fecha a conexão atual e marca as
+  atualizações ao vivo como indisponíveis; voltar a ficar online não reconecta.
+  "Atualizar sala" relê REST e, se der certo, diz que os dados foram atualizados por
+  leitura manual (sem afirmar que a conexão voltou); recarregar/reabrir a página cria
+  outra conexão.
+  A linha "Situação atualizada às HH:MM:SS" mostra o instante do snapshot do servidor.
 - Depois de um `201`, a tela mostra na hora o valor, o novo fim e a carteira da resposta e
   faz **uma** releitura para o histórico, o mínimo e a posição; se ela falhar, o aceite
   continua mostrado.
@@ -587,10 +606,10 @@ Comportamentos que podem surpreender (cancelamento):
   vencer. Cancelar o lote demo faz o próximo boot criar outro.
 - **`cancelled_at` não é autenticado pela âncora v1** (como `ends_at` e o dono). Quem edita
   o banco à mão pode esconder ou reexibir um lote; isso não move saldo.
-- **Sem aviso em tempo real:** a sala já aberta não é avisada (não há WebSocket até o Épico
-  4). Um lance em lote cancelado responde `422 lot_cancelled` e a tela diz "Este lote foi
-  cancelado."; uma leitura pública **posterior** (atualizar ou voltar à sala) responde `404`
-  e pode mostrar "Lote não encontrado.". Isso não significa que o cancelamento falhou.
+- **Cancelamento na sala conectada:** depois do commit, recebe `lot_cancelled`, mostra
+  "Este lote foi cancelado" e oferece volta à vitrine; o socket fecha normalmente.
+  Nova conexão é recusada e leitura pública posterior responde `404`, como lote ausente.
+  Repetição idempotente do cancelamento não publica outro terminal.
 - **Erro de rede ou 5xx no cancelamento** é resultado incerto: a tela não afirma sucesso nem
   falha, relê a lista uma vez e nunca reenvia sozinha.
 
@@ -785,8 +804,8 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   atualizada às HH:mm"): na vitrine, um lote não passa sozinho de agendado a ao
   vivo nem de ao vivo a encerrado; um novo carregamento atualiza a fase. Na sala
   da 3.5 há contagem regressiva visual e releitura no zero de cada `ends_at`,
-  em "Atualizar sala" e depois do próprio lance. Ainda não há polling nem
-  WebSocket de sala; o servidor sempre decide a fase e a aceitação do lance.
+  em "Atualizar sala" e depois do próprio lance. A Story 4.1 acrescenta snapshots
+  WebSocket depois dos commits; o servidor sempre decide fase e aceitação do lance.
 - Todo lote encerrado aparece como "Encerrado, apurando resultado" até a liquidação
   existir (Story 4.3). Hoje isso é só texto de interface: não há vencedor, valor final
   nem comprovante, e nenhuma leitura liquida lote.

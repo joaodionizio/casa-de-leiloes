@@ -663,6 +663,9 @@ def register_bid_routes(app: FastAPI) -> None:
             return error_response(422, outcome.value, headers=NO_STORE)
 
         session.commit()
+        from app.lot_room import signal_committed
+
+        signal_committed(app, lot_id)
         logger.info(
             "bid accepted: lot_id=%s sequence=%d anti_sniping=%s",
             lot_id,

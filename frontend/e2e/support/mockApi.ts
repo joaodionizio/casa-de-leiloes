@@ -561,7 +561,11 @@ export async function mockApi(
         const step = script === undefined ? {} : script[Math.min(state.reads, script.length - 1)]
         state.reads += 1
         const latest = state.bids[state.bids.length - 1]
-        const asOf = new Date(Date.parse(ROOM_AS_OF) + (state.reads - 1) * 1000).toISOString()
+        // A read after an accepted POST cannot predate that bid's server clock.
+        const asOf = new Date(Math.max(
+          Date.parse(ROOM_AS_OF) + (state.reads - 1) * 1000,
+          bidAttempted && latest !== undefined ? Date.parse(latest.placed_at) + 1 : 0,
+        )).toISOString()
         const current = latest === undefined ? null : latest.amount_cents
         return json(route, 200, {
           as_of: asOf.replace('.000Z', '.000000Z'),

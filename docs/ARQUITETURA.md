@@ -325,6 +325,17 @@ aproveita isso.
 
 **Descartei:** SSE para esta hospedagem específica.
 
+**Rota e `Origin` da sala (decididos em 27/10/2026, Story 4.1; fecham Q2 e a parte
+WebSocket da Q10, sem alterar a decisão acima):** a sala usa
+`/ws/lots/{lot_id}`, na mesma origem; o lance segue só em
+`POST /api/lots/{lot_id}/bids`. O handshake é público, sem JWT na URL. Se o
+cabeçalho `Origin` existir, ele precisa ser igual à `APP_ORIGIN` configurada
+(esquema, host e porta normalizada); origem diferente, malformada ou `null` é
+rejeitada. Se não existir (cliente que não é navegador), aceito. Descartei exigir
+`Origin` sempre (quebra scripts de teste sem ganho real num stream público) e não
+validar nada (deixa uso cruzado entre sites sem barreira). Rota do comprovante e
+do link continuam em aberto.
+
 ### AD-11. Autenticação: JWT em cookie HttpOnly, mesma origem
 **Decidi** usar JWT em cookie HttpOnly, com aplicação em mesma origem. Em
 produção: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. O FastAPI serve a API e
@@ -835,6 +846,11 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    limite para conexões sem heartbeat (AD-10). O navegador não reconecta
    WebSocket sozinho: o cliente precisa de reconexão com espera crescente.
 2. **Origin no WebSocket.** O stream é público, mas o handshake valida `Origin`?
+   **Resolvida na Story 4.1 (27/10/2026):** decidi que o handshake de `/ws/lots/{lot_id}`
+   valida `Origin` contra a `APP_ORIGIN` quando o cabeçalho existe (esquema, host e porta
+   normalizada; diferente, malformado, `null` ou repetido é recusado antes do `accept`) e
+   aceita a ausência dele (cliente que não é navegador). Descartei exigir `Origin` sempre
+   e não validar nada; detalhes no AD-10 e na D7 da story.
 3. **`bidder_alias` na linha do lance.** O pseudônimo entra no hash (AD-21):
    persisto o alias em cada lance ou o recalculo na auditoria com o
    `PSEUDONYM_SECRET`? Recalcular faz a rotação do segredo quebrar a verificação.
@@ -926,6 +942,11 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
     (quebraria o `verify` de quem não baixou o browser) e rodá-lo só em CI. O AD-27
     não foi alterado: "testes automatizados existentes" continua valendo; o Playwright é
     um acréscimo opcional, não uma etapa obrigatória.
+    **Resolvido em parte na Story 4.1 (27/10/2026), rota do WebSocket da sala:** decidi
+    `/ws/lots/{lot_id}`, na mesma origem (`ws` em desenvolvimento, `wss` em HTTPS), com
+    política pública e `Origin` conforme a Q2; descartei `/api/lots/{lot_id}/ws`. O
+    prefixo `/ws` é reservado no fallback da SPA. Continuam abertos: as rotas do
+    comprovante e do link compartilhável.
 
 ## Pontos de atenção (consequências, não decisões)
 

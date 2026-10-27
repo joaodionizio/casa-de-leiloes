@@ -185,13 +185,13 @@ dispensado: o enunciado já é a especificação (registrar o motivo).
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
 IDs históricos preservados; detalhes e decisões fechadas na arquitetura.
 - **Q1:** intervalos do scheduler/heartbeat e reconexão com espera crescente.
-- **Q2:** validar `Origin` no handshake do WebSocket da sala (4.1)?
 - **Q4:** catch-up antes do seed/tráfego (4.4); demo já definido nas 2.4/3.4/3.6.
 - **Q6:** implementar/validar que só quem fechou publica o evento (4.4).
 - **Q9:** fechar antes de recusar lance vencido (4.4); hoje só recusa.
-- **Q10:** rotas do WebSocket da sala, do comprovante e do link.
+- **Q10:** rotas do comprovante e do link (a do WebSocket da sala fechou na 4.1).
 
-Fechadas: Q3 na 3.3 (`bidder_alias` persistido por bid, 16 hex; auditoria nunca recalcula histórico;
+Fechadas: Q2 na 4.1 (`Origin` presente = `APP_ORIGIN`; ausente aceita) e Q10 parcial na 4.1
+(`/ws/lots/{lot_id}`; AD-10). Q3 na 3.3 (`bidder_alias` persistido por bid, 16 hex; auditoria nunca recalcula histórico;
 vínculo do líder/participação atuais podem calcular alias operacional, 3.4/3.5). Q5 nas 3.2/3.4:
 limite exato com `now` fixo, caminho real com margens. Q7 na 2.3: falha simulada/`scripts.smoke_artic`;
 Q8 na 2.5: `phase`. Q10 parcial: Compose/versões/bancos (1.2), `JWT_SECRET`/auth (2.2), testes (2.4/2.5).

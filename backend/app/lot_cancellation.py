@@ -52,6 +52,7 @@ class CancellationRefusal(StrEnum):
 class CancelledLot:
     id: uuid.UUID
     cancelled_at: datetime  # UTC
+    transitioned: bool = True
 
 
 def cancel_lot(
@@ -79,7 +80,9 @@ def cancel_lot(
         return authenticated
 
     if lot.cancelled_at is not None:  # 5: idempotente, sem novo UPDATE nem timestamp
-        return CancelledLot(id=lot.id, cancelled_at=lot.cancelled_at.astimezone(UTC))
+        return CancelledLot(
+            id=lot.id, cancelled_at=lot.cancelled_at.astimezone(UTC), transitioned=False
+        )
     if authenticated.bid_count > 0:  # 6: a contagem autenticada decide
         return CancellationRefusal.LOT_HAS_BIDS
     if now >= lot.ends_at:  # 7: a igualdade já é encerrado
@@ -141,6 +144,10 @@ def register_lot_cancellation_routes(app: FastAPI) -> None:
             return error_response(422, outcome.value, headers=NO_STORE)
 
         session.commit()
+        if outcome.transitioned:
+            from app.lot_room import signal_committed
+
+            signal_committed(app, lot_id, cancelled=True)
         logger.info("lot cancelled: lot_id=%s", lot_id)
         response.headers["Cache-Control"] = "no-store"
         return CancelLotResponse(id=outcome.id, cancelled_at=outcome.cancelled_at)

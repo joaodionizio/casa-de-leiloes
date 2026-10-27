@@ -1,16 +1,22 @@
 # Story 4.1 — Sala ao vivo por WebSocket: snapshot e atualizações
 
-Status: backlog — criada, aguardando decisões humanas Q2/Q10
+Status: **review** — implementada em 27/10/2026; findings aprovados do 1º code review corrigidos em 27/10/2026 (seção 15); aguardando re-review independente e meu teste manual no navegador
 
-Próximo passo: **PRECISA DE DECISÕES**; depois, criação de spec em sessão autorizada.
+Próximo passo: build desta story (`bmad-build`), sem nova spec: esta story
+consolidada é a especificação. A 4.2 não começa junto.
 Chave: `4-1-sala-ao-vivo-por-websocket-snapshot-e-atualizações`.
-Épico 4 — Sala ao vivo e encerramento. Criação: 27/10/2026.
-Modelo solicitado: GPT-6.1 Sol Medium. Trabalho exclusivamente documental.
+Épico 4 — Sala ao vivo e encerramento. Criação: 27/10/2026; consolidação com as
+decisões humanas: 27/10/2026. Trabalho documental, sem código.
 
-> Registrei recomendações concretas para D1–D10. Elas não representam aprovação
-> do dono. Q2 e Q10 são decisões explicitamente reservadas a ele em `CLAUDE.md`
-> e `docs/ARQUITETURA.md`; não as fechei por inferência. Por isso não marquei
-> `ready-for-dev`, não iniciei o épico no sprint e não alterei nenhuma AD.
+> **Decisões do dono (27/10/2026).** D1 aprovada: rota `/ws/lots/{lot_id}`; lance
+> só por `POST /api/lots/{lot_id}/bids`, nada de lance por WebSocket. D7 aprovada:
+> sala pública, só estado público/pseudonimizado; `Origin` presente é validado
+> contra a `APP_ORIGIN` configurada e diferente é rejeitado; ausente é aceito; sem
+> JWT na URL. D2–D6 e D8–D10 aprovadas como propostas abaixo. Q2 e a parte
+> WebSocket da Q10 estão fechadas (registradas em `CLAUDE.md` e no AD-10 de
+> `docs/ARQUITETURA.md`, sem mudar a decisão do AD-10). Onde o texto abaixo ainda
+> diz "recomendo", leia "decidi". Heartbeat, timeout, backoff e reconexão
+> automática ficam na 4.2.
 
 ## 1. Story e objetivo
 
@@ -65,7 +71,7 @@ testes puros de bids, posição, countdown e submissão. Não executei testes.
 
 ## 3. Recomendações D1–D10
 
-### D1 — Rota WebSocket (Q10; aprovação humana pendente)
+### D1 — Rota WebSocket (Q10; APROVADA)
 
 Recomendo **`/ws/lots/{lot_id}`**, mesma origem, `ws` em desenvolvimento e `wss`
 em HTTPS. Não encontrei rota final de sala já aprovada. O exemplo pedido pelo
@@ -196,7 +202,7 @@ uma mensagem atrasada. `as_of` não prova ordem de commit e não substitui essa
 coordenação. Sem versão persistida, migration, Redis, outbox ou novo protocolo
 de locks financeiros.
 
-### D7 — Acesso público e Origin (Q2; aprovação humana pendente)
+### D7 — Acesso público e Origin (Q2; APROVADA)
 
 Recomendo `websocket_route(..., policy=AccessPolicy.PUBLIC)`. Visitante,
 AUCTIONEER, BIDDER e cookie inválido recebem o mesmo estado público. Sem JWT na
@@ -209,7 +215,13 @@ malformado e `null`; aceitar ausência só para clientes não navegador, como na
 infra técnica atual. Browser same-origin sempre envia Origin. Não usar `Host`
 recebido como lista de confiança nem Referer como fallback improvisado do WS.
 
-Alternativas humanas: exigir Origin também nos clientes não navegador (política
+**Aprovado:** exatamente a política acima. Implementação: reutilizar
+`parse_origin`/`format_origin` de `app/csrf.py` (esquema, host e porta efetiva)
+contra a `APP_ORIGIN` já normalizada da aplicação; a comparação só por `host` da
+verificação técnica da 1.4 (`infra_check.is_allowed_origin`) sai junto com ela e
+não é reaproveitada. Rejeição no handshake, antes de `accept`.
+
+Alternativas descartadas pelo dono: exigir Origin também nos clientes não navegador (política
 mais fechada, testes/scripts precisam enviá-lo), ou não validar num stream
 estritamente público (menos barreira a uso cruzado). Custo baixo para qualquer
 escolha; recomendo a primeira política descrita, reaproveitando a origem
@@ -265,6 +277,15 @@ browser. Erro interno após aceite fecha com 1011 genérico, sem stack/segredo.
 Disconnect e encerramento normal limpam recursos; cancelamento entregue fecha
 com 1000. Essas são recomendações de protocolo a fixar na spec.
 
+**D-B (decisão minha após o 1º code review, 27/10/2026).** Ao receber o evento `offline` do
+navegador, a sala fecha também o WebSocket atual e marca as atualizações ao vivo como
+indisponíveis (o `onmessage` é desligado, para o que se aplica bater com o que o painel diz).
+O evento `online` não reconecta, e nada disso é heartbeat, timeout, backoff ou reconexão
+(4.2). Descartei deixar o socket aberto com o rótulo "desatualizado": se ele sobrevivesse
+a uma oscilação curta, a tela aplicaria quadros ao vivo sob um aviso falso, e o estado nunca
+voltaria a "conectado". Descartei também voltar a "conectado" ao próximo quadro: seria uma
+política de conexão, que é da 4.2.
+
 Não transportar o timeout de echo de 10 s para a sala. Não implementar heartbeat
 de aplicação periódico, timeout por ausência dele, backoff, tentativas de
 reconexão ou replay. Ping/pong de controle eventualmente fornecido por
@@ -308,11 +329,48 @@ Os testes devem forçar as corridas acima, inclusive igualdade do timestamp e
 cancelamento com count zero. A spec formaliza a máquina de aplicação e sua
 arbitragem antes de qualquer build.
 
+### 4.1 Regra de ordenação do estado da sala (aprovada, sem protocolo novo)
+
+Aproveito `bid_count`, que já existe no read model e só cresce (cada lance aceito
+soma 1; nada o reduz). Não crio versão, migration nem campo no payload. Uma função
+pura e única, `shouldApplyRoom(current, incoming)`, vale para **toda** fonte de
+estado público do cliente (snapshot WS, `bid_accepted`, GET `/bids` e o overlay do
+201). Ela é a segunda linha de defesa; a primeira é a serialização por lote no
+servidor (D6).
+
+| Situação | Resultado |
+| --- | --- |
+| Lote já marcado como cancelado (terminal) | Nada o substitui; só mensagem de outro lote é descartada por `lot_id` |
+| `incoming.bid_count < current.bid_count` | **Descarta.** Estado antigo nunca sobrescreve o mais recente |
+| `incoming.bid_count > current.bid_count` | Aplica (substitui a sala inteira) |
+| Igual | Mesmos lances e mesmo `ends_at` (só um lance muda `ends_at`); só `phase`, `as_of` e o mínimo derivam do tempo. Aplica **se e somente se** `as_of(incoming) >= as_of(current)`; `as_of` vem do mesmo `clock_timestamp()` do PostgreSQL e serve só de desempate de campos derivados do tempo, nunca para ordenar lances |
+
+Corridas que os testes precisam provar:
+
+1. **Snapshot inicial × broadcast concorrente.** No servidor: inscrição, leitura
+   inicial e enfileiramento do snapshot são serializados por lote com a
+   publicação (D6); o primeiro frame é sempre o snapshot e nenhum broadcast o
+   precede nem o contradiz. No cliente: mesmo que um GET `/bids` ou um evento
+   chegue fora de ordem, `shouldApplyRoom` descarta o de `bid_count` menor.
+2. **201 do POST N × atualização WS mais recente.** O 201 sempre confirma a
+   tentativa (mensagem de sucesso, limpeza do campo, carteira do próprio POST).
+   O overlay de preço, `ends_at` e âncora só se aplica se
+   `placed.bid.sequence > room.bid_count` atual; se a sala já tem
+   `bid_count >= sequence` (WS N+1 chegou antes), o overlay é ignorado e a sala
+   atual permanece. Se a sala ainda não existe (remontagem), o 201 a cria como hoje.
+3. **REST atrasado depois de WS novo** (GET `/bids` lançado antes, resolvido
+   depois): descartado pela mesma regra. Rodadas e gerações da 3.5 continuam
+   valendo para `/mine`, carteira e detalhe.
+
+`lot_cancelled` é terminal e prevalece sobre qualquer contagem, inclusive com
+`bid_count` 0. A posição (ganhando/superado) continua exigindo par público/privado
+da mesma rodada; um evento que aplica sala nova invalida o par e dispara
+revalidação coalescida de `/mine` (só para BIDDER).
+
 ## 5. Critérios de aceitação da futura implementação
 
-Os critérios abaixo adotam as recomendações e ficam condicionados à decisão de
-rota/Origin; a consolidação deve substituir esses dois pontos se o dono escolher
-alternativas.
+Os critérios abaixo adotam as decisões aprovadas (rota `/ws/lots/{lot_id}` e
+política de `Origin` da D7). Acrescentei CA15 e CA16 na consolidação.
 
 1. **CA1 — Conexão pública real.** Dado lote existente não cancelado, visitante,
    BIDDER e AUCTIONEER conectam na rota aprovada sem JWT na URL, inclusive sem
@@ -360,6 +418,15 @@ alternativas.
 14. **CA14 — Verificação do build.** Testes determinísticos abaixo e regressões
     relevantes passam; `./verify.sh` com saída real registrado. Playwright
     simulado e smoke real explicitamente identificados, conforme opt-ins atuais.
+15. **CA15 — Estado antigo nunca sobrescreve o recente (servidor).** Dados dois
+    commits A e B com sinais invertidos, ou conexão aberta durante uma publicação,
+    a sequência de `bid_count` recebida por uma conexão é não decrescente, o
+    primeiro frame é `room_snapshot` e o último estado recebido é o do banco.
+16. **CA16 — Estado antigo nunca sobrescreve o recente (cliente).** Pela regra da
+    §4.1: GET `/bids` ou evento com `bid_count` menor é descartado; o 201 do
+    lance N não regride a sala já em N+1 (preço, mínimo, `ends_at`, âncora e
+    histórico), mas confirma a tentativa; `lot_cancelled` não é desfeito por
+    mensagem atrasada; empate de `bid_count` só aplica com `as_of` não menor.
 
 ## 6. Escopo e exclusões
 
@@ -392,6 +459,7 @@ e upgrade de stack. Não executar Git, ler `.env*` ou alterar secrets.
 | Origin divergente por proxy | Comparar com origem configurada aprovada, testar Vite e HTTPS; não inferir confiança de headers de proxy |
 | Snapshot confundido com auditoria/decisão financeira | Leituras preservam contrato 3.5; o POST transacional continua autoridade; sem autenticar cadeia em toda leitura |
 | Manager por processo usado com vários workers | Manter implantação de um processo do AD-10; sem escalar silenciosamente |
+| **D-A (decisão minha após o 1º code review):** o `201` espera a publicação pós-commit | A rota espera, sem limite de tempo, a trava da sala do lote, uma vaga no limitador de leituras (4) e a releitura. Com rajada de conexões novas no mesmo lote ou banco lento, o `201` atrasa; se o navegador desistir antes, a tela trata o lance como incerto (a escrita já está confirmada). Mantive o comportamento e documentei no README. **Não** acrescentei timeout arbitrário nem teto de conexões: ambos ficam para a 4.2, junto da Q1 |
 
 ## 8. Plano de testes
 
@@ -415,6 +483,8 @@ Não criar servidor financeiro falso como única prova de pós-commit.
 | F2 / CA11 | Adiar REST velho até após WS novo; adiar 201 N até após WS N+1; timestamps iguais; cancelamento count zero seguido de REST antigo; confirmar que valor/fim/terminal não regridem e mensagem do POST correto permanece |
 | F3 / CA11 | Posição ganhando/superado/neutro com par atual; /mine atrasado/falha, participação fora dos 50, troca conta/lote e callback de socket desmontado. Visitante/leiloeiro não consultam endpoints privados |
 | F4 / CA11–12 | Evento durante digitação/POST pendente; navegar e remontar no intervalo do F-01; zero countdown/refresh simultâneo/evento; nenhum POST duplicado. Close/error mantém snapshot marcado, refresh REST funciona, zero tentativas automáticas/heartbeat |
+| B11 / CA15 | Ordenação no servidor: (a) conectar com barreira durante uma publicação em curso: primeiro frame é snapshot e `bid_count` não decresce depois; (b) sinais de A e B invertidos: o publicador lê o estado atual nas duas vezes, sequência não decrescente, final igual ao banco |
+| F5 / CA16 | Testes puros de `shouldApplyRoom`: menor descarta, maior aplica, igual com `as_of` maior/igual aplica e menor descarta, terminal prevalece, `bid_count` 0, `lot_id` diferente; mais integração em `LotPage`: GET `/bids` atrasado após WS; 201 N depois de WS N+1 (overlay ignorado, mensagem de sucesso e carteira mantidas); snapshot duplicado |
 | I1 / CA4–8,10 | Duas abas/clientes reais mesmo lote; uma dá lance REST; após commit outra muda preço/histórico e fim quando estendido, sem refresh. Teste com backend real, não apenas interceptação Playwright |
 | I2 / CA13 | Smoke em desenvolvimento pelo proxy WS e no Render por wss; duas abas e Origin configurada. Registrar onde rodou; não executar deploy nesta criação |
 
@@ -458,31 +528,24 @@ decisão humana, preservando alternativas e a AD existente.
 ## 10. Tarefas para spec/build posteriores
 
 - [x] Criar contexto documental, recomendações D1–D10, critérios e test plan.
-- [ ] Obter decisão humana somente para Q10/rota e Q2/Origin; consolidar docs.
-- [ ] Criar spec autorizada: contrato final, coordenação handshake/publicação,
-  ponte de threads, política de fila/limpeza e arbitragem REST/WS/201/privado.
-- [ ] Submeter spec à revisão/aprovação humana conforme FRONTEND-WORKFLOW.
-- [ ] Build autorizado: B1–B10 e manager/endpoint/writers pós-commit (CA1–9).
-- [ ] Integrar frontend/proxy e F1–F4 (CA10–12).
-- [ ] I1/I2, verify e documentação com evidência real (CA13–14); parar na 4.1.
+- [x] Obter decisão humana para Q10/rota e Q2/Origin; consolidar docs (27/10/2026).
+- [x] Spec: dispensada; esta story consolidada é a especificação (decisão do dono).
+  Contrato final, coordenação handshake/publicação, ponte de threads, fila/limpeza
+  e arbitragem estão nas D2–D10 e na §4.1.
+- [x] Revisão/aprovação humana das decisões (27/10/2026).
+- [x] Build autorizado: B1–B10 e manager/endpoint/writers pós-commit (CA1–9).
+- [x] Integrar frontend/proxy e F1–F4 (CA10–12).
+- [x] I1 local, verify e documentação com evidência real (CA14). I2 no Render **não** executado
+  (CA13: a prova local não vale como prova Render). Teste manual no navegador: pendente, é meu.
 
 Não executei essas tarefas de implementação nem criei spec nesta sessão.
 
-## 11. Questões humanas realmente abertas
+## 11. Questões humanas
 
-Somente duas decisões bloqueiam a consolidação da story para spec:
-
-1. **Q10 / D1 — rota final:** aprovar `/ws/lots/{lot_id}` (recomendada), ou
-   `/api/lots/{lot_id}/ws` (alternativa). Efeito: nome público, proxy e reserva de
-   fallback; custo semelhante e baixo. Nenhuma rota de sala já existe para migrar.
-2. **Q2 / D7 — Origin:** aprovar origem presente igual à `APP_ORIGIN` e ausência
-   aceita para clientes não navegador (recomendada); ou exigir sempre; ou aceitar
-   qualquer origem no stream público. Efeito: compatibilidade de scripts e
-   exposição de uso cruzado; custo baixo. Sempre sem autenticação pelo cookie.
-
-Não reabro posição do usuário, regra anti-sniping, locks, aliases, outbox ou
-decisões financeiras. Q1 (intervalos/heartbeat/reconexão) pertence à 4.2 e não
-bloqueia a 4.1; Q4/Q6/Q9 de fechamento pertencem à 4.4.
+Nenhuma aberta para a 4.1. Q10 (rota `/ws/lots/{lot_id}`) e Q2 (`Origin`, D7)
+foram decididas em 27/10/2026. Continuam fora desta story: Q1 (4.2), Q4/Q6/Q9 (4.4)
+e a rota do comprovante/link da Q10. Não reabro posição do usuário, anti-sniping
+(AD-5 revisada), locks, aliases, outbox ou decisões financeiras.
 
 ## 12. Definition of Done e conclusão desta criação
 
@@ -491,15 +554,13 @@ commit concluído; outra aba recebe WebSocket e altera lance atual, histórico e
 novo `ends_at` se houve anti-sniping, sem refresh manual, sem dados privados e
 sem regressões da 3.5. Heartbeat e reconexão não fazem parte desse DoD.
 
-Nesta criação, preenchi requisitos, contexto vivo, contrato recomendado,
-alternativas, critérios, tarefas, arquivos, concorrência, privacidade e plano de
-validação com base no checklist de create-story. Nenhuma implementação, teste,
+Nesta consolidação (27/10/2026), registrei as decisões D1–D10 do dono, a regra de
+ordenação por `bid_count` (§4.1), CA15/CA16 e os testes B11/F5, e fechei Q2 e a
+parte WebSocket da Q10 em `CLAUDE.md` e no AD-10. Nenhuma implementação, teste,
 verify, consulta ao banco, deploy, Git, leitura `.env*` ou alteração de secrets.
-O sprint permanece `backlog`; criação documental não significa pronta para dev.
 
-**Resultado: PRECISA DE DECISÕES (Q2 e Q10).** Após as respostas, consolidar estas
-recomendações e registrar **PRONTA PARA SPEC**, sem iniciar implementação por
-essa mudança de rótulo.
+**Resultado: PRONTA PARA IMPLEMENTAÇÃO (`ready-for-dev`).** O sprint reflete o
+status; o épico 4 passa a `in-progress` quando o build começar.
 
 ### Referências técnicas verificadas
 
@@ -519,3 +580,147 @@ Consultei documentação primária para validar as APIs necessárias:
 (proxy com upgrade WebSocket). São apoio técnico; as decisões do produto e as
 versões vinculantes vêm do projeto. A spec deve conferir compatibilidade no
 ambiente instalado antes do build.
+
+## 13. Registro do build (27/10/2026)
+
+Implementado: `backend/app/lot_room.py` (manager por processo, snapshot e `bid_accepted`
+lidos em Session curta no threadpool, fila de 8 por conexão, um emissor por socket,
+`lot_cancelled` terminal); sinal pós-commit em `bids.py` e `lot_cancellation.py`
+(cancelamento só na transição nova); eco técnico `infra_check` removido; `/ws` reservado
+no `spa.py`; proxy WS no Vite; `lotRoomSocket.ts` (`parseRoomMessage`, `shouldApplyRoom`,
+URL ws/wss) e integração em `LotPage`/`LotBidPanel` (estado textual da conexão). Fora:
+heartbeat, timeout, backoff, reconexão (4.2); fechamento, liquidação, scheduler,
+comprovante (4.3/4.4). `anyio` declarado como dependência direta, sem mudar versões.
+
+**Defeito achado na verificação (meu, do próprio teste):** em `VERIFY_E2E=1` o spec
+`lot-room-ws.spec.ts` "countdown zero…" esperava `0:01`, mas o formato real do contador é
+`00:01`. Corrigi só a expectativa errada (não afrouxei nada: a asserção segue exata) e
+repeti o spec 5× (30/30 passaram).
+
+**Smoke local (I1/CA13 parcial)**, banco descartável `casa_smoke` (já removido), segredos
+fictícios só no ambiente do processo, uvicorn + Vite, duas conexões reais em
+`ws://localhost:5173/ws/lots/{id}` (proxy do Vite): ambas receberam `room_snapshot` como
+1º frame (`bid_count` 0); um `POST` de lance (201) gerou `bid_accepted` idêntico nas duas
+(`bid_count` 1, 10000, alias `Licitante-…`); chaves só `type/lot_id/room`,
+`as_of/bid_count/bids/current_bid_cents/ends_at/minimum_next_bid_cents/phase` e por lance
+`amount_cents/bidder_alias/placed_at/sequence`; `Origin` hostil e lote inexistente: 403.
+
+**Comandos executados (saída real):**
+- Direcionados (backend): `pytest tests/test_lot_room.py tests/integration/test_lot_room_ws.py
+  tests/test_access_policy.py tests/test_csrf.py tests/test_infra_check.py tests/test_spa.py`
+  → 372 passed, 1 warning. Direcionado front: `node --test src/lotRoomSocket.test.ts` → 2/2.
+- `./verify.sh` → exit 0: Ruff e format ok (91 arquivos); 2047 passed, 1 warning; 162 testes
+  front, 0 falhas; ESLint, tsc, build do Vite e docker build ok.
+- `VERIFY_E2E=1 ./verify.sh` (1ª execução) → falhou no teste acima (194 passed, 1 failed,
+  5 skipped); após a correção → exit 0, Playwright 195 passed, 5 skipped.
+- Único warning: `StarletteDeprecationWarning` (httpx no `starlette.testclient`), de
+  dependência, preexistente; não mexi nas versões.
+
+**Checklist de fechamento:** primeiro frame sempre `room_snapshot` (subscribe serializado
+com a publicação; teste B6/B11 e smoke); sem broadcast antes do `commit()` (barreira em
+`Session.commit`, B3); rollback/recusa/409 não publicam (B4); releitura em Session própria
+e curta, em threadpool, com limiter (B2); nada de SQL síncrono no loop; cliente lento é
+removido sem travar os demais (B5); isolamento por `lot_id`; terminal de cancelamento não
+é desfeito (`shouldApplyRoom`, F2); `shouldApplyRoom` único para GET, WS e overlay do 201;
+`bid_count` ordena e `as_of` do servidor só desempata; 201 confirma sucesso e carteira sem
+regredir a sala; payload sem `user_id`, e-mail, carteira, hash ou HMAC (B7); o front só usa
+o `ends_at` do servidor; 4.2 e 4.3/4.4 fora.
+
+**Não feito:** I2 (Render, wss) e teste manual no navegador. Review independente ainda não
+executado, por instrução.
+
+## 14. Finding do meu teste manual e correção (27/10/2026)
+
+**Finding (MEDIUM).** Com a sala conectada, pus o navegador em Network → Offline e esperei: o
+indicador seguiu "Sala conectada". Ao clicar em "Atualizar sala", a falha do GET do detalhe
+trocou a tela inteira por "Não foi possível carregar o lote".
+
+**Causa.** (1) Sem heartbeat (4.2), o browser pode manter um socket morto "aberto" por muito
+tempo, então `onclose`/`onerror` não disparavam. (2) `loadDetail` em `LotPage.tsx` gravava
+`detail = failed` mesmo com o lote já exibido (a sala e a participação já preservavam o
+último estado, o detalhe não). (3) `LotBidPanel` recebia `syncFailed` mas não o mostrava.
+
+**Correção (só dentro da 4.1).**
+- `LotPage.tsx`: o evento `offline` do navegador marca a conexão como indisponível (único
+  sinal precoce sem heartbeat; não é heartbeat nem reconexão, e `online` não reconecta).
+  *Atualizado na seção 15 (D-B): o `offline` também fecha o socket atual.* Remoção
+  do listener no cleanup.
+- `LotPage.tsx`: falha de rede/servidor na releitura do detalhe preserva o lote já exibido;
+  só `not_found` (lote removido/cancelado) o substitui. Primeiro carregamento com falha segue
+  mostrando o erro global.
+- `LotBidPanel.tsx`: mensagem local `role="alert"` "Não foi possível atualizar a sala…
+  últimos dados recebidos… tente novamente", com "Atualizar sala" habilitado para nova tentativa.
+- Um GET manual bem-sucedido aplica a sala por `shouldApplyRoom`, mas não marca a conexão
+  como conectada: só o socket faz isso. Sem reconexão, backoff ou heartbeat (4.2).
+
+**Testes novos (`frontend/e2e/lot-room-ws.spec.ts`, Playwright com API simulada):**
+offline muda de conectado para desatualizado e mantém preço/histórico; nenhum novo
+`WebSocket` depois de `online` + refresh (1 conexão); fechamento do socket sem conexão
+útil não apaga a sala e há uma só tentativa; refresh REST que falha (503 em detalhe e sala)
+preserva a sala, mostra a mensagem local e não troca a página; novo refresh com sucesso
+aplica a sala mais nova e limpa a mensagem. Observação: as rotas do Playwright respondem antes
+da camada de rede, então a falha do refresh é injetada como 503 (`hold().fail()`), e o
+offline real só exercita o evento `offline`. A falha por rede de verdade fica no meu teste manual.
+
+**Execução:** `playwright test lot-room-ws --repeat-each=3` → 27 passed. `./verify.sh` →
+exit 0 (Ruff/format ok, 2047 passed e 1 warning, 162 testes front, ESLint, tsc, build,
+docker build). `VERIFY_E2E=1 ./verify.sh`: resultado registrado abaixo.
+
+`VERIFY_E2E=1 ./verify.sh` após a correção → exit 0: 2047 backend passed (1 warning, o mesmo
+`StarletteDeprecationWarning`), 162 testes front, Playwright 198 passed e 5 skipped, build e
+docker build ok. Status segue `review`; aguardo meu novo teste manual.
+
+## 15. Correções do 1º code review independente (27/10/2026)
+
+O review (5 camadas, sessão diferente da que implementou) deu **CORREÇÃO NECESSÁRIA**: 1 MEDIUM, vários
+LOW e duas decisões minhas. Corrigi só o que aprovei; não reespecifiquei a story nem toquei na 4.2+.
+
+| ID | O que mudou |
+| --- | --- |
+| M1 | `privatePending` em `LotPage.tsx`: enquanto a revalidação de `/mine` disparada por quadro do socket está pendente, a posição fica oculta mas **não** aparece "Não foi possível carregar sua participação." (só em falha real) |
+| L1 | `sameRoomState` (`lotRoomSocket.ts`) ignora só o `as_of`; mesmo estado público com `as_of` novo reancora o relógio e **não** cancela rodada nem dispara leitura privada. Substitui o `JSON.stringify` |
+| L2 | `ambiguousRef`: se um quadro do socket supera a rodada pós-POST e a revalidação coalescida termina bem, o aviso de POST ambíguo passa a "O estado abaixo é o atual do servidor". Falha mantém o aviso parcial. Novo envio limpa a marca |
+| L3 | Ao entrar em "Este lote foi cancelado", o foco vai ao `h1` (anunciado pelo leitor de tela) |
+| L4 | `read_cancellation` normaliza `cancelled_at` para UTC |
+| L5 | O handler não captura mais `CancelledError`: limpa (bloco blindado) e o cancelamento propaga |
+| L6 | `manualFresh`: leitura manual bem-sucedida com socket indisponível mostra "Dados atualizados por leitura manual…" (não "desatualizado"); o GET não marca o socket como conectado; nova queda ou refresh falho limpa a marca |
+| L7 | Testes das lacunas do plano da 4.1 (abaixo) |
+| L8 | UUIDs fixos nos parâmetros (`test_lot_room.py`, `test_infra_check.py`) e nas constantes de lote inexistente |
+| L9 | Logs de publicação, isolamento, falha de conexão e expulsão por fila cheia incluem `lot_id` e a **classe** da exceção (nunca a mensagem); expulsão e isolamento agora são logados |
+| L10 | `docs/ARQUITETURA.md`: Q2 resolvida e parte WebSocket da Q10 resolvida na 4.1; comprovante/link seguem abertos |
+| D-A | Mantive o comportamento; limitação documentada no README e na tabela de riscos (§7). Sem timeout nem teto de conexões: 4.2, com a Q1 |
+| D-B | `offline` fecha também o socket atual e marca ao vivo como indisponível; `online` não reconecta (registrado na D10) |
+
+**Testes novos/ajustados (L7 e demais).** Backend: falha de publicação com socket real conectado → 201,
+fechamento 1011, sala limpa, log com `lot_id` e classe e sem a mensagem privada; fila cheia por POSTs reais
+(um cliente que nunca drena é expulso com 1011 e o saudável recebe todos os quadros); repetição do
+cancelamento não sinaliza (contando `signal_committed`, sem depender de assinantes); recusas 403, 422
+(`lot_has_bids`, `lot_ended`), 409 e 404 da rota de cancelamento não sinalizam e não alteram o banco; Origin
+decide sozinho para lote existente (controle com Origin válido aceito, `test_csrf.py` reescrito: antes passava
+porque o lote não existia); `Origin` repetido recusado antes da leitura (ASGI direto); cancelamento do handler
+propaga e limpa; whitelist exata de chaves de `bid_accepted` e do snapshot, sem e-mails, ids, hashes nem âncora.
+Frontend: `sameRoomState` (node), e no Playwright M1 (mensagem ausente com `/mine` retido), L1 (`as_of`
+crescente, sem nova chamada privada), L2, L3, D-B (socket realmente fechado), L6, e `lot_cancelled` terminal
+(foco, leitura pendente abortada e quadro posterior de contagem maior não desfazem). Observação: ao chegar o
+terminal, a página **aborta** o GET pendente; por isso não existe "resposta REST tardia" a aplicar no browser, e a
+2ª linha de defesa (`shouldApplyRoom(..., cancelled)`) fica coberta no teste puro, não no Playwright.
+
+**Prova de que os testes mordem (mutação, restaurada depois).** Reintroduzir a captura de `CancelledError` fez
+falhar 2 testes de `test_lot_room.py`; sinalizar a cada cancelamento (sem `transitioned`) fez falhar
+`test_cancel_post_commit_terminal_idempotent_and_hidden`; desligar M1, L1, L2, L3 e D-B no `LotPage.tsx` fez
+falhar 6 specs de `lot-room-ws`, que passaram de novo com o código restaurado.
+
+**Comandos executados (saída real):**
+- Direcionados backend: `pytest tests/test_lot_room.py tests/integration/test_lot_room_ws.py tests/test_csrf.py
+  tests/test_infra_check.py tests/test_access_policy.py tests/test_spa.py` → 382 passed, 1 warning.
+- Direcionado front: `npx playwright test lot-room-ws --repeat-each=3` → 33 passed; `npm test` → 163 pass, 0 fail.
+- A 1ª execução de `./verify.sh` parou no Ruff (8 × E501 e formatação nos testes novos, meus); corrigi só
+  formatação/linhas e repeti.
+- `./verify.sh` → exit 0: Ruff e format ok (91 arquivos); **2057 passed**, 1 warning; 163 testes front, 0 falhas;
+  ESLint, tsc, build do Vite e docker build ok.
+- `VERIFY_E2E=1 ./verify.sh` → exit 0: 2057 passed backend, 163 front, **Playwright 200 passed, 5 skipped**,
+  build e docker build ok. Warning único: o mesmo `StarletteDeprecationWarning`, preexistente.
+
+**Não feito / pendente:** I2 (Render, wss, duas abas) e meu teste manual no navegador; re-review independente.
+Itens deferidos pelo review e que **não** mexi: e2e opt-in (decisão do CA14). Status segue `review`; sprint-status
+intocado. Não iniciei a 4.2; sem Git; nenhum `.env*` lido.

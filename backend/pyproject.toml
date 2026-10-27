@@ -5,6 +5,7 @@ description = "Casa de Leilões — backend (FastAPI)"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.1",
+    "anyio",
     "argon2-cffi>=25.1.0",
     "fastapi",
     "httpx>=0.28.1",

@@ -51,7 +51,7 @@ EXPECTED_POLICIES = {
     # Story 3.5: a sala lê o histórico em público e a participação própria como BIDDER.
     ("/api/lots/{lot_id}/bids", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/lots/{lot_id}/bids/mine", "GET", "http"): AccessPolicy.BIDDER,
-    ("/api/infra-check/ws", None, "websocket"): AccessPolicy.PUBLIC,
+    ("/ws/lots/{lot_id}", None, "websocket"): AccessPolicy.PUBLIC,
 }
 SPA_POLICY = {
     ("/{full_path:path}", "GET", "http"): AccessPolicy.PUBLIC,
@@ -223,10 +223,10 @@ def test_helper_routes_carry_their_policy_dependency(api_only_app: FastAPI) -> N
     )
 
 
-def test_technical_websocket_still_passes_as_public(api_only_app: FastAPI) -> None:
+def test_room_websocket_passes_as_public(api_only_app: FastAPI) -> None:
     table = policy_by_route(api_only_app.routes)
     assert policy_problems(api_only_app.routes) == []
-    assert table[("/api/infra-check/ws", None, "websocket")] == AccessPolicy.PUBLIC
+    assert table[("/ws/lots/{lot_id}", None, "websocket")] == AccessPolicy.PUBLIC
 
 
 def test_stacked_plain_decorator_reusing_a_protected_endpoint_is_reported(

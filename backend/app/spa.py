@@ -68,7 +68,7 @@ def register_spa_routes(app: FastAPI, dist_dir: Path) -> None:
         # `/api` é da API e `/health` é rota explícita: nunca viram SPA, nem por
         # caminhos equivalentes (`/health/`, `/lots/../api/x`).
         logical_path = normalize_route_path(full_path)
-        if logical_path == "api" or logical_path.startswith("api/"):
+        if logical_path in ("api", "ws") or logical_path.startswith(("api/", "ws/")):
             raise HTTPException(status_code=404)
         if logical_path == "health":
             if full_path == "health":

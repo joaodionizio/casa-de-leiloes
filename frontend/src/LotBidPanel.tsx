@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import type { BidRoom } from './api/bids'
 import type { WalletResponse } from './api/wallet'
 import AppLink from './AppLink'
+import type { ConnectionState } from './lotRoomSocket'
 import BidForm from './BidForm'
 import type { BidNotice } from './bidFeedback'
 import type { BidPosition } from './bidPosition'
@@ -17,6 +18,9 @@ export type Loadable<T> =
   | { status: 'ready'; data: T }
 
 interface LotBidPanelProps {
+  connection: ConnectionState
+  // Leitura manual bem-sucedida com o socket indisponível: dados atuais, mas sem ao vivo.
+  manualFresh: boolean
   lotId: string
   viewer: Viewer
   startingBidCents: number
@@ -199,7 +203,19 @@ function LotBidPanel(props: LotBidPanelProps) {
 
       <div className="room-refresh">
         <p className="as-of muted">Situação atualizada às {formatClock(room.as_of)}</p>
-        <p className="muted">A sala não se atualiza sozinha; use Atualizar.</p>
+        <p role="status" className="muted">{props.connection === 'connected'
+          ? '● Sala conectada — atualizações ao vivo'
+          : props.connection === 'connecting'
+            ? 'Conectando à sala…'
+            : props.manualFresh
+              ? 'Atualizações ao vivo indisponíveis. Dados atualizados por leitura manual; use Atualizar sala para ver mudanças.'
+              : 'Atualizações ao vivo indisponíveis. Estado desatualizado; use Atualizar sala.'}</p>
+        {props.syncFailed && (
+          <p role="alert" className="form-error">
+            Não foi possível atualizar a sala. Os dados abaixo são os últimos recebidos e podem
+            estar desatualizados; tente novamente.
+          </p>
+        )}
         <button
           type="button"
           className="button button-secondary"

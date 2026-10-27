@@ -1022,3 +1022,42 @@ ela e o que a IA fez.
   para `done`. Nada retroativo em lotes ou lances; a representação canônica v1 e a
   cadeia SHA/HMAC não mudaram.
 - Não implementei a Story 4.1. A IA não executou Git e não leu `.env*`.
+
+## Build da Story 4.1 — sala ao vivo por WebSocket — 27/10/2026
+
+- A IA (Claude Sonnet 5.5) implementou a 4.1 a partir da story consolidada e das decisões
+  D1–D10 que eu aprovei; não decidiu nada novo. Continuou o trabalho já iniciado na sessão
+  anterior (manager, endpoint, sinais pós-commit, cliente e testes) e fechou a verificação.
+- Smoke local com duas conexões reais pelo proxy WS do Vite, banco descartável e segredos
+  fictícios só no ambiente do processo (nenhum `.env*` lido). Resultado e comandos reais
+  estão na seção 13 da story.
+- O `VERIFY_E2E=1 ./verify.sh` falhou na primeira execução por erro no próprio teste novo
+  da IA (esperava `0:01`, formato real `00:01`). Foi corrigida só a expectativa, repetida
+  5× e o verify completo passou. Nenhum teste foi afrouxado.
+- Sem Git; não iniciei a 4.2; review independente e prova no Render ainda não feitos.
+
+## Correção do finding do teste manual da Story 4.1 (conexão perdida) — 27/10/2026
+
+- Meu teste manual (Network → Offline) mostrou que a sala seguia "conectada" e que um
+  "Atualizar sala" falho derrubava a página inteira para "Não foi possível carregar o lote".
+- A IA diagnosticou: socket morto sem evento de close (sem heartbeat, que é da 4.2), e
+  `loadDetail` sobrescrevia o lote já exibido ao falhar. Corrigiu só isso: evento `offline`
+  marca a conexão como indisponível, falha de releitura preserva o lote, mensagem local de
+  desatualização e nova tentativa. Sem reconexão automática, backoff ou heartbeat.
+- Testes novos no Playwright (cinco cenários pedidos). Limitação registrada: rotas do
+  Playwright não simulam rede caída de verdade, então o refresh falho usa 503 injetado.
+- Sem Git; não iniciei a 4.2.
+
+## Correções do 1º code review da Story 4.1 — 27/10/2026
+
+- O code review independente (Opus, 5 camadas, sessão separada da implementação) deu "correção necessária".
+  Eu decidi: corrigir M1 e L1–L10; manter o comportamento da publicação pós-commit e só documentar a limitação
+  (D-A, sem timeout nem teto de conexões agora, que ficam para a 4.2 com a Q1); e fechar o socket no evento
+  `offline` sem reconectar (D-B).
+- A IA (Claude Sonnet 5.5) aplicou só isso. Para não confiar em teste que "passa sempre", reverteu de propósito
+  cada correção e confirmou que os testes novos falham (captura de `CancelledError`, guarda `transitioned`,
+  M1/L1/L2/L3/D-B), restaurando o código depois. Dois dos testes antigos passavam pelo motivo errado (Origin
+  num lote inexistente; repetição de cancelamento sem assinantes) e foram refeitos.
+- O primeiro `./verify.sh` falhou no Ruff por linhas longas nos testes novos da própria IA; corrigido só o
+  formato. Números finais (2057 backend, 163 front, Playwright 200 passed e 5 skipped) estão na seção 15 da story.
+- Sem Git; não iniciei a 4.2; nenhum `.env*` lido. Aguardo re-review independente e meu teste manual.

@@ -22,6 +22,13 @@ import { documentTitle } from './brand'
 import { consumeZero, endsAtKey, makeAnchor, type CountdownAnchor } from './countdown'
 import LotBidPanel, { type Loadable, type Viewer } from './LotBidPanel'
 import LotState from './LotState'
+import {
+  parseRoomMessage,
+  roomSocketUrl,
+  sameRoomState,
+  shouldApplyRoom,
+  type ConnectionState,
+} from './lotRoomSocket'
 import { lotTitleText } from './lotLabels'
 import { formatDateTime } from './lotTime'
 import { formatCents, moneyErrorMessage, parseReaisToCents } from './money'
@@ -54,6 +61,14 @@ function later(action: () => Promise<unknown>): void {
   void Promise.resolve().then(action)
 }
 
+// Leitura privada: `superseded` (outra leitura do canal tomou o lugar) nunca é sucesso.
+type PrivateResult = 'ok' | 'failed' | 'superseded'
+
+// Para as partes de uma rodada, quem substituiu a leitura responde pelo resultado.
+function notFailed(read: Promise<PrivateResult>): Promise<boolean> {
+  return read.then((result) => result !== 'failed')
+}
+
 interface ReadRound {
   signal: AbortSignal
   isCurrent: () => boolean
@@ -81,8 +96,7 @@ interface RoundOptions {
 
 // Sala do lote (CAP-11 da 2.5, Story 3.5): a obra, os termos e, agora, a disputa. O
 // detalhe (2.5) só fornece o que é estático; fase, fim, lance atual, mínimo e histórico
-// vêm do `GET /bids`. Não há polling nem atualização entre clientes (Épico 4): a sala
-// muda numa leitura explícita, no zero da contagem ou depois do próprio lance.
+// vêm de snapshots REST/WS. O POST continua sendo a única forma de dar lance.
 function LotPage({
   lotId,
   navState,
@@ -91,6 +105,20 @@ function LotPage({
   owner,
   onSessionExpired,
 }: LotPageProps) {
+  const [connection, setConnection] = useState<ConnectionState>('connecting')
+  const connectionRef = useRef<ConnectionState>('connecting')
+  // Leitura manual bem-sucedida com o socket já indisponível: os dados estão atuais,
+  // mas as atualizações ao vivo continuam fora.
+  const [manualFresh, setManualFresh] = useState(false)
+  // Revalidação privada disparada por um evento do socket ainda em andamento: a
+  // participação anterior fica oculta, mas isso é atualização, não falha.
+  const [privatePending, setPrivatePending] = useState(false)
+  // Aviso de POST ambíguo ainda sem desfecho; um evento do socket pode superar a rodada
+  // pós-POST, e a revalidação coalescida então resolve o aviso.
+  const ambiguousRef = useRef(false)
+  const [cancelled, setCancelled] = useState(false)
+  const cancelledRef = useRef(false)
+  const privateRefresh = useRef({ running: false, dirty: false })
   const [detail, setDetail] = useState<LotPageState>({ status: 'loading' })
   const [room, setRoom] = useState<Loadable<BidRoom>>({ status: 'loading' })
   const [mine, setMine] = useState<Loadable<MyBids>>({ status: 'loading' })
@@ -183,9 +211,28 @@ function LotPage({
       setDetail({ status: 'ready', data: result.data })
       return true
     }
-    setDetail({ status: result.failure === 'not_found' ? 'not_found' : 'failed' })
+    // Uma releitura que falha por rede ou servidor não derruba um lote já exibido.
+    setDetail((current) =>
+      result.failure === 'not_found'
+        ? { status: 'not_found' }
+        : current.status === 'ready'
+          ? current
+          : { status: 'failed' },
+    )
     return false
   }, [begin, lotId])
+
+  const applyRoom = useCallback((incoming: BidRoom, roundId: number, isOverlay = false): boolean => {
+    const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
+    if (!shouldApplyRoom(current, incoming, cancelledRef.current, lotId, lotId)) return false
+    roomRef.current = { status: 'ready', data: incoming }
+    roomRoundRef.current = roundId
+    setRoom(roomRef.current)
+    setRoomRound(roundId)
+    setAnchor(makeAnchor(incoming.ends_at, incoming.as_of, performance.now()))
+    setOverlay(isOverlay)
+    return true
+  }, [lotId])
 
   const loadRoom = useCallback(
     async (roundId: number): Promise<boolean> => {
@@ -193,36 +240,37 @@ function LotPage({
       const result = await fetchBidRoom(lotId, round.signal)
       if (!round.isCurrent()) return true
       if (result.ok) {
-        roomRoundRef.current = roundId
-        setRoom({ status: 'ready', data: result.data })
-        setRoomRound(roundId)
-        setAnchor(makeAnchor(result.data.ends_at, result.data.as_of, performance.now()))
-        setOverlay(false)
+        if (!applyRoom(result.data, roundId) && !cancelledRef.current) {
+          // This round began after the retained newer room; its fresh private
+          // read can pair with that authority without replacing public data.
+          roomRoundRef.current = roundId
+          setRoomRound(roundId)
+        }
         return true
       }
       // Uma leitura que falha não apaga uma sala já carregada.
       setRoom((current) => (current.status === 'ready' ? current : { status: 'failed' }))
       return false
     },
-    [begin, lotId],
+    [begin, lotId, applyRoom],
   )
 
   const loadPrivate = useCallback(
-    async (withWallet: boolean, roundId: number): Promise<boolean> => {
-      if (viewerRef.current !== 'bidder') return true
+    async (withWallet: boolean, roundId: number): Promise<PrivateResult> => {
+      if (viewerRef.current !== 'bidder') return 'ok'
       const round = begin('priv')
       const [mineResult, walletResult] = await Promise.all([
         fetchMyBids(lotId, round.signal),
         withWallet ? fetchWallet(round.signal) : Promise.resolve(null),
       ])
-      if (!round.isCurrent()) return true
+      if (!round.isCurrent()) return 'superseded'
       if (
         (!mineResult.ok && mineResult.failure === 'unauthorized') ||
         (walletResult !== null && !walletResult.ok && walletResult.failure === 'unauthorized')
       ) {
         cancelRound()
         expiredRef.current()
-        return false
+        return 'failed'
       }
       if (mineResult.ok) {
         setMine({ status: 'ready', data: mineResult.data })
@@ -235,7 +283,7 @@ function LotPage({
         if (walletResult.ok) setWallet({ status: 'ready', data: walletResult.wallet })
         else setWallet((current) => (current.status === 'ready' ? current : { status: 'failed' }))
       }
-      return mineResult.ok && (walletResult === null || walletResult.ok)
+      return mineResult.ok && (walletResult === null || walletResult.ok) ? 'ok' : 'failed'
     },
     [begin, cancelRound, lotId],
   )
@@ -271,7 +319,7 @@ function LotPage({
         options.detail ? loadDetail() : Promise.resolve(true),
         loadRoom(id),
       ]
-      if (privateFor !== null) parts.push(loadPrivate(options.wallet, id))
+      if (privateFor !== null) parts.push(notFailed(loadPrivate(options.wallet, id)))
       const round: Round = { id, parts, privateFor, done: Promise.resolve('failed') }
       roundRef.current = round
       setSync(quiet ? 'idle' : 'syncing')
@@ -318,10 +366,108 @@ function LotPage({
         await loadPrivate(true, roomRoundRef.current)
       } else if (running.privateFor !== privateOwner) {
         running.privateFor = privateOwner
-        running.parts.push(loadPrivate(true, running.id))
+        running.parts.push(notFailed(loadPrivate(true, running.id)))
       }
     })
   }, [privateOwner, loadPrivate])
+
+  // One public socket per mounted lot. No heartbeat or automatic reconnection.
+  useEffect(() => {
+    let active = true
+    const socket = new WebSocket(roomSocketUrl(lotId, window.location.origin))
+    const markUnavailable = () => {
+      if (!active || cancelledRef.current) return
+      connectionRef.current = 'unavailable'
+      setConnection('unavailable')
+      setManualFresh(false)
+    }
+    socket.onopen = () => {
+      if (!active) return
+      connectionRef.current = 'connected'
+      setConnection('connected')
+    }
+    socket.onclose = markUnavailable
+    socket.onerror = markUnavailable
+    // The browser can keep a dead socket "open" for a long time; going offline is the
+    // only early signal without a heartbeat (4.2). The current socket is closed too, so
+    // what the panel says matches what is applied. `online` never reconnects.
+    const goOffline = () => {
+      markUnavailable()
+      socket.onmessage = null
+      socket.close()
+    }
+    window.addEventListener('offline', goOffline)
+    socket.onmessage = (message) => {
+      if (!active || !mountedRef.current) return
+      const event = parseRoomMessage(message.data)
+      if (event === null || event.lot_id !== lotId || cancelledRef.current) return
+      if (event.type === 'lot_cancelled') {
+        cancelledRef.current = true
+        cancelRound()
+        channels.current.detail.controller?.abort()
+        channels.current.detail.generation += 1
+        setCancelled(true)
+        socket.close()
+        return
+      }
+      const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
+      if (!shouldApplyRoom(current, event.room, false, lotId, event.lot_id)) return
+      if (current !== null && sameRoomState(current, event.room)) {
+        // Same public state, newer reading: only the clock is re-anchored. No round is
+        // cancelled and no private read starts.
+        roomRef.current = { status: 'ready', data: event.room }
+        setRoom(roomRef.current)
+        setAnchor(makeAnchor(event.room.ends_at, event.room.as_of, performance.now()))
+        return
+      }
+      cancelRound()
+      roundSeq.current += 1
+      applyRoom(event.room, roundSeq.current)
+      setSync('idle')
+      if (viewerRef.current !== 'bidder') return
+      setPrivatePending(true)
+      const refresh = privateRefresh.current
+      refresh.dirty = true
+      if (refresh.running) return
+      refresh.running = true
+      later(async () => {
+        let result: PrivateResult = 'superseded'
+        try {
+          while (active && refresh.dirty && !cancelledRef.current) {
+            refresh.dirty = false
+            result = await loadPrivate(true, roomRoundRef.current)
+          }
+        } finally {
+          refresh.running = false
+          if (active && mountedRef.current) {
+            setPrivatePending(false)
+            // Only this loop's own current, successful read resolves the notice. A
+            // superseded read leaves it open for the round that replaced it.
+            if (ambiguousRef.current && result !== 'superseded') {
+              ambiguousRef.current = false
+              if (result === 'ok') {
+                setNotice((notice) =>
+                  notice?.kind === 'uncertain' ? ambiguousNotice('complete') : notice,
+                )
+              }
+            }
+          }
+        }
+      })
+    }
+    return () => {
+      active = false
+      window.removeEventListener('offline', goOffline)
+      socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null
+      socket.close()
+    }
+  }, [lotId, applyRoom, cancelRound, loadPrivate])
+
+  // Lote cancelado ao vivo: a tela inteira muda, então o foco vai para o título (que o
+  // leitor de tela anuncia) em vez de cair no `body` quando o campo do lance desmonta.
+  useEffect(() => {
+    if (cancelled) headingRef.current?.focus()
+  }, [cancelled])
 
   // Foco no `h1` ao navegar (D11).
   useEffect(() => {
@@ -342,8 +488,18 @@ function LotPage({
     if (submittingRef.current) return
     setRefreshing(true)
     setAcceptedSyncFailed(false)
-    void runRound({ detail: true, wallet: true }, true).then(() => {
-      if (mountedRef.current) setRefreshing(false)
+    void runRound({ detail: true, wallet: true }, true).then((result) => {
+      if (!mountedRef.current) return
+      setRefreshing(false)
+      if (result === 'ok') setManualFresh(connectionRef.current === 'unavailable')
+      else if (result === 'failed') setManualFresh(false)
+      // An ambiguous POST left open by a superseded revalidation is decided here.
+      if (ambiguousRef.current && result !== 'superseded') {
+        ambiguousRef.current = false
+        setNotice((notice) =>
+          notice?.kind === 'uncertain' ? ambiguousNotice(result === 'ok' ? 'complete' : 'partial') : notice,
+        )
+      }
     })
   }
 
@@ -376,43 +532,30 @@ function LotPage({
       if (result.ok) {
         const { placed } = result
         cancelRound()
-        // O 201 vale mesmo sem sala carregada (remontagem): sem sala, ela nasce dele.
-        setRoom((current) =>
-          current.status === 'ready'
-            ? {
-                status: 'ready',
-                data: {
-                  ...current.data,
-                  current_bid_cents: placed.lot.current_bid_cents,
-                  ends_at: placed.lot.ends_at,
-                  minimum_next_bid_cents: null,
-                },
-              }
-            : {
-                status: 'ready',
-                data: {
-                  as_of: placed.bid.placed_at,
-                  phase: 'live',
-                  ends_at: placed.lot.ends_at,
-                  current_bid_cents: placed.lot.current_bid_cents,
-                  minimum_next_bid_cents: null,
-                  bid_count: placed.bid.sequence,
-                  bids: [placed.bid],
-                },
-              },
-        )
-        setAnchor(makeAnchor(placed.lot.ends_at, placed.bid.placed_at, performance.now()))
+        // Success belongs to this attempt; only a newer bid may overlay the room.
+        const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
+        if (current === null || placed.bid.sequence > current.bid_count) {
+          roundSeq.current += 1
+          applyRoom({
+            as_of: placed.bid.placed_at,
+            phase: 'live',
+            ends_at: placed.lot.ends_at,
+            current_bid_cents: placed.lot.current_bid_cents,
+            minimum_next_bid_cents: null,
+            bid_count: placed.bid.sequence,
+            bids: [placed.bid, ...(current?.bids ?? [])].slice(0, 50),
+          }, roundSeq.current, true)
+        }
         setWallet({ status: 'ready', data: placed.wallet })
         setAmountText('')
         setFieldError(undefined)
-        setOverlay(true)
         setAcceptedSyncFailed(false)
         setNotice({
           kind: 'success',
           text: successText(placed.bid.amount_cents, placed.lot.anti_sniping_applied),
           walletLink: false,
         })
-        const synced = await runRound({ detail: false, wallet: false }, false)
+        const synced = await runRound({ detail: false, wallet: true }, false)
         if (!mountedRef.current || synced === 'superseded') return
         setAcceptedSyncFailed(synced === 'failed')
         return
@@ -423,9 +566,12 @@ function LotPage({
         return
       }
       if (result.failure === 'ambiguous') {
+        ambiguousRef.current = true
         setNotice(ambiguousNotice('pending'))
         const synced = await runRound({ detail: false, wallet: true }, false)
+        // Superada por um evento do socket: quem resolve o aviso é a revalidação dele.
         if (!mountedRef.current || synced === 'superseded') return
+        ambiguousRef.current = false
         setNotice(ambiguousNotice(synced === 'ok' ? 'complete' : 'partial'))
         return
       }
@@ -442,7 +588,7 @@ function LotPage({
       amountRef.current?.focus()
       await runRound({ detail: false, wallet: true }, false)
     },
-    [cancelRound, runRound],
+    [cancelRound, runRound, applyRoom],
   )
 
   // Remontagem durante um envio pendente: acompanha o mesmo `POST`, sem outro.
@@ -472,6 +618,7 @@ function LotPage({
     if (entry === null) return
     // Só o formato foi validado aqui: mínimo e saldo são do servidor.
     cancelRound()
+    ambiguousRef.current = false
     submittingRef.current = true
     setSubmitting(true)
     setNotice(null)
@@ -499,6 +646,13 @@ function LotPage({
     event.preventDefault()
     if (navState.fromVitrine === true) window.history.back()
     else navigate('/')
+  }
+
+  if (cancelled) {
+    return <section className="notice-page" aria-labelledby="lot-title">
+      <h1 id="lot-title" ref={headingRef} tabIndex={-1}>Este lote foi cancelado</h1>
+      <AppLink to="/" className="button button-secondary">Ir para a vitrine</AppLink>
+    </section>
   }
 
   if (detail.status === 'loading') {
@@ -559,7 +713,8 @@ function LotPage({
   const position = bidPosition(roomData, mineData, overlay, paired)
   const lastOwnBidCents = endedLastBid(roomData, mineData, paired)
   const participationUnavailable =
-    mine.status === 'failed' || (mine.status === 'ready' && !paired && sync !== 'syncing')
+    mine.status === 'failed' ||
+    (mine.status === 'ready' && !paired && sync !== 'syncing' && !privatePending)
   const zeroReached =
     roomData !== null &&
     roomData.phase === 'live' &&
@@ -634,6 +789,8 @@ function LotPage({
           {roomData !== null && (
             <LotBidPanel
               lotId={lotId}
+              connection={connection}
+              manualFresh={manualFresh}
               viewer={viewer}
               startingBidCents={lot.starting_bid_cents}
               startsAt={lot.starts_at}
