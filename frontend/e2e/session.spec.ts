@@ -167,13 +167,11 @@ test.describe('header por papel', () => {
     await expect(page.getByRole('link', { name: 'Entrar', exact: true })).toHaveCount(0)
     // Story 3.1: a carteira passou a existir e é um destino do header do licitante.
     await expect(nav.getByRole('link', { name: 'Carteira' })).toBeVisible()
-    // O licitante vê o mesmo detalhe público, sem carteira nem lance no conteúdo da
-    // página: a asserção continua valendo, agora escopada ao conteúdo principal (o
-    // header tem o link "Carteira").
+    // Story 3.5: o licitante vê a sala do lote, com o formulário de lance.
     await page.locator(`[data-lot-id="${lotId(2)}"]`).click()
     await expect(page.locator('#lot-title')).toHaveText('Obra de teste 2')
-    await expect(page.getByRole('button', { name: /dar lance/i })).toHaveCount(0)
-    await expect(page.locator('main').getByText(/carteira/i)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Dar lance' })).toBeVisible()
+    await expect(page.getByLabel('Valor do lance')).toBeVisible()
   })
 
   test('AUCTIONEER: Vitrine, Criar lote, Meus lotes e Sair', async ({ page }) => {

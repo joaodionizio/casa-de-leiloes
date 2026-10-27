@@ -536,6 +536,39 @@ Comportamentos que podem surpreender (lances):
 - A leitura da cadeia a cada tentativa é O(n) e a fila na trava do lote não tem
   `lock_timeout`: aceitável na escala do desafio.
 
+### A sala do lote (Story 3.5)
+
+Duas leituras alimentam a sala, ambas só de leitura (sem trava, sem escrita, sem autenticar
+a cadeia; um lote legado sem âncora é lido normalmente, e o `POST` dele continua 409):
+
+- `GET /api/lots/{lot_id}/bids` (público): `as_of`, `phase`, `ends_at`, `current_bid_cents`,
+  `minimum_next_bid_cents` (`null` só se nenhum valor até o teto o alcança), `bid_count`
+  (total do lote) e `bids`: os **50 mais recentes**, `sequence` decrescente, cada um com
+  `sequence`, `bidder_alias`, `amount_cents` e `placed_at`. Uma única instrução SQL, com um
+  só `clock_timestamp()`. O limite de 50 é só da sala; a auditoria (5.1) mantém o histórico
+  completo. Nunca expõe `bidder_id`, nome, e-mail, hashes nem HMAC.
+- `GET /api/lots/{lot_id}/bids/mine` (só `BIDDER`): `bidder_alias`, `my_bid_count` (todos os
+  lances daquele alias no lote, mesmo fora dos 50) e `last_bid_cents`. A posição
+  (ganhando, superado ou neutro) é derivada no front destes dois retornos.
+
+Comportamentos que podem surpreender (sala):
+
+- **O contador é uma estimativa visual** baseada no último estado lido, com relógio
+  monotônico do navegador; pode superestimar o tempo restante. **O servidor continua sendo
+  a autoridade** para aceitar ou recusar o lance: chegar a `0:00` não bloqueia o envio e
+  causa uma única releitura por valor de `ends_at`.
+- **A sala não atualiza sozinha** (não há polling nem WebSocket até o Épico 4): outra pessoa
+  só aparece depois de "Atualizar sala", do zero da contagem ou do seu próprio lance. A linha
+  "Situação atualizada às HH:MM:SS" mostra a hora do `/bids` lido.
+- Depois de um `201`, a tela mostra na hora o valor, o novo fim e a carteira da resposta e
+  faz **uma** releitura para o histórico, o mínimo e a posição; se ela falhar, o aceite
+  continua mostrado.
+- **Erro de rede ou 5xx no envio** é resultado incerto: a tela não afirma se o lance entrou,
+  faz uma releitura e nunca reenvia sozinha. Como não há chave de idempotência, repetir à mão
+  ainda pode gravar outro lance.
+- O formulário só valida o **formato** do valor; abaixo do mínimo ou acima do saldo o pedido
+  vai ao servidor, que decide.
+
 ## Vitrine e página do lote
 
 Qualquer pessoa, **sem login**, vê os lotes separados em ao vivo, próximos (agendados) e

@@ -119,7 +119,76 @@ const PIXEL = Buffer.from(
   'base64',
 )
 
+// Sala do lote (Story 3.5). O mock serve o read model público e o `/mine` a partir de
+// um estado simples por lote; não reimplementa o motor: aceita o valor enviado ou
+// devolve a recusa pedida pelo teste. O `as_of` da sala difere do do detalhe, e avança
+// 1 s a cada leitura de `/bids`.
+export const ROOM_AS_OF = '2026-10-25T12:00:07.000000Z'
+export const ALIASES: Record<string, string> = {
+  'bidder1@example.com': 'Licitante-A83F19C2D4E5B601',
+  'bidder2@example.com': 'Licitante-0B7E5A91C3D2F480',
+}
+export const OTHER_ALIAS = ALIASES['bidder2@example.com']
+export const OWN_ALIAS = ALIASES['bidder1@example.com']
+
+export interface MockBid {
+  sequence: number
+  bidder_alias: string
+  amount_cents: number
+  placed_at: string
+}
+
+export interface RoomSeed {
+  bids?: MockBid[] // todos os lances, sequência crescente
+  ends_at?: string
+  // Sobrescritas aplicadas à N-ésima leitura de `/bids` (a última se repete).
+  script?: Array<Partial<{ phase: Phase; ends_at: string; minimum_next_bid_cents: number | null }>>
+}
+
+// `count` lances alternando os dois licitantes, a partir do lance inicial.
+export function makeBids(
+  count: number,
+  startingCents: number,
+  aliases: string[] = [OTHER_ALIAS, OWN_ALIAS],
+): MockBid[] {
+  return Array.from({ length: count }, (_, index) => ({
+    sequence: index + 1,
+    bidder_alias: aliases[index % aliases.length],
+    amount_cents: startingCents + index * 1_000,
+    placed_at: new Date(BASE + index * 1_000).toISOString().replace('.000Z', '.000000Z'),
+  }))
+}
+
+export type BidMode =
+  | 'accepted'
+  | 'anti_sniping'
+  | 'below_minimum'
+  | 'insufficient_balance'
+  | 'already_winning'
+  | 'lot_not_started'
+  | 'lot_ended'
+  | 'integrity'
+  | 'validation'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'server_error'
+  | 'network'
+  | 'invalid201'
+
 export interface MockOptions {
+  rooms?: Record<string, RoomSeed>
+  bid?: BidMode
+  // Atraso do `POST` do lance, para o teste do envio pendente.
+  bidDelayMs?: number
+  // Nos erros ambíguos: o servidor chegou a gravar o lance antes de falhar?
+  bidAppliedOnError?: boolean
+  // Depois do primeiro `POST`, as leituras indicadas respondem 503 (`all` = as três).
+  rereadFail?: 'room' | 'mine' | 'wallet' | 'all'
+  // Atraso das leituras `/bids` depois do primeiro `POST`.
+  rereadDelayMs?: number
+  // `/mine` ou a carteira respondem 401 (sessão expirada) em qualquer leitura.
+  privateRead401?: 'mine' | 'wallet'
+
   lots?: MockLot[]
   // Sessão inicial: anônimo, ou já autenticado com o papel dado.
   session?: Role | null
@@ -140,19 +209,31 @@ export interface MockOptions {
 }
 
 export interface MockApi {
+  // Corpos dos `POST /api/lots/{id}/bids` recebidos.
+  bidPosts: Array<{ lotId: string; body: unknown }>
   // Pedidos recebidos, no formato "GET /api/lots".
   requests: string[]
   count(request: string): number
+  // Respostas de `POST /bids` já enviadas ao navegador.
+  bidResponses: number
+  // Segura os pedidos "GET /api/lots/..." iguais a `request` até `release()` (resposta
+  // normal) ou `fail()` (503). Vale para todos os que chegarem antes disso.
+  hold(request: string): { release: () => void; fail: () => void }
+  // Troca os lances do lote no meio do teste (sequência crescente).
+  setBids(lotId: string, bids: MockBid[]): void
   unexpected: string[]
 }
 
+// Um pedido abortado pelo navegador (leitura substituída) não tem mais rota para responder.
 function json(route: Route, status: number, body: unknown): Promise<void> {
-  return route.fulfill({
-    status,
-    contentType: 'application/json',
-    headers: { 'cache-control': 'no-store' },
-    body: JSON.stringify(body),
-  })
+  return route
+    .fulfill({
+      status,
+      contentType: 'application/json',
+      headers: { 'cache-control': 'no-store' },
+      body: JSON.stringify(body),
+    })
+    .catch(() => undefined)
 }
 
 function errorBody(status: number, code: string): Record<string, unknown> {
@@ -192,9 +273,62 @@ export async function mockApi(
       available_balance_cents: state.total - state.committed,
     }
   }
+  const rooms = new Map<
+    string,
+    { bids: MockBid[]; endsAt: string; reads: number }
+  >()
+  const roomOf = (id: string) => {
+    let state = rooms.get(id)
+    if (state === undefined) {
+      const lot = lots.find((item) => item.id === id)
+      const seed = options.rooms?.[id]
+      state = {
+        bids: [...(seed?.bids ?? [])],
+        endsAt: seed?.ends_at ?? lot?.ends_at ?? '',
+        reads: 0,
+      }
+      rooms.set(id, state)
+    }
+    return state
+  }
+  let bidAttempted = false
+  // O 401 simulado vale uma vez: depois do novo login a sessão volta a ser válida.
+  let expiredOnce = false
+  const expires = (what: 'mine' | 'wallet') => {
+    if (options.privateRead401 !== what || expiredOnce) return false
+    expiredOnce = true
+    return true
+  }
+  const failsAfterPost = (what: 'room' | 'mine' | 'wallet') =>
+    bidAttempted && (options.rereadFail === what || options.rereadFail === 'all')
+  const holds = new Map<string, Promise<boolean>>()
   const api: MockApi = {
+    bidPosts: [],
     requests: [],
     count: (request) => api.requests.filter((item) => item === request).length,
+    bidResponses: 0,
+    hold: (request) => {
+      let settle: (ok: boolean) => void = () => undefined
+      holds.set(
+        request,
+        new Promise<boolean>((resolve) => {
+          settle = resolve
+        }),
+      )
+      return {
+        release: () => {
+          holds.delete(request)
+          settle(true)
+        },
+        fail: () => {
+          holds.delete(request)
+          settle(false)
+        },
+      }
+    },
+    setBids: (id, bids) => {
+      roomOf(id).bids = [...bids]
+    },
     unexpected: [],
   }
 
@@ -205,6 +339,10 @@ export async function mockApi(
     const { pathname } = new URL(request.url())
     const method = request.method()
     api.requests.push(`${method} ${pathname}`)
+    const held = holds.get(`${method} ${pathname}`)
+    if (held !== undefined && !(await held)) {
+      return json(route, 503, errorBody(503, 'internal_error'))
+    }
 
     if (pathname.startsWith('/api/catalog/images/')) {
       if (options.images === 'broken') {
@@ -235,6 +373,10 @@ export async function mockApi(
     if (pathname === '/api/wallet' && method === 'GET') {
       if (session === null) return json(route, 401, errorBody(401, 'unauthorized'))
       if (session.role !== 'BIDDER') return json(route, 403, errorBody(403, 'forbidden'))
+      if (expires('wallet')) {
+        return json(route, 401, errorBody(401, 'unauthorized'))
+      }
+      if (failsAfterPost('wallet')) return json(route, 503, errorBody(503, 'internal_error'))
       if (depositAttempted && options.reread === 'fail') {
         return json(route, 503, errorBody(503, 'internal_error'))
       }
@@ -280,6 +422,121 @@ export async function mockApi(
         scheduled: lots.filter((lot) => lot.phase === 'scheduled').map(summary),
         ended: lots.filter((lot) => lot.phase === 'ended').map(summary),
       })
+    }
+    const bidsPath = pathname.match(/^\/api\/lots\/([0-9a-f-]{36})\/bids(\/mine)?$/)
+    if (bidsPath !== null) {
+      const lot = lots.find((item) => item.id === bidsPath[1])
+      if (lot === undefined) return json(route, 404, errorBody(404, 'not_found'))
+      const state = roomOf(lot.id)
+      if (bidsPath[2] === '/mine' && method === 'GET') {
+        if (session === null || expires('mine')) {
+          return json(route, 401, errorBody(401, 'unauthorized'))
+        }
+        if (session.role !== 'BIDDER') return json(route, 403, errorBody(403, 'forbidden'))
+        if (failsAfterPost('mine')) return json(route, 503, errorBody(503, 'internal_error'))
+        const alias = ALIASES[session.email] ?? OWN_ALIAS
+        const own = state.bids.filter((bid) => bid.bidder_alias === alias)
+        return json(route, 200, {
+          bidder_alias: alias,
+          my_bid_count: own.length,
+          last_bid_cents: own.length === 0 ? null : own[own.length - 1].amount_cents,
+        })
+      }
+      if (bidsPath[2] === undefined && method === 'GET') {
+        if (bidAttempted && options.rereadDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, options.rereadDelayMs))
+        }
+        if (failsAfterPost('room')) return json(route, 503, errorBody(503, 'internal_error'))
+        const script = options.rooms?.[lot.id]?.script
+        const step = script === undefined ? {} : script[Math.min(state.reads, script.length - 1)]
+        state.reads += 1
+        const latest = state.bids[state.bids.length - 1]
+        const asOf = new Date(Date.parse(ROOM_AS_OF) + (state.reads - 1) * 1000).toISOString()
+        const current = latest === undefined ? null : latest.amount_cents
+        return json(route, 200, {
+          as_of: asOf.replace('.000Z', '.000000Z'),
+          phase: step.phase ?? lot.phase,
+          ends_at: step.ends_at ?? state.endsAt,
+          current_bid_cents: current,
+          minimum_next_bid_cents:
+            step.minimum_next_bid_cents !== undefined
+              ? step.minimum_next_bid_cents
+              : current === null
+                ? lot.starting_bid_cents
+                : current + lot.min_increment_cents,
+          bid_count: state.bids.length,
+          bids: state.bids.slice(-50).reverse(),
+        })
+      }
+      if (bidsPath[2] === undefined && method === 'POST') {
+        if (session === null) return json(route, 401, errorBody(401, 'unauthorized'))
+        const owner = session.email
+        const body = request.postDataJSON() as { amount_cents: number }
+        api.bidPosts.push({ lotId: lot.id, body })
+        bidAttempted = true
+        if (options.bidDelayMs !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, options.bidDelayMs))
+        }
+        const mode = options.bid ?? 'accepted'
+        const refusals: Partial<Record<BidMode, [number, string]>> = {
+          below_minimum: [422, 'below_minimum'],
+          insufficient_balance: [422, 'insufficient_balance'],
+          already_winning: [422, 'already_winning'],
+          lot_not_started: [422, 'lot_not_started'],
+          lot_ended: [422, 'lot_ended'],
+          integrity: [409, 'lot_integrity_conflict'],
+          validation: [422, 'validation_error'],
+          unauthorized: [401, 'unauthorized'],
+          forbidden: [403, 'forbidden'],
+        }
+        const refusal = refusals[mode]
+        if (refusal !== undefined) {
+          return json(route, refusal[0], {
+            status: refusal[0],
+            code: refusal[1],
+            message: 'MENSAGEM DO SERVIDOR QUE A TELA NÃO DEVE USAR',
+          })
+        }
+        const record = () => {
+          const sequence = state.bids.length + 1
+          state.bids.push({
+            sequence,
+            bidder_alias: ALIASES[owner] ?? OWN_ALIAS,
+            amount_cents: body.amount_cents,
+            placed_at: '2026-10-25T12:00:09.000000Z',
+          })
+          walletOf(owner).committed = body.amount_cents
+          return state.bids[state.bids.length - 1]
+        }
+        if (mode === 'server_error' || mode === 'network') {
+          if (options.bidAppliedOnError === true) record()
+          return mode === 'network'
+            ? route.abort('failed')
+            : json(route, 500, errorBody(500, 'internal_error'))
+        }
+        if (mode === 'invalid201') {
+          record()
+          api.bidResponses += 1
+          return json(route, 201, { bid: null })
+        }
+        const placed = record()
+        api.bidResponses += 1
+        const extended = mode === 'anti_sniping'
+        if (extended) {
+          state.endsAt = new Date(Date.parse(state.endsAt) + 120_000)
+            .toISOString()
+            .replace('.000Z', 'Z')
+        }
+        return json(route, 201, {
+          bid: placed,
+          lot: {
+            current_bid_cents: placed.amount_cents,
+            ends_at: state.endsAt,
+            anti_sniping_applied: extended,
+          },
+          wallet: walletSnapshot(owner),
+        })
+      }
     }
     const detail = pathname.match(/^\/api\/lots\/([0-9a-f-]{36})$/)
     if (detail !== null && method === 'GET') {

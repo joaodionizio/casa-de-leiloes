@@ -23,7 +23,7 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -37,10 +37,13 @@ from sqlalchemy import (
     SmallInteger,
     Text,
     UniqueConstraint,
+    func,
     select,
+    true,
 )
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.sql import Select
 
 from app.access import NO_STORE, AccessPolicy, api_route, require_bidder
 from app.bid_integrity import (
@@ -61,11 +64,13 @@ from app.bid_rules import (
     LotBidState,
     evaluate_post_wallet,
     evaluate_pre_wallet,
+    minimum_bid_cents,
 )
 from app.config import IntegrityConfig
 from app.db import Base, get_session
 from app.errors import LOT_INTEGRITY_CONFLICT, error_response, error_responses
-from app.lots import database_now, get_integrity_config, lock_lot
+from app.lot_time import LotPhase, lot_phase
+from app.lots import Lot, _clock_cte, database_now, get_integrity_config, lock_lot
 from app.money import MAX_CENTS, Cents
 from app.users import User
 from app.wallet import (
@@ -400,6 +405,146 @@ class PlaceBidResponse(BaseModel):
     wallet: WalletResponse
 
 
+# --- leituras da sala (Story 3.5): sem trava, sem escrita, sem autenticar a cadeia ---
+
+# Só a sala limita o histórico; a auditoria (5.1) mantém o histórico completo.
+ROOM_BID_LIMIT = 50
+
+
+class PublicBidRoomResponse(BaseModel):
+    as_of: datetime
+    phase: LotPhase
+    ends_at: datetime
+    current_bid_cents: int | None
+    minimum_next_bid_cents: int | None
+    bid_count: int
+    bids: list[AcceptedBidResponse]
+
+
+class MyLotBidsResponse(BaseModel):
+    bidder_alias: str
+    my_bid_count: int
+    last_bid_cents: int | None
+
+
+def public_room_statement(lot_id: uuid.UUID) -> Select[Any]:
+    """O único statement da sala pública: o instante, o lote e os 50 lances mais
+    recentes no mesmo snapshot. O `LEFT OUTER JOIN` parte do CTE (uma linha), então há
+    `as_of` mesmo sem lote; o LATERAL sem linhas deixa a lista vazia. Projeta só
+    colunas públicas: nunca `bidder_id`, hashes nem HMAC."""
+    clock = _clock_cte()
+    recent = (
+        select(Bid.sequence, Bid.bidder_alias, Bid.amount_cents, Bid.placed_at)
+        .where(Bid.lot_id == Lot.id)
+        .order_by(Bid.sequence.desc())
+        .limit(ROOM_BID_LIMIT)
+        .lateral("recent")
+    )
+    return (
+        select(
+            clock.c.as_of,
+            Lot.id.label("lot_id"),
+            Lot.starts_at,
+            Lot.ends_at,
+            Lot.starting_bid_cents,
+            Lot.min_increment_cents,
+            Lot.current_bid_cents,
+            Lot.current_leader_id,
+            Lot.bid_count,
+            recent.c.sequence,
+            recent.c.bidder_alias,
+            recent.c.amount_cents,
+            recent.c.placed_at,
+        )
+        .select_from(clock)
+        .outerjoin(Lot, Lot.id == lot_id)
+        .outerjoin(recent, true())
+        .order_by(recent.c.sequence.desc().nulls_last())
+    )
+
+
+def read_public_room(
+    session: Session, lot_id: uuid.UUID
+) -> PublicBidRoomResponse | None:
+    rows = session.execute(public_room_statement(lot_id)).all()
+    first = rows[0]  # o CTE garante ao menos uma linha
+    if first.lot_id is None:
+        return None
+    as_of = first.as_of.astimezone(UTC)
+    current = (
+        None
+        if first.current_bid_cents is None
+        else CurrentBid(
+            amount_cents=first.current_bid_cents, leader_id=first.current_leader_id
+        )
+    )
+    minimum = minimum_bid_cents(
+        LotBidState(
+            starts_at=first.starts_at,
+            ends_at=first.ends_at,
+            starting_bid_cents=first.starting_bid_cents,
+            min_increment_cents=first.min_increment_cents,
+            current=current,
+        )
+    )
+    return PublicBidRoomResponse(
+        as_of=as_of,
+        phase=lot_phase(first.starts_at, first.ends_at, as_of),
+        ends_at=first.ends_at.astimezone(UTC),
+        current_bid_cents=first.current_bid_cents,
+        minimum_next_bid_cents=minimum,
+        bid_count=first.bid_count,
+        bids=[
+            AcceptedBidResponse(
+                sequence=row.sequence,
+                bidder_alias=row.bidder_alias,
+                amount_cents=row.amount_cents,
+                placed_at=row.placed_at.astimezone(UTC),
+            )
+            for row in rows
+            if row.sequence is not None
+        ],
+    )
+
+
+def my_bids_statement(lot_id: uuid.UUID, bidder_alias: str) -> Select[Any]:
+    """Um statement de negócio: existência do lote, contagem completa e valor do maior
+    `sequence` do próprio alias. Não materializa o histórico."""
+    mine = (Bid.lot_id == Lot.id, Bid.bidder_alias == bidder_alias)
+    count = select(func.count()).select_from(Bid).where(*mine).scalar_subquery()
+    last = (
+        select(Bid.amount_cents)
+        .where(*mine)
+        .order_by(Bid.sequence.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    return select(count.label("my_bid_count"), last.label("last_bid_cents")).where(
+        Lot.id == lot_id
+    )
+
+
+def read_my_bids(
+    session: Session,
+    *,
+    lot_id: uuid.UUID,
+    user_id: uuid.UUID,
+    integrity: IntegrityConfig,
+) -> MyLotBidsResponse | None:
+    # Só o alias da sessão é calculado; aliases históricos nunca são recalculados.
+    alias = generate_bidder_alias(
+        lot_id=lot_id, user_id=user_id, pseudonym_secret=integrity.pseudonym_secret
+    )
+    row = session.execute(my_bids_statement(lot_id, alias)).one_or_none()
+    if row is None:
+        return None
+    return MyLotBidsResponse(
+        bidder_alias=alias,
+        my_bid_count=row.my_bid_count,
+        last_bid_cents=row.last_bid_cents,
+    )
+
+
 def place_bid_response(placed: PlacedBid) -> PlaceBidResponse:
     return PlaceBidResponse(
         bid=AcceptedBidResponse(
@@ -418,6 +563,51 @@ def place_bid_response(placed: PlacedBid) -> PlaceBidResponse:
 
 
 def register_bid_routes(app: FastAPI) -> None:
+    @api_route(
+        app,
+        "/api/lots/{lot_id}/bids",
+        methods=["GET"],
+        policy=AccessPolicy.PUBLIC,
+        response_model=PublicBidRoomResponse,
+        responses=error_responses(404, 422),
+    )
+    def public_bid_room(
+        lot_id: uuid.UUID,
+        response: Response,
+        session: Session = Depends(get_session),
+    ) -> PublicBidRoomResponse | Response:
+        result = read_public_room(session, lot_id)
+        session.rollback()  # encerra a transação de leitura antes de responder
+        if result is None:
+            return error_response(404, "not_found", headers=NO_STORE)
+        response.headers["Cache-Control"] = "no-store"
+        return result
+
+    @api_route(
+        app,
+        "/api/lots/{lot_id}/bids/mine",
+        methods=["GET"],
+        policy=AccessPolicy.BIDDER,
+        response_model=MyLotBidsResponse,
+        responses=error_responses(401, 403, 404, 422),
+    )
+    def my_lot_bids(
+        lot_id: uuid.UUID,
+        response: Response,
+        user: User = Depends(require_bidder),
+        session: Session = Depends(get_session),
+        integrity: IntegrityConfig = Depends(get_integrity_config),
+    ) -> MyLotBidsResponse | Response:
+        user_id = user.id
+        result = read_my_bids(
+            session, lot_id=lot_id, user_id=user_id, integrity=integrity
+        )
+        session.rollback()
+        if result is None:
+            return error_response(404, "not_found", headers=NO_STORE)
+        response.headers["Cache-Control"] = "no-store"
+        return result
+
     @api_route(
         app,
         "/api/lots/{lot_id}/bids",

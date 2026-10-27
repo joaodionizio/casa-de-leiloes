@@ -38,6 +38,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/wallet",
         "/api/wallet/deposit",
         "/api/lots/{lot_id}/bids",
+        "/api/lots/{lot_id}/bids/mine",
     ]
 
 
@@ -179,6 +180,7 @@ LOT_DETAIL_PATH = "/api/lots/{lot_id}"
 WALLET_PATH = "/api/wallet"
 DEPOSIT_PATH = "/api/wallet/deposit"
 BIDS_PATH = "/api/lots/{lot_id}/bids"
+MY_BIDS_PATH = "/api/lots/{lot_id}/bids/mine"
 LOT_FIELDS = sorted(
     [
         "id",
@@ -208,9 +210,9 @@ def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
 
     # Story 3.1: a carteira vem depois dos lotes, imediatamente. Story 3.4: o lance
     # (`register_bid_routes`) vem depois da carteira.
-    assert paths[-6:-3] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
-    assert paths[-3:-1] == [WALLET_PATH, DEPOSIT_PATH]
-    assert paths[-1] == BIDS_PATH
+    assert paths[-7:-4] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-4:-2] == [WALLET_PATH, DEPOSIT_PATH]
+    assert paths[-2:] == [BIDS_PATH, MY_BIDS_PATH]
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
 
@@ -449,7 +451,46 @@ def test_place_bid_documents_201_and_the_real_error_envelope(
     assert operation["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/PlaceBidRequest")
-    assert set(api_only.get("/api/openapi.json").json()["paths"][BIDS_PATH]) == {"post"}
+    # Story 3.5: a leitura pública da sala divide o caminho com o POST.
+    assert set(api_only.get("/api/openapi.json").json()["paths"][BIDS_PATH]) == {
+        "get",
+        "post",
+    }
+
+
+def test_room_reads_document_their_schemas_and_errors(api_only: TestClient) -> None:
+    paths = api_only.get("/api/openapi.json").json()["paths"]
+    room = paths[BIDS_PATH]["get"]
+    mine = paths[MY_BIDS_PATH]["get"]
+
+    assert room["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PublicBidRoomResponse")
+    for status in ("404", "422"):
+        assert response_ref(room, status) == ERROR_REF
+    assert "401" not in room["responses"]
+    assert mine["responses"]["200"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/MyLotBidsResponse")
+    for status in ("401", "403", "404", "422"):
+        assert response_ref(mine, status) == ERROR_REF
+    assert set(paths[MY_BIDS_PATH]) == {"get"}
+
+    schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
+    room_fields = [
+        "as_of",
+        "bid_count",
+        "bids",
+        "current_bid_cents",
+        "ends_at",
+        "minimum_next_bid_cents",
+        "phase",
+    ]
+    assert sorted(schemas["PublicBidRoomResponse"]["properties"]) == room_fields
+    assert sorted(schemas["PublicBidRoomResponse"]["required"]) == room_fields
+    my_fields = ["bidder_alias", "last_bid_cents", "my_bid_count"]
+    assert sorted(schemas["MyLotBidsResponse"]["properties"]) == my_fields
+    assert sorted(schemas["MyLotBidsResponse"]["required"]) == my_fields
 
 
 def test_bid_schemas_have_exactly_the_contract_fields_and_no_private_ones(

@@ -71,6 +71,16 @@ export function formatCents(cents: number): string {
   return `R$ ${grouped},${fraction}`
 }
 
+// Centavos → texto para o campo, sem "R$" nem milhar: 130000 → "1300,00". Só texto,
+// sem divisão (usado pelo atalho "Usar o mínimo").
+export function centsToInputText(cents: number): string {
+  if (!Number.isSafeInteger(cents) || cents < 0) {
+    throw new RangeError('cents must be a non-negative safe integer')
+  }
+  const padded = String(cents).padStart(3, '0')
+  return `${padded.slice(0, -2)},${padded.slice(-2)}`
+}
+
 // Sugestão com vírgula para uma entrada com ponto decimal: "333.55" → "333,55",
 // "12.5" → "12,50". Só texto, sem aritmética; sem entrada reconhecível, um exemplo.
 function commaExample(input: string): string {

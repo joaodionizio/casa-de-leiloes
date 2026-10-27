@@ -12,6 +12,7 @@ import { documentTitle } from './brand'
 import LoginPage from './LoginPage'
 import LotCreation from './LotCreation'
 import LotPage from './LotPage'
+import type { Viewer } from './LotBidPanel'
 import MyLots from './MyLots'
 import { NAVIGATION_EVENT, navigate, replaceRoute } from './navigation'
 import NotFoundPage from './NotFoundPage'
@@ -203,12 +204,13 @@ function App() {
     replaceRoute(safeReturnPath(navState.returnTo, user.role))
   }
 
-  // 401 numa rota restrita: a sessão acabou (o cookie venceu). Volta ao login com o
-  // aviso e, depois de entrar, à mesma área.
+  // 401 numa rota restrita ou na sala de um lote: a sessão acabou (o cookie venceu).
+  // Volta ao login com o aviso e, depois de entrar, à mesma área ou ao mesmo lote.
   function handleSessionExpired() {
     setSession({ status: 'anonymous' })
     setSessionNotice(null)
-    const returnTo = isRestrictedRoute(route) ? routePath(route) : '/'
+    const returnTo =
+      isRestrictedRoute(route) || route.kind === 'lot' ? routePath(route) : '/'
     replaceRoute('/login', { returnTo, notice: 'expired' })
   }
 
@@ -226,6 +228,15 @@ function App() {
     setLogoutError(failureMessage(result.failure))
   }
 
+  const lotViewer: Viewer =
+    session.status === 'checking'
+      ? 'checking'
+      : session.status === 'anonymous'
+        ? 'visitor'
+        : session.user.role === 'AUCTIONEER'
+          ? 'auctioneer'
+          : 'bidder'
+
   function renderView() {
     if (route.kind === 'vitrine') {
       return <VitrinePage key={where.id} navState={navState} navigated={navigated} />
@@ -237,6 +248,9 @@ function App() {
           lotId={route.lotId}
           navState={navState}
           navigated={navigated}
+          viewer={lotViewer}
+          owner={session.status === 'authenticated' ? session.user.email : null}
+          onSessionExpired={handleSessionExpired}
         />
       )
     }

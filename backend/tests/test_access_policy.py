@@ -47,6 +47,9 @@ EXPECTED_POLICIES = {
     ("/api/wallet/deposit", "POST", "http"): AccessPolicy.BIDDER,
     # Story 3.4: só o licitante dá lance; o leiloeiro não.
     ("/api/lots/{lot_id}/bids", "POST", "http"): AccessPolicy.BIDDER,
+    # Story 3.5: a sala lê o histórico em público e a participação própria como BIDDER.
+    ("/api/lots/{lot_id}/bids", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/lots/{lot_id}/bids/mine", "GET", "http"): AccessPolicy.BIDDER,
     ("/api/infra-check/ws", None, "websocket"): AccessPolicy.PUBLIC,
 }
 SPA_POLICY = {

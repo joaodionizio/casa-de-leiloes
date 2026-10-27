@@ -303,7 +303,7 @@ def test_other_methods_on_the_bid_path_are_not_allowed(
     lot_id = live_lot(seeded)
     headers = json_headers(HTTPS_ORIGIN)
 
-    assert alice.get(url(lot_id)).status_code == 405
+    # Story 3.5: `GET` passou a ser a leitura pública da sala (test_bid_reads.py).
     for method in ("put", "patch"):
         response = getattr(alice, method)(url(lot_id), json={}, headers=headers)
         assert response.status_code == 405, method

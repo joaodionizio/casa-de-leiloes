@@ -735,6 +735,36 @@ Essa experiência me levou a reservar modelos High para tarefas de alto risco re
 e usar modelos Medium para verificações focadas e consolidação, em vez de usar
 High em todas as etapas.
 
+## Story 3.5 — Dar lance pela sala do lote (26/10/2026)
+
+- **Preparação:** create-story e revisão da spec com Claude Sonnet 5.5; elaboração
+  da spec com GPT-6.1 Sol Medium.
+- **O que a IA fez:** com a story e a spec já aprovadas por mim (D1–D5 fechadas), o Claude
+  Sonnet 5.5 implementou os dois read models (`GET /bids` e `GET /bids/mine`) em `bids.py`, a
+  sala no front (contrato HTTP, feedback por `code`, posição, contagem, envio pendente por
+  conta e lote, painel, formulário e histórico), o ajuste do retorno ao lote em 401, os testes
+  e a nota do README. Não alterou o motor da 3.4 nem tocou em Git ou em `.env*`.
+- **O que revisei/decidi:** as decisões vinham da spec; a revisão do código é minha, antes do
+  commit. O build não abriu decisão nova.
+- **Onde a IA errou e foi corrigida durante o trabalho:** um `Countdown.tsx` e um
+  `countdown.ts` na mesma pasta colidem em sistemas de arquivos que ignoram caixa (o `tsc`
+  acusou); o componente virou `CountdownTimer.tsx`. Alguns testes meus tinham aritmética
+  errada ou cenários impossíveis (um licitante dando lances seguidos recebe `already_winning`)
+  e foram corrigidos no teste, não no código. Um teste da 3.4 que exigia 405 em `GET` no
+  caminho do lance ficou obsoleto por decisão da spec e perdeu só essa linha.
+- **Review e correções:** o code review independente com GPT-6.1 Sol Medium encontrou
+  6 MEDIUM (F-01 a F-06) e 1 LOW opcional (F-07). F-01 a F-06 foram corrigidos e F-07
+  recebeu cobertura adicional. O re-review focado e independente com GPT-6.1 Sol Medium
+  confirmou as correções, considerou a cobertura suficiente e não encontrou regressão
+  concreta: **APROVADA PARA DONE**. A Story 3.5 foi fechada como `done`.
+- **Verificação após as correções:** `VERIFY_E2E=1 ./verify.sh`, exit 0; pytest 1987,
+  npm test 147 e Playwright 168 passaram; Ruff/format, ESLint, tsc, Vite build e docker
+  build OK. O re-review posterior executou apenas teste focado, sem alterar código.
+  O fechamento documental não repetiu essas verificações.
+- **Estratégia atual:** modelos High ficam reservados para problemas realmente críticos;
+  tarefas normais e reviews focados usam Medium/Sonnet quando suficientes. Implementador
+  e reviewer são independentes quando possível.
+
 ## Protótipo navegável de referência do front-end (26/10/2026)
 
 Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até
