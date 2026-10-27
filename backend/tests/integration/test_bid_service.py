@@ -234,7 +234,7 @@ def test_an_ended_lot_refuses_with_lot_ended_and_is_never_settled_or_reopened(
 # --- T-SNIPE (1), (2), (4) ---
 
 
-def test_a_bid_inside_the_window_renews_the_end_to_the_locked_instant_plus_two_minutes(
+def test_a_bid_inside_the_window_extends_the_current_end_with_one_locked_instant(
     seeded: sessionmaker[Session],
     db_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
@@ -255,18 +255,15 @@ def test_a_bid_inside_the_window_renews_the_end_to_the_locked_instant_plus_two_m
     with statement_log(db_engine) as log:
         placed = accepted(run_bid(seeded, lot_id, ALICE, 10_000))
 
-    # AD-5 (revisada em 27/10/2026): novo fim = `now` + 2 min, com o `clock_timestamp()`
-    # lido uma única vez depois da trava do lote (AD-6), o mesmo do `placed_at`.
+    # O instante único decide a janela; a extensão soma ao fim vigente.
     trace = service_trace(log)
     assert trace[:2] == ["lock_lot", "clock"] and trace.count("clock") == 1
     (instant,) = read_instants
     assert placed.anti_sniping_applied is True
     assert placed.placed_at == instant
-    assert placed.ends_at == instant + timedelta(minutes=2)
-    assert lot_state(seeded, lot_id)["ends_at"] == instant + timedelta(minutes=2)
-    # Não é mais o fim lido + 2 min (regra anterior, descartada).
-    assert placed.ends_at != stored_end + timedelta(minutes=2)
-    assert placed.ends_at > stored_end
+    assert placed.ends_at == stored_end + timedelta(minutes=2)
+    assert lot_state(seeded, lot_id)["ends_at"] == placed.ends_at
+    assert placed.ends_at != instant + timedelta(minutes=2)
 
 
 def clock_at(monkeypatch: pytest.MonkeyPatch, instant: Any) -> None:
@@ -278,7 +275,7 @@ def clock_at(monkeypatch: pytest.MonkeyPatch, instant: Any) -> None:
 @pytest.mark.parametrize(
     ("remaining", "applied"),
     [
-        pytest.param(timedelta(minutes=2), False, id="exactly-2min"),
+        pytest.param(timedelta(minutes=2), True, id="exactly-2min"),
         pytest.param(
             timedelta(minutes=2) - timedelta(microseconds=1), True, id="2min-1us"
         ),
@@ -300,7 +297,7 @@ def test_the_window_boundaries_on_the_real_path_use_the_locked_instant(
 
     placed = accepted(run_bid(seeded, lot_id, ALICE, 10_000))
 
-    expected_end = instant + timedelta(minutes=2) if applied else stored_end
+    expected_end = stored_end + timedelta(minutes=2) if applied else stored_end
     assert placed.placed_at == instant
     assert placed.anti_sniping_applied is applied
     assert placed.ends_at == expected_end
@@ -308,7 +305,7 @@ def test_the_window_boundaries_on_the_real_path_use_the_locked_instant(
     assert_authenticated(seeded, lot_id)
 
 
-def test_exactly_two_minutes_remaining_does_not_write_ends_at(
+def test_exactly_two_minutes_remaining_writes_extended_ends_at(
     seeded: sessionmaker[Session],
     db_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
@@ -320,8 +317,9 @@ def test_exactly_two_minutes_remaining_does_not_write_ends_at(
     with statement_log(db_engine) as log:
         placed = accepted(run_bid(seeded, lot_id, ALICE, 10_000))
 
-    assert placed.anti_sniping_applied is False and placed.ends_at == stored_end
-    assert "ends_at" not in lot_update_columns(log)
+    assert placed.anti_sniping_applied is True
+    assert placed.ends_at == stored_end + timedelta(minutes=2)
+    assert "ends_at" in lot_update_columns(log)
 
 
 @pytest.mark.parametrize(
@@ -345,23 +343,21 @@ def test_a_bid_at_or_after_the_end_is_refused_and_never_changes_the_end(
     assert lot_state(seeded, lot_id)["ends_at"] == stored_end
 
 
-def test_a_second_valid_bid_in_the_window_renews_again_from_its_own_instant(
+def test_three_valid_bids_cumulatively_extend_the_persisted_end(
     seeded: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    lot_id = live_lot(seeded, ends_at=db_now(seeded) + timedelta(seconds=60))
-
-    first = accepted(run_bid(seeded, lot_id, ALICE, 10_000))
-    second = accepted(run_bid(seeded, lot_id, BOB, 11_000))
-
-    # O fim da primeira renovação deixa menos de 2 min (o segundo instante é posterior).
-    assert first.anti_sniping_applied is True
-    assert first.ends_at == first.placed_at + timedelta(minutes=2)
-    assert second.placed_at > first.placed_at
-    assert second.anti_sniping_applied is True
-    assert second.ends_at == second.placed_at + timedelta(minutes=2)
-    assert second.ends_at > first.ends_at
-    assert lot_state(seeded, lot_id)["ends_at"] == second.ends_at
-    assert_authenticated(seeded, lot_id)
+    end = db_now(seeded) + timedelta(minutes=10)
+    lot_id = live_lot(seeded, ends_at=end)
+    for index, bidder in enumerate((ALICE, BOB, ALICE), start=1):
+        clock_at(monkeypatch, end - timedelta(seconds=40))
+        placed = accepted(run_bid(seeded, lot_id, bidder, 9_000 + index * 1_000))
+        assert placed.anti_sniping_applied is True
+        assert placed.ends_at == end + timedelta(minutes=2)
+        assert placed.ends_at != placed.placed_at + timedelta(minutes=2)
+        assert lot_state(seeded, lot_id)["ends_at"] == placed.ends_at
+        assert_authenticated(seeded, lot_id)
+        end = placed.ends_at
 
 
 def test_a_bid_outside_the_window_leaves_the_end_alone(

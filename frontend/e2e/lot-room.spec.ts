@@ -127,14 +127,14 @@ test.describe('lance', () => {
     await expect(page.getByLabel('Valor do lance')).toHaveValue('')
   })
 
-  test('anti-sniping: o prazo renovado aparece em fim, aviso e contagem', async ({ page }) => {
-    await mockApi(page, bidder({ bid: 'anti_sniping' }))
+  test('anti-sniping: o prazo prorrogado aparece em fim, aviso e contagem', async ({ page }) => {
+    await mockApi(page, bidder({ rooms: { [LOT]: { ends_at: '2026-10-25T12:01:10Z' } }, bid: 'anti_sniping' }))
     await openRoom(page)
     const before = await page.locator('.lot-page-when').innerText()
 
     await bidAmount(page, '110,00')
 
-    await expect(page.getByText('Prazo renovado: 2 minutos a partir do seu lance.')).toBeVisible()
+    await expect(page.getByText('O prazo do lote foi prorrogado em 2 minutos.')).toBeVisible()
     await expect(page.locator('.lot-page-when')).not.toHaveText(before)
   })
 
@@ -432,18 +432,18 @@ test.describe('rodadas de leitura', () => {
 
   test('anti-sniping: a contagem usa o novo fim antes da releitura', async ({ page }) => {
     await page.clock.install()
-    const api = await mockApi(page, bidder({ rooms: CLOSE, bid: 'anti_sniping' }))
+    const api = await mockApi(page, bidder({ rooms: { [LOT]: { ends_at: '2026-10-25T12:01:10Z' } }, bid: 'anti_sniping' }))
     await openRoom(page)
-    await expect(page.getByRole('timer')).toHaveText('00:03')
+    await expect(page.getByRole('timer')).toHaveText('01:03')
 
     const room = api.hold(ROOM)
     await bidAmount(page, '110,00')
 
-    // Fim renovado (12:02:09) = instante do lance (12:00:09) + 2 min: a contagem parte de 2:00.
-    await expect(page.getByText('Prazo renovado: 2 minutos a partir do seu lance.')).toBeVisible()
-    await expect(page.getByRole('timer')).toHaveText('02:00')
+    // Fim 12:01:10 + 2 min = 12:03:10; lance 12:00:09 → 03:01, não 02:00.
+    await expect(page.getByText('O prazo do lote foi prorrogado em 2 minutos.')).toBeVisible()
+    await expect(page.getByRole('timer')).toHaveText('03:01')
     await page.clock.runFor(1_000)
-    await expect(page.getByRole('timer')).toHaveText('01:59')
+    await expect(page.getByRole('timer')).toHaveText('03:00')
     room.release()
     await expect(page.locator('.bid-minimum')).toHaveText('R$ 120,00')
   })

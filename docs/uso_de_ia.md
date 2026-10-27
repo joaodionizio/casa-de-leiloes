@@ -1008,6 +1008,8 @@ ela e o que a IA fez.
   foi realizado depois: F-01 aprovado com LOW opcional, conforme relatório e
   fechamento oficial acima.
 
+> **Nova revisão humana da AD-5 — 27/10/2026 (antes da Story 4.3).** Decidi voltar à regra cumulativa: com `0 < ends_at - now <= 2 minutos`, cada lance válido acrescenta 2 minutos ao término vigente (`ends_at vigente + 2 minutos`), inclusive com exatamente 2:00 restantes (flag verdadeira). A decisão intermediária `now + 2 minutos` foi revogada. Preservo abaixo o texto original como registro histórico; fórmulas e notas anteriores devem ser lidas na sua data. Lote encerrado nunca reabre; frontend/WebSocket apenas aplicam o `ends_at` persistido. Ver AD-5 em `docs/ARQUITETURA.md`.
+
 ## Revisão da AD-5 (anti-sniping) antes da Story 4.1 — 27/10/2026
 
 - Decisão minha: reli o enunciado e mudei a interpretação do anti-sniping de
@@ -1299,3 +1301,46 @@ Entrega: somente `frontend/e2e/lot-room-ws.spec.ts`, story 4.2,
 final de `LotPage.tsx` e `LotBidPanel.tsx` com a partida confirmou conteúdo
 idêntico. Não detectei arquivo de segredo alterado pela checagem de nomes.
 Nenhum finding interno aberto. Parei pronta para novo re-review focal.
+
+## Correção isolada da AD-5 cumulativa — 27/10/2026
+
+Recebi uma nova decisão humana vinculante antes da Story 4.3: voltar a somar
+2 minutos ao término vigente para cada lance válido na janela inclusiva. Descartei
+novamente a renovação a partir de `now`. Atualizei primeiro a AD-5 e depois a
+documentação de apoio; só então alterarei código e testes. Preservarei os textos
+históricos com nota datada e não alterarei `.memlog.md`.
+
+Escopo aprovado: regra pura, feedback, mocks e expectativas/testes da regra,
+integração e concorrência PostgreSQL. Sem migration ou alteração de dados; sem
+mudanças em canonical bid v1, SHA-256, HMAC, `final_hash`, pseudônimo, carteira,
+compromisso financeiro, relógio autoritativo e ordem de locks. A Story 4.2 não
+contém descrição concreta da fórmula: mantenho sua spec e máquina de conexão.
+A Story 4.3 não será iniciada. Evidência: `docs/EVIDENCIA-ANTI-SNIPING-CUMULATIVO.md`.
+
+Na auditoria desta correção, detectei e desfiz uma inserção acidental da nota em
+três `.memlog.md`: removi exclusivamente a nota inserida, restaurando o conteúdo
+anterior. O glob usado na documentação incluía arquivos ocultos; o resultado final
+preserva os logs históricos. A nota de evidência registra a ocorrência e os testes.
+
+### Resultados finais da correção cumulativa (27/10/2026)
+
+Executei os direcionados finais: **470 passed, 1 warning in 26.90s**, incluindo
+PostgreSQL real, concorrência dentro/fora da nova janela e transporte WebSocket.
+Playwright focal: **2 passed (4.0s)**. A mutação para `now + 2 minutos` produziu
+**3 failed in 0.26s** como esperado; restaurei integralmente a regra cumulativa.
+
+`./verify.sh`: **exit 0**, backend **2083 passed in 105.06s**, frontend **175 pass**.
+`VERIFY_E2E=1 ./verify.sh`: **exit 0**, backend **2083 passed in 103.10s**,
+frontend **175 pass**, Playwright **222 passed (24.3s), 5 skipped**. Ambos
+terminaram com `verify.sh: todas as etapas passaram.`; lint, format, tipos,
+Vite e Docker aprovados. O warning do pytest é de depreciação do TestClient.
+As falhas anteriores corrigidas e os logs reais estão na nota de evidência.
+
+Um revisor interno separado não confirmou defeitos; incorporei sua sugestão LOW
+sobre B fora da nova janela e ele reconferiu os ajustes. O review independente
+solicitado pelo dono permanece para antes do commit. Confirmei ausência de
+migration nova e de alteração de dados históricos, canonical bid v1, SHA-256,
+HMAC, final_hash, pseudônimo, carteira, compromisso financeiro e ordem de locks.
+`ends_at` continua fora do canônico. Não iniciei nenhuma parte da Story 4.3;
+não executei Git nem fiz commit. Arquivos alterados e históricos anotados estão
+listados em `docs/EVIDENCIA-ANTI-SNIPING-CUMULATIVO.md`.

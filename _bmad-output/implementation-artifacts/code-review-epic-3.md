@@ -1,3 +1,5 @@
+> **Nova revisão humana da AD-5 — 27/10/2026.** Decidi voltar à extensão cumulativa (`ends_at vigente + 2 minutos`), inclusive com exatamente 2:00 restantes. A decisão intermediária de renovar a partir do lance foi revogada. Preservo este review como registro da implementação examinada na época; não é review da correção atual.
+
 # Code review Epic 3 — Carteira e lances íntegros
 
 Status: **CORREÇÕES NECESSÁRIAS**. Review agregado do conteúdo atual em sessão independente, 26/10/2026, America/Maceio. Epic 3 permanece **`in-progress`**; Stories 3.1–3.6 permanecem `done`. Nenhum status alterado.

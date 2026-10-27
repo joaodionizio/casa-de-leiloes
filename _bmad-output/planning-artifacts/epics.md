@@ -10,6 +10,9 @@ inputDocuments:
   - código atual (backend/, frontend/, verify.sh)
 ---
 
+> **Nova revisão humana — 27/10/2026:** decidi voltar à AD-5 cumulativa: `ends_at vigente + 2 minutos` para cada lance válido em `0 < restante <= 2 min`, inclusive exatamente 2:00 (flag verdadeira). A decisão intermediária de renovação a partir do lance foi revogada; preservo o texto anterior como histórico.
+
+
 # casa-de-leiloes - Divisão em épicos
 
 ## Visão geral

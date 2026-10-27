@@ -498,13 +498,15 @@ confirma. Qualquer falha desfaz tudo.
 
 Comportamentos que podem surpreender (lances):
 
-- **Anti-sniping renovável e sem teto:** um lance aceito com `0 < restante <= 2 min` leva o
-  fim a **`now` + 2 minutos**, com o mesmo instante `clock_timestamp()` lido sob a trava
-  (AD-5, revisada em 27/10/2026); cada novo lance válido na janela renova o prazo a partir
-  de si. Com exatamente 2 minutos restantes o fim não muda e `anti_sniping_applied` fica
-  falso. Lance recusado nunca altera o fim. Depois do fim, o lote nunca reabre; o lance
-  recebe `lot_ended`. Lotes e lances anteriores a esta revisão não foram alterados. Esta
-  etapa só recusa: não fecha nem liquida (isso é da Story 4.3/4.4).
+- **Anti-sniping cumulativo e sem teto:** um lance aceito com `0 < restante <= 2 min`
+  acrescenta **2 minutos ao término vigente** (`ends_at vigente + 2 minutos`), inclusive
+  com exatamente 2 minutos restantes (`anti_sniping_applied = true`). Exemplo: fim
+  15:00, lance 14:59:20 → 15:02; outro lance 15:01:10 → 15:04. A janela usa o mesmo
+  `clock_timestamp()` lido sob a trava. Não prometo exatamente 2 minutos restantes.
+  Revisei novamente a AD-5 em 27/10/2026, por decisão humana, revogando a decisão
+  intermediária de renovar a partir do instante do lance. Lance recusado nunca altera
+  o fim; `now >= ends_at` recebe `lot_ended` e nunca reabre. Não há migration nem
+  alteração retroativa dos dados. Esta etapa só recusa: não fecha nem liquida.
 - **409 de integridade:** antes de qualquer regra, o servidor reconstrói a cadeia SHA-256
   do lote, confere a âncora HMAC e vincula o líder e o lance atual ao último lance. Qualquer
   adulteração (alteração, inserção, remoção do meio, truncamento, recálculo sem o segredo)

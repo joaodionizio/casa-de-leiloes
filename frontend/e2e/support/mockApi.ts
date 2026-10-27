@@ -636,10 +636,11 @@ export async function mockApi(
         }
         const placed = record()
         api.bidResponses += 1
-        const extended = mode === 'anti_sniping'
+        const remaining = Date.parse(state.endsAt) - Date.parse(placed.placed_at)
+        const extended = mode === 'anti_sniping' && remaining > 0 && remaining <= 120_000
         if (extended) {
-          // AD-5 (revisada em 27/10/2026): o novo fim é `placed_at` + 2 min.
-          state.endsAt = new Date(Date.parse(placed.placed_at) + 120_000)
+          // AD-5: cada lance válido na janela soma ao término vigente.
+          state.endsAt = new Date(Date.parse(state.endsAt) + 120_000)
             .toISOString()
             .replace('.000Z', 'Z')
         }

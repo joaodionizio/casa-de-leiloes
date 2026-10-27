@@ -22,7 +22,7 @@ from app.lot_time import LotPhase, check_lot_window, lot_phase, require_aware
 from app.money import MAX_CENTS
 
 ANTI_SNIPING_WINDOW = timedelta(minutes=2)  # AD-5: 0 < restante <= janela
-ANTI_SNIPING_RENEWAL = timedelta(minutes=2)  # AD-5: o fim alvo é `now` + renovação
+ANTI_SNIPING_EXTENSION = timedelta(minutes=2)  # AD-5: soma ao término vigente
 
 
 class BidRefusal(StrEnum):
@@ -201,13 +201,10 @@ def evaluate_post_wallet(
     # `ends_at` e `now` de `eligible` já estão em UTC: a subtração é entre instantes.
     remaining = eligible.ends_at - eligible.now
     if timedelta(0) < remaining <= ANTI_SNIPING_WINDOW:
-        # Renovação (AD-5, revisada em 27/10/2026): o fim alvo é `now` + 2 min, com o
-        # mesmo `now` lido sob a trava; cada lance na janela renova o prazo, sem teto.
-        # Com exatamente 2 min restantes o alvo é o próprio `ends_at`: não há mudança
-        # efetiva e `anti_sniping_applied` fica falso. O fim nunca diminui.
-        target = eligible.now + ANTI_SNIPING_RENEWAL
-        if target > eligible.ends_at:
-            return BidAccepted(ends_at=target, anti_sniping_applied=True)
+        return BidAccepted(
+            ends_at=eligible.ends_at + ANTI_SNIPING_EXTENSION,
+            anti_sniping_applied=True,
+        )
     return BidAccepted(ends_at=eligible.ends_at, anti_sniping_applied=False)
 
 

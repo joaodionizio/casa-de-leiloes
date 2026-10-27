@@ -1,3 +1,6 @@
+
+> **Nova revisão humana da AD-5 — 27/10/2026 (antes da Story 4.3).** Decidi voltar à regra cumulativa: com `0 < ends_at - now <= 2 minutos`, cada lance válido acrescenta 2 minutos ao término vigente (`ends_at vigente + 2 minutos`), inclusive com exatamente 2:00 restantes (flag verdadeira). A decisão intermediária `now + 2 minutos` foi revogada. Preservo abaixo o texto original como registro histórico; fórmulas e notas anteriores devem ser lidas na sua data. Lote encerrado nunca reabre; frontend/WebSocket apenas aplicam o `ends_at` persistido. Ver AD-5 em `docs/ARQUITETURA.md`.
+
 # Testes proporcionais e critérios refinados
 
 Decidi testar os novos contratos e fluxos de UI. Descartei repetir concorrência financeira, rollback, ordem de locks, hash/HMAC e matriz de domínio já cobertos pela 3.4. A coerência do snapshot público vem de a leitura ser uma única instrução (B8) e das invariantes de B3; não simulo commit no meio de uma instrução.

@@ -80,10 +80,10 @@ que não mudam a arquitetura.
 - AD-4 React + Vite + TypeScript simples e explicável: interface/type, unions
   simples, `Promise<T>`, contratos HTTP e eventos WebSocket tipados. Evitar
   generics complexos, conditional/mapped types. Sem JavaScript puro.
-- AD-5 Anti-sniping (revisada em 27/10/2026): lance válido com `0 < restante <= 2 min`
-  leva o fim a `now + 2 min` (mesmo `now` da trava); com exatamente 2 min não há
-  mudança e a flag fica falsa; depois do fim nunca reabre. README: "Comportamentos que
-  podem surpreender".
+- AD-5 Anti-sniping (revisada novamente em 27/10/2026): lance válido com
+  `0 < restante <= 2 min` soma 2 min ao `ends_at` vigente, inclusive exatamente
+  2:00 restantes (flag verdadeira); depois do fim nunca reabre. Usa o mesmo `now`
+  da trava. A decisão intermediária `now + 2 min` foi revogada; histórico na AD-5.
 - AD-6 Hora: `clock_timestamp()` do PostgreSQL, lido depois da trava do lote,
   um único instante por operação. O navegador nunca decide.
 - AD-7 Lance: uma única transação, 18 passos (ver ARQUITETURA.md). Depois da trava e

@@ -170,6 +170,7 @@ def test_real_window_and_total_and_temporal_phases(setup):
 def test_commit_barrier_two_clients_isolation_and_ant_sniping(setup, monkeypatch):
     client, factory = setup
     identifier = live_lot(factory, ends_at=db_now(factory) + timedelta(seconds=90))
+    original_end = lot_state(factory, identifier)["ends_at"]
     other_id = live_lot(factory)
     assert login(client, HTTPS_ORIGIN, BIDDER_EMAIL).status_code == 200
     reached, release = threading.Event(), threading.Event()
@@ -229,7 +230,10 @@ def test_commit_barrier_two_clients_isolation_and_ant_sniping(setup, monkeypatch
         assert one["room"]["bid_count"] == 1
         assert_public_frame(one, factory, identifier)
         placed = response.json()["bid"]
-        assert datetime.fromisoformat(one["room"]["ends_at"]) == datetime.fromisoformat(
+        assert datetime.fromisoformat(
+            one["room"]["ends_at"]
+        ) == original_end + timedelta(minutes=2)
+        assert datetime.fromisoformat(one["room"]["ends_at"]) != datetime.fromisoformat(
             placed["placed_at"]
         ) + timedelta(minutes=2)
         assert (

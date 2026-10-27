@@ -222,10 +222,10 @@ test('countdown zero and manual REST round cannot undo a concurrent WS extension
   await expect.poll(() => api.count(ROOM)).toBe(2)
   await page.clock.runFor(2000)
   expect(api.count(ROOM)).toBe(2)
-  send(socket!, state(2, { ends_at: '2026-10-25T14:33:00.123456Z' }))
+  send(socket!, state(2, { ends_at: '2026-10-25T14:33:01.123456Z' }))
   held.release()
   await expect(page.locator('.bid-current')).toHaveText('R$\u00a0120,00')
-  await expect(page.getByRole('timer')).toHaveText('02:00')
+  await expect(page.getByRole('timer')).toHaveText('02:01')
   await expect(page.getByText('Confirmando encerramento com o servidor…')).toHaveCount(0)
 })
 

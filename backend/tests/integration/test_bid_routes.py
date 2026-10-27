@@ -214,7 +214,7 @@ def test_an_outbid_over_http_returns_the_state_after_the_release(
     assert_invariants(seeded)
 
 
-def test_an_accepted_bid_inside_the_window_reports_the_renewed_end(
+def test_an_accepted_bid_inside_the_window_reports_the_extended_end(
     alice: TestClient, seeded: sessionmaker[Session]
 ) -> None:
     lot_id = live_lot(seeded, ends_at=db_now(seeded) + timedelta(seconds=60))
@@ -223,11 +223,10 @@ def test_an_accepted_bid_inside_the_window_reports_the_renewed_end(
     body = bid(alice, lot_id, 10_000).json()
 
     assert body["lot"]["anti_sniping_applied"] is True
-    # Renovação (AD-5, 27/10/2026): `placed_at` + 2 min, não o fim anterior + 2 min.
-    assert instant(body["lot"]["ends_at"]) == instant(body["bid"]["placed_at"]) + (
+    assert instant(body["lot"]["ends_at"]) == stored_end + timedelta(minutes=2)
+    assert instant(body["lot"]["ends_at"]) != instant(body["bid"]["placed_at"]) + (
         timedelta(minutes=2)
     )
-    assert instant(body["lot"]["ends_at"]) != stored_end + timedelta(minutes=2)
 
 
 # --- recusas de negócio: 422 com o código de domínio (CA2) ---

@@ -227,7 +227,7 @@ Extrair:
 - posição do usuário clara;
 - histórico como prova de transparência.
 
-Não copiar regras temporais da Catawiki. Vale AD-5 (revisada em 27/10/2026): **lance válido na janela leva o fim a `now` + 2 min**.
+Não copiar regras temporais da Catawiki. Vale AD-5 (revisada novamente em 27/10/2026): **lance válido na janela inclusiva soma 2 min ao `ends_at` vigente**. A decisão intermediária de renovação a partir do lance foi revogada; preservada no histórico da AD-5.
 
 ### Superbid — muitos lotes ao vivo
 

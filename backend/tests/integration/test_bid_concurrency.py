@@ -226,34 +226,55 @@ def test_the_second_bid_arriving_over_http_sees_the_first(
     assert_invariants(seeded)
 
 
-# --- T-SNIPE (3): o segundo lê o fim que o primeiro renovou ---
+# --- T-SNIPE (3): o segundo lê o fim que o primeiro prorrogou ---
 
 
-def test_the_second_bid_reads_the_end_renewed_by_the_first_and_renews_again(
-    seeded: sessionmaker[Session], db_engine: Engine
+@pytest.mark.parametrize(
+    "wait_for_window", [False, True], ids=["outside-new-window", "inside-new-window"]
+)
+def test_the_second_bid_reads_the_extended_end_under_real_lock(
+    seeded: sessionmaker[Session],
+    db_engine: Engine,
+    wait_for_window: bool,
 ) -> None:
-    ends_at = db_now(seeded) + timedelta(seconds=60)
+    ends_at = db_now(seeded) + timedelta(seconds=5 if wait_for_window else 60)
     lot_id = live_lot(seeded, ends_at=ends_at)
     outcome: list[Any] = []
+
+    def enter_extended_window() -> None:
+        # B já está bloqueado na trava real. Espero o fim original passar para
+        # que seu clock_timestamp pós-trava entre na janela do fim prorrogado.
+        # Não troco relógio, não altero dados nem simulo ordem de aquisição.
+        with seeded() as observer:
+            observer.execute(
+                text(
+                    "SELECT pg_sleep(GREATEST(EXTRACT(EPOCH FROM "
+                    "(CAST(:end AS timestamptz) - clock_timestamp())), 0))"
+                ),
+                {"end": ends_at},
+            )
 
     first = overlapped(
         seeded,
         db_engine,
         lambda s: hold_bid(s, lot_id, ALICE, 10_000),
         b_service(seeded, lot_id, BOB, 11_000, outcome),
+        while_blocked=enter_extended_window if wait_for_window else None,
     )
 
-    # AD-5 (revisada em 27/10/2026): o fim de A é `A.placed_at + 2 min`. B, que esperou
-    # a trava e leu o instante depois do commit de A, vê menos de 2 min restantes e
-    # renova de novo, a partir do próprio instante.
     assert first.anti_sniping_applied is True
-    assert first.ends_at == first.placed_at + timedelta(minutes=2)
+    assert first.ends_at == ends_at + timedelta(minutes=2)
     (second,) = outcome
     assert isinstance(second, PlacedBid)
     assert second.placed_at > first.placed_at
-    assert second.anti_sniping_applied is True
-    assert second.ends_at == second.placed_at + timedelta(minutes=2)
-    assert second.ends_at > first.ends_at
+    assert second.anti_sniping_applied is wait_for_window
+    expected = (
+        first.ends_at + timedelta(minutes=2) if wait_for_window else first.ends_at
+    )
+    assert second.ends_at == expected
+    assert second.ends_at != second.placed_at + timedelta(minutes=2)
+    assert_authenticated(seeded, lot_id)
+    assert_invariants(seeded)
     assert lot_state(seeded, lot_id)["ends_at"] == second.ends_at
 
 

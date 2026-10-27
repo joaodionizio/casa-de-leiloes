@@ -319,7 +319,7 @@ PERIOD_GRID = [
     pytest.param(START - MICRO, BidRefusal.LOT_NOT_STARTED, id="start-1us"),
     pytest.param(START, accepted(), id="start"),
     pytest.param(START + timedelta(hours=3), accepted(), id="middle"),
-    pytest.param(END - MICRO, accepted(END - MICRO + TWO_MIN, True), id="end-1us"),
+    pytest.param(END - MICRO, accepted(END + TWO_MIN, True), id="end-1us"),
     pytest.param(END, BidRefusal.LOT_ENDED, id="end"),
     pytest.param(END + MICRO, BidRefusal.LOT_ENDED, id="end+1us"),
     pytest.param(
@@ -370,12 +370,12 @@ def test_period_with_same_tzinfo_in_an_ambiguous_hour() -> None:
         lot, attempt(STARTING), MAX_CENTS, datetime(2026, 11, 1, 1, 30, tzinfo=tz)
     )
     assert result == accepted(datetime(2026, 11, 1, 5, 10, tzinfo=UTC), False)
-    # 02:09 com fold=0 é 05:09Z: dentro da janela de 2 minutos; o fim alvo é
-    # 05:09Z + 2 min.
+    # 02:09 com fold=0 é 05:09Z: dentro da janela; o fim vigente
+    # 05:10Z recebe mais 2 min.
     result = evaluate_bid(
         lot, attempt(STARTING), MAX_CENTS, datetime(2026, 11, 1, 2, 9, tzinfo=tz)
     )
-    assert result == accepted(datetime(2026, 11, 1, 5, 11, tzinfo=UTC), True)
+    assert result == accepted(datetime(2026, 11, 1, 5, 12, tzinfo=UTC), True)
 
 
 @pytest.mark.parametrize(
@@ -818,15 +818,15 @@ def snipe(remaining: timedelta, **lot_kwargs: object) -> BidAccepted | BidRefusa
     [
         pytest.param(timedelta(hours=1), accepted(END, False), id="1h"),
         pytest.param(TWO_MIN + MICRO, accepted(END, False), id="2min+1us"),
-        # Exatamente 2 min: o alvo `now + 2 min` é o próprio `ends_at`; sem mudança.
-        pytest.param(TWO_MIN, accepted(END, False), id="2min"),
-        pytest.param(TWO_MIN - MICRO, accepted(END + MICRO, True), id="2min-1us"),
+        # Janela inclusiva: exatamente 2 min também somam ao término vigente.
+        pytest.param(TWO_MIN, accepted(END + TWO_MIN, True), id="2min"),
+        pytest.param(TWO_MIN - MICRO, accepted(END + TWO_MIN, True), id="2min-1us"),
         pytest.param(
             timedelta(minutes=1),
-            accepted(END + TWO_MIN - timedelta(minutes=1), True),
+            accepted(END + TWO_MIN, True),
             id="1min",
         ),
-        pytest.param(MICRO, accepted(END - MICRO + TWO_MIN, True), id="1us"),
+        pytest.param(MICRO, accepted(END + TWO_MIN, True), id="1us"),
     ],
 )
 def test_anti_sniping_window(remaining: timedelta, expected: BidAccepted) -> None:
@@ -841,35 +841,19 @@ def test_outside_the_window_the_end_does_not_change() -> None:
         assert result.anti_sniping_applied is False
 
 
-def test_exactly_two_minutes_remaining_keeps_the_end_and_does_not_flag() -> None:
-    result = snipe(TWO_MIN)
-    assert isinstance(result, BidAccepted)
-    assert result.ends_at == END
-    assert result.anti_sniping_applied is False
+def test_exactly_two_minutes_remaining_extends_and_flags() -> None:
+    assert snipe(TWO_MIN) == accepted(END + TWO_MIN, True)
 
 
-def test_one_minute_remaining_renews_to_now_plus_two_minutes() -> None:
+def test_extension_is_from_current_end_not_from_now() -> None:
     now = END - timedelta(minutes=1)
     result = snipe(timedelta(minutes=1))
-    assert isinstance(result, BidAccepted)
-    assert result.ends_at == now + TWO_MIN
-    assert result.ends_at == END + timedelta(minutes=1)
-    assert result.anti_sniping_applied is True
+    assert result == accepted(END + TWO_MIN, True)
+    assert result.ends_at != now + TWO_MIN
 
 
-def test_one_microsecond_remaining_renews_to_now_plus_two_minutes() -> None:
-    now = END - MICRO
-    result = snipe(MICRO)
-    assert isinstance(result, BidAccepted)
-    assert result.ends_at == now + TWO_MIN
-    assert result.anti_sniping_applied is True
-
-
-def test_the_renewed_end_is_never_earlier_than_the_current_end() -> None:
-    for remaining in (TWO_MIN, TWO_MIN - MICRO, timedelta(minutes=1), MICRO):
-        result = snipe(remaining)
-        assert isinstance(result, BidAccepted)
-        assert result.ends_at >= END
+def test_one_microsecond_remaining_extends_current_end() -> None:
+    assert snipe(MICRO) == accepted(END + TWO_MIN, True)
 
 
 @pytest.mark.parametrize("now", [END, END + MICRO])
@@ -878,26 +862,60 @@ def test_end_instant_and_after_are_ended(now: datetime) -> None:
     assert result is BidRefusal.LOT_ENDED
 
 
-def test_a_second_valid_bid_renews_again_to_its_own_instant_plus_two_minutes() -> None:
-    first_now = END - timedelta(minutes=1)
-    first = snipe(timedelta(minutes=1))
-    assert isinstance(first, BidAccepted)
-    assert first.ends_at == first_now + TWO_MIN
-    second_now = first.ends_at - timedelta(seconds=30)
-    second = evaluate_bid(
-        lot_state(ends_at=first.ends_at, current=leader(BIDDER, 10_000)),
+@pytest.mark.parametrize(
+    ("now_text", "expected_text", "applied"),
+    [
+        ("14:57:59", "15:00:00", False),
+        ("14:58:00", "15:02:00", True),
+        ("14:59:20", "15:02:00", True),
+    ],
+)
+def test_human_decision_examples(now_text, expected_text, applied) -> None:
+    end = datetime.fromisoformat("2026-10-27T15:00:00+00:00")
+    now = datetime.fromisoformat(f"2026-10-27T{now_text}+00:00")
+    expected = datetime.fromisoformat(f"2026-10-27T{expected_text}+00:00")
+    result = evaluate_bid(lot_state(ends_at=end), attempt(10_000), 10_000, now)
+    assert result == accepted(expected, applied)
+
+
+def test_extension_is_cumulative_across_three_valid_bids() -> None:
+    end = datetime.fromisoformat("2026-10-27T15:00:00+00:00")
+    current = None
+    for index, (at, expected) in enumerate(
+        [("14:59:20", "15:02:00"), ("15:01:10", "15:04:00"), ("15:03:30", "15:06:00")]
+    ):
+        now = datetime.fromisoformat(f"2026-10-27T{at}+00:00")
+        bidder = BIDDER if index % 2 == 0 else OTHER
+        amount = 10_000 + index * 1_000
+        result = evaluate_bid(
+            lot_state(ends_at=end, current=current),
+            attempt(amount, bidder),
+            MAX_CENTS,
+            now,
+        )
+        assert result == accepted(
+            datetime.fromisoformat(f"2026-10-27T{expected}+00:00"), True
+        )
+        assert result.ends_at != now + TWO_MIN
+        end = result.ends_at
+        current = leader(bidder, amount)
+
+
+def test_bid_near_extended_end_adds_to_current_end() -> None:
+    end = datetime.fromisoformat("2026-10-27T15:02:00+00:00")
+    result = evaluate_bid(
+        lot_state(ends_at=end, current=leader(BIDDER, 10_000)),
         attempt(11_000, OTHER),
         11_000,
-        second_now,
+        end - timedelta(seconds=1),
     )
-    assert second == accepted(second_now + TWO_MIN, True)
-    assert second.ends_at > first.ends_at
+    assert result == accepted(datetime.fromisoformat("2026-10-27T15:04:00+00:00"), True)
 
 
 def test_short_lot_accepted_at_start_is_extended() -> None:
     lot = lot_state(starts_at=START, ends_at=START + timedelta(seconds=90))
     result = evaluate_bid(lot, attempt(10_000), 10_000, START)
-    assert result == accepted(START + TWO_MIN, True)
+    assert result == accepted(lot.ends_at + TWO_MIN, True)
 
 
 @pytest.mark.parametrize(
@@ -938,7 +956,7 @@ def test_accepted_end_is_utc() -> None:
     )
     assert isinstance(inside, BidAccepted)
     assert inside.ends_at.utcoffset() == timedelta(0)
-    assert inside.ends_at == END + timedelta(minutes=1)
+    assert inside.ends_at == END + TWO_MIN
     outside = evaluate_bid(
         lot,
         attempt(10_000),
