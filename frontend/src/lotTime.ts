@@ -39,3 +39,18 @@ export function formatDateTime(iso: string): string {
   if (Number.isNaN(moment.getTime())) return iso
   return dateTimeFormat.format(moment)
 }
+
+// Hora do dia com segundos ("14:30:05"), no fuso do navegador: "Situação atualizada às"
+// e a hora de cada lance. Campos explícitos, sem `timeStyle`.
+const clockFormat = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+
+export function formatClock(iso: string): string {
+  const moment = new Date(iso)
+  if (Number.isNaN(moment.getTime())) return iso
+  return clockFormat.format(moment)
+}

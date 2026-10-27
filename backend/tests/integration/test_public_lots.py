@@ -39,6 +39,7 @@ from tests.lot_support import (
     db_now,
     fixed_as_of,
     insert_lot,
+    integrity_secrets,
     lot_rows,
     normalized,
     statement_recorder,
@@ -329,7 +330,7 @@ def test_the_seeded_demo_lot_appears_live_like_a_manual_lot(
     auctioneer_id: uuid.UUID,
 ) -> None:
     with seeded() as session:
-        seed.run_seed(session)
+        seed.run_seed(session, audit_hmac_secret=integrity_secrets()[0])
         session.commit()
     manual = insert_lot(seeded, auctioneer_id=auctioneer_id)
     old_demo = insert_lot(

@@ -23,6 +23,22 @@ export interface LotResponse {
   created_at: string
 }
 
+// Item da lista do leiloeiro (Story 3.6, D7): o `LotResponse` mais o cancelamento, a
+// contagem persistida (dica de UX, não autenticada) e a fase temporal que o servidor
+// calculou com o `as_of`. O 201 da criação continua devolvendo `LotResponse`.
+export type MyLotPhase = 'scheduled' | 'live' | 'ended'
+
+export interface MyLotResponse extends LotResponse {
+  cancelled_at: string | null
+  bid_count: number
+  phase: MyLotPhase
+}
+
+export interface MyLotsBody {
+  as_of: string
+  items: MyLotResponse[]
+}
+
 export interface CreateLotRequest {
   external_id: number
   starting_bid_cents: number
@@ -59,8 +75,24 @@ export type CreateLotResult =
 export type MyLotsFailure = 'unauthorized' | 'forbidden' | 'server'
 
 export type MyLotsResult =
-  | { ok: true; items: LotResponse[] }
+  | { ok: true; asOf: string; items: MyLotResponse[] }
   | { ok: false; failure: MyLotsFailure }
+
+// Falhas do POST de cancelamento. As de negócio (`has_bids`, `ended`, `integrity`,
+// `forbidden`, `not_found`, `unauthorized`) o servidor decidiu; `ambiguous` é rede, 5xx,
+// corpo fora do contrato ou código desconhecido: o resultado é incerto.
+export type CancelLotFailure =
+  | 'has_bids'
+  | 'ended'
+  | 'integrity'
+  | 'forbidden'
+  | 'not_found'
+  | 'unauthorized'
+  | 'ambiguous'
+
+export type CancelLotResult =
+  | { ok: true; cancelledAt: string }
+  | { ok: false; failure: CancelLotFailure }
 
 const LOT_FIELDS: LotField[] = [
   'starting_bid_cents',
@@ -102,10 +134,33 @@ function isLotResponse(value: unknown): value is LotResponse {
   )
 }
 
-function isMyLotsBody(value: unknown): value is { items: LotResponse[] } {
+// ISO 8601 com fuso, como o servidor serializa (a fração pode faltar quando é zero).
+const TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/
+
+function isTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' && TIMESTAMP_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
+  )
+}
+
+function isMyLot(value: unknown): value is MyLotResponse {
+  if (!isLotResponse(value)) return false
+  const lot = value as unknown as Record<string, unknown>
+  return (
+    (lot.cancelled_at === null || isTimestamp(lot.cancelled_at)) &&
+    typeof lot.bid_count === 'number' &&
+    Number.isSafeInteger(lot.bid_count) &&
+    lot.bid_count >= 0 &&
+    (lot.phase === 'scheduled' || lot.phase === 'live' || lot.phase === 'ended')
+  )
+}
+
+// Uma lista sem `as_of` (contrato antigo) não é sucesso nem lista vazia.
+export function isMyLotsBody(value: unknown): value is MyLotsBody {
   if (typeof value !== 'object' || value === null) return false
-  const items = (value as { items?: unknown }).items
-  return Array.isArray(items) && items.every(isLotResponse)
+  const body = value as { as_of?: unknown; items?: unknown }
+  return isTimestamp(body.as_of) && Array.isArray(body.items) && body.items.every(isMyLot)
 }
 
 function errorCode(value: unknown): string | null {
@@ -190,5 +245,53 @@ export async function fetchMyLots(signal: AbortSignal): Promise<MyLotsResult> {
   if (response.status !== 200) return { ok: false, failure: 'server' }
   const body = await readJson(response)
   if (!isMyLotsBody(body)) return { ok: false, failure: 'server' }
-  return { ok: true, items: body.items }
+  return { ok: true, asOf: body.as_of, items: body.items }
+}
+
+// Classifica uma resposta já lida do POST. Separado do `fetch` para o teste puro. Só o
+// `code` decide; o `message` do servidor nunca é lido. Só o 200 com `id` do lote pedido
+// e `cancelled_at` válido é sucesso.
+export function classifyCancelResponse(
+  status: number,
+  body: unknown,
+  lotId: string,
+): CancelLotResult {
+  if (status === 200) {
+    const data = (typeof body === 'object' && body !== null ? body : {}) as {
+      id?: unknown
+      cancelled_at?: unknown
+    }
+    if (data.id !== lotId || !isTimestamp(data.cancelled_at)) {
+      return { ok: false, failure: 'ambiguous' }
+    }
+    return { ok: true, cancelledAt: data.cancelled_at }
+  }
+  const code = errorCode(body)
+  if (status === 422 && code === 'lot_has_bids') return { ok: false, failure: 'has_bids' }
+  if (status === 422 && code === 'lot_ended') return { ok: false, failure: 'ended' }
+  if (status === 409 && code === 'lot_integrity_conflict') {
+    return { ok: false, failure: 'integrity' }
+  }
+  if (status === 403 && code === 'forbidden') return { ok: false, failure: 'forbidden' }
+  if (status === 404 && code === 'not_found') return { ok: false, failure: 'not_found' }
+  if (status === 401) return { ok: false, failure: 'unauthorized' }
+  // Rede, 5xx, 403/415 de proteção (csrf_*), 422 de validação, código desconhecido ou
+  // qualquer outra coisa: não dá para afirmar o resultado.
+  return { ok: false, failure: 'ambiguous' }
+}
+
+// Um único `fetch`, sem corpo, sem retry: o servidor é a autoridade e idempotente, mas o
+// cliente nunca reenvia sozinho.
+export async function cancelLot(lotId: string): Promise<CancelLotResult> {
+  let response: Response
+  try {
+    response = await fetch(`/api/lots/${encodeURIComponent(lotId)}/cancel`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch {
+    return { ok: false, failure: 'ambiguous' }
+  }
+  return classifyCancelResponse(response.status, await readJson(response), lotId)
 }

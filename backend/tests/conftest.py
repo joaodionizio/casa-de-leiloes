@@ -18,6 +18,15 @@ from sqlalchemy.orm import Session, sessionmaker
 # sobrescrito, nunca o do backend/.env. Precisa existir antes de qualquer import
 # de `app.main`, que cria a aplicação no import. O valor nunca é impresso.
 os.environ["JWT_SECRET"] = secrets.token_urlsafe(48)
+# Segredos de integridade (Story 3.4, P5): também gerados a cada execução, sempre
+# sobrescritos, distintos entre si e do JWT_SECRET, e nunca impressos.
+os.environ["AUDIT_HMAC_SECRET"] = secrets.token_urlsafe(48)
+os.environ["PSEUDONYM_SECRET"] = secrets.token_urlsafe(48)
+assert (
+    len({os.environ["JWT_SECRET"], os.environ["AUDIT_HMAC_SECRET"]}) == 2
+    and len({os.environ["JWT_SECRET"], os.environ["PSEUDONYM_SECRET"]}) == 2
+    and os.environ["AUDIT_HMAC_SECRET"] != os.environ["PSEUDONYM_SECRET"]
+)
 
 from app.config import get_origin_settings, get_settings  # noqa: E402
 from app.db import create_db_engine, create_session_factory  # noqa: E402
@@ -153,24 +162,26 @@ def db_session_factory(db_engine: Engine) -> sessionmaker[Session]:
 
 @pytest.fixture
 def clean_users(db_engine: Engine, test_database_url: str) -> None:
-    """Esvazia `lots` e `users` no banco _test antes do teste que grava usuários,
-    pela mesma guarda de banco de teste do reset da sessão.
+    """Esvazia `bids`, `wallets`, `lots` e `users` no banco _test antes do teste que
+    grava usuários, pela mesma guarda de banco de teste do reset da sessão.
 
-    `lots` referencia `users` (Story 2.4, D11): o PostgreSQL recusa `TRUNCATE users`
-    sozinho. Os dois vão num comando só, sem `CASCADE`, que esconderia uma tabela nova
-    que referencie `users` sem que o teste soubesse."""
+    `lots`, `wallets` e `bids` referenciam `users` (Story 2.4, D11; 3.1; 3.4): o
+    PostgreSQL recusa `TRUNCATE users` sozinho. As quatro vão num comando só, sem
+    `CASCADE`, que esconderia uma tabela nova que referencie `users` sem que o teste
+    soubesse."""
     with db_engine.begin() as connection:
         assert_connection_is_test_database(
             connection, make_url(test_database_url).database or ""
         )
-        connection.execute(text("TRUNCATE lots, users"))
+        connection.execute(text("TRUNCATE bids, wallets, lots, users"))
 
 
 @pytest.fixture
 def clean_lots(db_engine: Engine, test_database_url: str) -> None:
-    """Esvazia `lots` no banco _test, pela mesma guarda."""
+    """Esvazia `bids` e `lots` no banco _test, pela mesma guarda (`bids` referencia
+    `lots`; sem `CASCADE`)."""
     with db_engine.begin() as connection:
         assert_connection_is_test_database(
             connection, make_url(test_database_url).database or ""
         )
-        connection.execute(text("TRUNCATE lots"))
+        connection.execute(text("TRUNCATE bids, lots"))

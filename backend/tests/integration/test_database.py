@@ -54,7 +54,7 @@ def test_test_database_is_at_head_with_the_expected_tables(
     finally:
         engine.dispose()
     assert version == head
-    assert sorted(tables) == ["alembic_version", "lots", "users"]
+    assert sorted(tables) == ["alembic_version", "bids", "lots", "users", "wallets"]
 
 
 def test_engine_hides_statement_parameters(db_engine: Engine) -> None:

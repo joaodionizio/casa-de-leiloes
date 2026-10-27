@@ -52,6 +52,10 @@ KEYS = sorted(
         "starts_at",
         "ends_at",
         "created_at",
+        # Story 3.6, D7: os três campos próprios da lista do dono.
+        "cancelled_at",
+        "bid_count",
+        "phase",
     ]
 )
 
@@ -113,7 +117,10 @@ def test_an_auctioneer_without_lots_gets_an_empty_list(
     response = auctioneer.get(URL)
 
     assert response.status_code == 200
-    assert response.json() == {"items": []}
+    body = response.json()
+    assert sorted(body) == ["as_of", "items"]  # Story 3.6: o instante do banco
+    assert body["as_of"].endswith("Z")
+    assert body["items"] == []
     assert response.headers["cache-control"] == "no-store"
 
 
@@ -251,8 +258,10 @@ def test_reading_only_selects_and_changes_nothing(
 
     assert response.status_code == 200
     assert recorder.statements
+    # Story 3.6: a lista parte do relógio (`WITH clock ... SELECT`), sem DML nem trava.
     assert all(
-        statement.lstrip().upper().startswith("SELECT")
+        statement.lstrip().upper().startswith(("SELECT", "WITH"))
+        and "FOR UPDATE" not in statement.upper()
         for statement in recorder.statements
     )
     assert count_lots(seeded) == before_count

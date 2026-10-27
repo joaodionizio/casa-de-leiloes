@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import {
+  centsToInputText,
   formatCents,
   MAX_CENTS,
   moneyErrorMessage,
@@ -227,4 +228,11 @@ test('o fonte não usa conversão de ponto flutuante', () => {
   for (const forbidden of ['parseFloat', 'parseInt', '* 100', '/ 100', 'toFixed']) {
     assert.equal(source.includes(forbidden), false, forbidden)
   }
+})
+
+test('centavos viram texto de campo, sem float, e voltam pelo parser', () => {
+  assert.equal(centsToInputText(130000), '1300,00')
+  assert.equal(centsToInputText(5), '0,05')
+  assert.equal(centsToInputText(MAX_CENTS), '90071992547409,91')
+  assert.equal(cents(centsToInputText(MAX_CENTS)), MAX_CENTS)
 })

@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -14,6 +14,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
 
 MIN_JWT_SECRET_LENGTH = 32
+MIN_INTEGRITY_SECRET_BYTES = 32
 LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 SESSION_COOKIE_NAME = "auction_session"
 SECURE_SESSION_COOKIE_NAME = f"__Host-{SESSION_COOKIE_NAME}"
@@ -135,6 +136,89 @@ class AuthSettings(BaseSettings):
 @lru_cache
 def get_auth_settings() -> AuthSettings:
     return AuthSettings()  # type: ignore[call-arg]  # jwt_secret vem do ambiente
+
+
+def _at_least_32_utf8_bytes(name: str, value: SecretStr) -> SecretStr:
+    """Tamanho em bytes UTF-8, não em caracteres. A mensagem nunca leva o valor, nem a
+    posição ou o caractere de um surrogate que o ambiente tenha entregue."""
+    try:
+        size = len(value.get_secret_value().encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ValueError(f"{name} must be valid UTF-8 text") from None
+    if size < MIN_INTEGRITY_SECRET_BYTES:
+        raise ValueError(
+            f"{name} must have at least {MIN_INTEGRITY_SECRET_BYTES} bytes in UTF-8"
+        )
+    return value
+
+
+class AuditSettings(BaseSettings):
+    """O segredo da âncora HMAC (Story 3.4, P4, P5). O seed só precisa deste, então ele
+    fica separado de `IntegritySettings`. O valor nunca aparece em erro, log ou
+    resposta."""
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE, extra="ignore", hide_input_in_errors=True
+    )
+
+    audit_hmac_secret: SecretStr
+
+    @field_validator("audit_hmac_secret")
+    @classmethod
+    def _audit_long_enough(cls, value: SecretStr) -> SecretStr:
+        return _at_least_32_utf8_bytes("AUDIT_HMAC_SECRET", value)
+
+
+class IntegritySettings(AuditSettings):
+    """Os dois segredos de integridade, validados em `create_app` (Story 3.4, P5)."""
+
+    pseudonym_secret: SecretStr
+
+    @field_validator("pseudonym_secret")
+    @classmethod
+    def _pseudonym_long_enough(cls, value: SecretStr) -> SecretStr:
+        return _at_least_32_utf8_bytes("PSEUDONYM_SECRET", value)
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "IntegritySettings":
+        audit = self.audit_hmac_secret.get_secret_value().encode("utf-8")
+        pseudonym = self.pseudonym_secret.get_secret_value().encode("utf-8")
+        if audit == pseudonym:
+            raise ValueError("AUDIT_HMAC_SECRET and PSEUDONYM_SECRET must be different")
+        return self
+
+
+@lru_cache
+def get_audit_settings() -> AuditSettings:
+    return AuditSettings()  # type: ignore[call-arg]  # audit_hmac_secret vem do ambiente
+
+
+@lru_cache
+def get_integrity_settings() -> IntegritySettings:
+    return IntegritySettings()  # type: ignore[call-arg]  # segredos vêm do ambiente
+
+
+@dataclass(frozen=True)
+class IntegrityConfig:
+    """Os segredos de integridade em `bytes`, montados uma vez em `create_app()`.
+    `repr=False`: um log do objeto nunca mostra o segredo."""
+
+    audit_hmac_secret: bytes = field(repr=False)
+    pseudonym_secret: bytes = field(repr=False)
+
+
+def integrity_config(
+    settings: IntegritySettings, jwt_secret: SecretStr
+) -> IntegrityConfig:
+    """Os dois segredos precisam diferir do `JWT_SECRET` (P5). Nunca ecoa o valor."""
+    audit = settings.audit_hmac_secret.get_secret_value().encode("utf-8")
+    pseudonym = settings.pseudonym_secret.get_secret_value().encode("utf-8")
+    jwt = jwt_secret.get_secret_value().encode("utf-8")
+    if jwt in (audit, pseudonym):
+        raise ValueError(
+            "AUDIT_HMAC_SECRET and PSEUDONYM_SECRET must differ from JWT_SECRET"
+        )
+    return IntegrityConfig(audit_hmac_secret=audit, pseudonym_secret=pseudonym)
 
 
 @dataclass(frozen=True)

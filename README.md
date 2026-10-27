@@ -36,8 +36,19 @@ de 32 caracteres, ou com uma `APP_ORIGIN` `http://` fora de `localhost`,
 repositório. Os testes geram um valor aleatório a cada execução e não usam o do
 `.env`.
 
+`AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` protegem o histórico de lances (veja
+"Lances"). Cada um precisa ter **pelo menos 32 bytes em UTF-8**, os dois precisam ser
+**diferentes entre si e diferentes do `JWT_SECRET`**; 32 bytes não garantem entropia, então
+use valores aleatórios fortes (por exemplo `python -c "import secrets;
+print(secrets.token_urlsafe(48))"`, uma vez para cada). Sem eles, ou inválidos, a
+aplicação não inicia e a mensagem nunca mostra o valor. Ficam no meu `backend/.env`
+(as linhas `AUDIT_HMAC_SECRET=` e `PSEUDONYM_SECRET=` entram sem valor em
+`backend/.env.example`, que eu edito); nunca vão para o repositório, para o banco, para
+log, resposta ou payload. Os testes geram valores aleatórios a cada execução.
+
 Aplicar as migrations e semear as contas de demonstração no banco de
-desenvolvimento (o seed só precisa de `DATABASE_URL`):
+desenvolvimento (o seed precisa de `DATABASE_URL` e `AUDIT_HMAC_SECRET`, que assina a
+âncora vazia do lote demo; ele não lê `PSEUDONYM_SECRET`):
 
 ```bash
 cd backend && uv run alembic upgrade head
@@ -45,8 +56,9 @@ cd backend && uv run python -m app.seed
 ```
 
 O seed é idempotente: cria só as contas que faltam e nunca altera uma conta que já
-existe (nem o hash da senha). Também garante um lote demo aberto (veja "Lotes").
-Veja "Contas de demonstração".
+existe (nem o hash da senha). Também garante uma carteira zerada para todo usuário que
+ainda não tem uma, sem nunca alterar um saldo (veja "Carteira"), e um lote demo aberto
+(veja "Lotes"). Veja "Contas de demonstração".
 
 Rodar os testes (o banco `_test` é recriado a cada sessão) e a verificação completa:
 
@@ -103,8 +115,9 @@ npm run test:e2e
   desenvolvimento), as migrations e o seed aplicados nele, e o build gerado:
 
   ```bash
-  cd backend && DATABASE_URL=<url do banco _test> APP_ORIGIN=http://localhost:8765 \
-    JWT_SECRET=<valor aleatório> SPA_DIST_DIR=../frontend/dist \
+  cd backend && DATABASE_URL='<url-do-banco-test>' APP_ORIGIN=http://localhost:8765 \
+    JWT_SECRET='<placeholder-jwt>' AUDIT_HMAC_SECRET='<placeholder-audit>' \
+    PSEUDONYM_SECRET='<placeholder-pseudonym>' SPA_DIST_DIR=../frontend/dist \
     uv run uvicorn app.main:app --port 8765
   cd frontend && E2E_REAL_BASE_URL=http://localhost:8765 npm run test:e2e -- real-stack
   ```
@@ -165,6 +178,10 @@ Senha: `Demo123!`. Não existe cadastro, troca nem recuperação de senha. Para
 mudar a senha de uma conta que já existe é preciso agir direto no banco: o seed
 nunca altera uma conta existente.
 
+Cada conta nasce com uma **carteira zerada** (veja "Carteira"): o seed não
+pré-carrega saldo. Para demonstrar, entre como `bidder1@example.com` e deposite pela
+tela "Carteira".
+
 ## Login e sessão
 
 `POST /api/auth/login` (e-mail e senha em JSON) devolve `{email, role}` e põe o
@@ -210,129 +227,123 @@ docker build -t casa-de-leiloes .
 docker run --rm --network casa-de-leiloes_default -p 127.0.0.1:9000:9000 \
   -e PORT=9000 \
   -e APP_ORIGIN=http://localhost:9000 \
-  -e JWT_SECRET=<um-valor-aleatorio-com-32-ou-mais-caracteres> \
+  -e JWT_SECRET='<um-valor-aleatorio-com-32-ou-mais-caracteres>' \
+  -e AUDIT_HMAC_SECRET='<placeholder-sintetico-audit-substituir>' \
+  -e PSEUDONYM_SECRET='<placeholder-sintetico-pseudonym-substituir>' \
   -e DATABASE_URL=postgresql://casa:casa_local_dev@postgres:5432/casa_de_leiloes_dev \
   casa-de-leiloes
 ```
+
+Substitua os dois placeholders sintéticos por segredos aleatórios fortes, cada um
+com **pelo menos 32 bytes em UTF-8**, **diferentes entre si e de `JWT_SECRET`**.
 
 O `./verify.sh` constrói a imagem (`docker build`), mas não a executa.
 
 ## Deploy no Render
 
-O primeiro deploy foi feito na Story 1.4, pelo painel do Render
-(sem `render.yaml`): um Web Service Docker e um PostgreSQL, ambos no plano
-gratuito e na região Virginia (US East).
+**Estado documental em 26/10/2026:** o primeiro deploy e redeploy foram validados
+na Story 1.4. O Epic 2 foi concluído localmente e incorporado à `main` (informação
+do usuário), mas o deploy correspondente foi postergado por falha de processo.
+O Epic 3 tem as stories concluídas e permanece **`in-progress`**, aguardando
+verify final, reviews, correções, merge manual e validação pública. Não há
+alegação de deploy dos Epics 2 ou 3 nesta revisão.
 
-URL pública: <https://casa-de-leiloes-i1xr.onrender.com>
+Decidi fazer um único **deploy de recuperação Epic 2 + Epic 3**, depois do review
+agregado do Epic 3 e dos reviews retrospectivos de integração dos Epics 1 e 2.
+O [checklist manual completo](docs/DEPLOY-RECUPERACAO-EPICS-2-3.md) concentra
+pré-requisitos, variáveis, migrations/seed/startup, smoke público e evidências.
+O [processo canônico de fechamento](docs/FECHAMENTO-DE-EPICO.md) rege os gates,
+a autorização de `done` e o início do próximo épico.
 
-### Configuração usada
+URL pública registrada: <https://casa-de-leiloes-i1xr.onrender.com>.
+O estado efetivo atual do painel e o commit publicado precisam de confirmação
+manual; esta atualização não acessou o Render nem validou a aplicação publicada.
 
-| Item | Valor |
+### Configuração esperada para produção após o merge do Epic 3
+
+| Item | Configuração |
 | --- | --- |
-| Banco | PostgreSQL 18, `casa-de-leiloes-db`, plano Free |
-| Web Service | runtime Docker, `Dockerfile` da raiz, plano Free |
-| Branch | `epic-1` (trocar para `main` depois do merge do épico) |
-| Auto-Deploy | Off: todo deploy é manual (Manual Deploy → Deploy latest commit) |
+| Serviço | Web Service Docker existente; `Dockerfile` da raiz, um processo uvicorn, SPA + API na mesma origem |
+| Banco | PostgreSQL existente do Render; disponibilidade/validade a confirmar no painel |
+| Branch de produção | **`main`**, após merge manual do Epic 3; verificar/corrigir no painel se ainda apontar para `epic-1` |
+| Auto-Deploy | Desabilitado; deploy manual |
+| Publicação | **Manual Deploy → Deploy latest commit**, depois de confirmar o commit final da `main` remota |
 | Health Check Path | `/health` |
-| Variáveis de ambiente | `DATABASE_URL` (Internal Database URL, colada no painel) |
+| Startup | `CMD` da imagem (`./scripts/start.sh`), sem Docker Command próprio, sem Pre-Deploy Command |
 
-**Pré-requisitos do próximo deploy (Stories 2.1 e 2.2, ainda não feitos):**
-adicionar no painel `APP_ORIGIN=https://casa-de-leiloes-i1xr.onrender.com` e
-`JWT_SECRET` (um valor aleatório de pelo menos 32 caracteres, que só existe no
-painel e no meu `.env`). Sem qualquer uma das duas a criação da aplicação falha e o
-serviço não inicia. `APP_ORIGIN` não é segredo; `JWT_SECRET` é. A branch
-configurada no painel ainda é `epic-1`.
+A opção publica o commit mais recente da branch vinculada; referência:
+[Deploying on Render](https://render.com/docs/deploys). O painel atual não foi
+inspecionado pelo agente. Região Virginia (US East), PostgreSQL 18 e planos
+Free são o registro do primeiro deploy, não uma inspeção nova da conta.
 
-O valor de `DATABASE_URL` existe apenas no painel do Render. `PORT` é injetada
-pelo Render e `SPA_DIST_DIR` já vem da imagem. Não há CORS (API, SPA e WebSocket
-usam a mesma origem), disco persistente, Pre-Deploy Command nem Docker Command:
-vale o `CMD` da imagem, que roda `alembic upgrade head` e só depois o uvicorn.
+### Variáveis operacionais atuais
 
-No primeiro deploy, o log mostrou o build da imagem, o Alembic conectando ao
-PostgreSQL e aplicando `0001` (baseline) antes de o uvicorn subir em
-`0.0.0.0:10000`; o serviço ficou `Live` e `/health` respondeu 200. Em um
-redeploy manual do mesmo commit, o Alembic rodou de novo sem reaplicar a `0001`.
+| Nome | Requisito |
+| --- | --- |
+| `DATABASE_URL` | Obrigatória: Internal Database URL, configurada só no painel. Não copiar seu valor para documentação/logs. |
+| `APP_ORIGIN` | Obrigatória: origem HTTPS exata da URL pública acima, sem barra final, caminho, query ou credenciais. |
+| `JWT_SECRET` | Obrigatória: aleatório forte, pelo menos 32 caracteres. |
+| `AUDIT_HMAC_SECRET` | Obrigatória desde 3.4: aleatório forte, pelo menos 32 bytes UTF-8; usada também pelo seed. |
+| `PSEUDONYM_SECRET` | Obrigatória desde 3.4: aleatório forte, pelo menos 32 bytes UTF-8. |
+| `PORT` | Injetada pelo Render; `start.sh` escuta em `0.0.0.0` nessa porta (padrão local 8000). |
+| `SPA_DIST_DIR` | Definida na imagem: `/app/frontend-dist`; não sobrescrever com caminho inválido. |
 
-### Como validar
+Os três segredos precisam ser **distintos entre si**. Verifico/configuro os
+nomes obrigatórios **antes** do deploy e preservo os valores operacionais já
+usados; rotação de segredos de integridade não é suportada. Não há variável de
+CORS, `APP_ENV` ou credencial AIC exigida pelo código. `TEST_DATABASE_URL`,
+`VERIFY_E2E` e `E2E_REAL_BASE_URL` pertencem aos testes, não ao serviço de produção.
+Fonte dos nomes/regras: `backend/app/config.py`, `main.py`, `seed.py`,
+`backend/scripts/start.sh` e `Dockerfile`, sem consulta a `.env*`.
 
-Com `URL=https://casa-de-leiloes-i1xr.onrender.com`:
+### Migrations, seed e startup
 
-```bash
-curl -sS -i "$URL/health"                 # 200, {"status":"ok"}
-curl -sS -i "$URL/"                       # 200, text/html (SPA)
-curl -sS -i "$URL/lots/qualquer-coisa"    # 200, text/html (index.html)
-curl -sS -i "$URL/api/lots"               # 200, JSON da vitrine (a validar depois do próximo deploy)
-curl -sS -i "$URL/api/docs"               # 200, Swagger
-curl -sS -i "$URL/api/openapi.json"       # 200, JSON, rotas /health, /api/auth/* e /api/me
-curl -sS -i "$URL/api/nao-existe"         # 404, JSON (nunca HTML)
-```
+O `start.sh` usa `set -eu`: executa **`alembic upgrade head` →
+`python -m app.seed` → uvicorn**. Erro em migration ou seed impede o servidor;
+configuração inválida também pode falhar no import de `app.main` depois do seed.
+Não há scheduler/catch-up/liquidação nesta versão; são escopo do Epic 4.
 
-No navegador, a página inicial mostra "Serviço no ar". Um asset real de
-`/assets/` (nome lido do `index.html`) responde 200 com `text/javascript` (JS) e
-`text/css` (CSS).
+Migrations atuais: `0001` baseline, `0002` users, `0003` lots, `0004` wallets,
+`0005` bids e `0006` lot_cancellation (**head esperado: `0006`**). No deploy,
+acompanho upgrades ainda necessários sem exigir reaplicação dos já concluídos.
+Não executo downgrade, limpeza de dados ou reassinatura de histórico em produção.
 
-**Cookie de sessão** (Story 2.2; a validar depois do próximo deploy). O cookie
-técnico da 1.4 (`__Host-infra_check`) foi removido: `GET /api/infra-check/cookie`
-agora responde 404 JSON. Na URL pública, depois de entrar numa conta demo:
+O seed precisa de `DATABASE_URL` e `AUDIT_HMAC_SECRET`; usa fixture local, sem
+consultar a AIC. Cria contas ausentes (um leiloeiro e dois licitantes), completa
+carteiras ausentes com zero e preserva contas, senhas, saldos e históricos
+existentes. Cria demo novo quando não encontra demo com fim futuro, não cancelado
+e `anchor_hmac` não nula. Demo legado sem âncora não é reautenticado: fica intacto
+e não impede o novo demo assinado. Não cria lances nem pré-carrega saldo.
 
-```bash
-curl -sS -i -c cookies.txt -X POST -H "Origin: $URL" -H 'Content-Type: application/json' \
-  -d '{"email":"bidder1@example.com","password":"Demo123!"}' "$URL/api/auth/login"
-curl -sS -i -b cookies.txt "$URL/api/me"
-```
+### Validação pública e limites
 
-O login responde 200 com `{"email":"bidder1@example.com","role":"BIDDER"}` e um
-`Set-Cookie` de `__Host-auction_session` com `HttpOnly`, `Secure`, `SameSite=lax`,
-`Path=/`, `Max-Age=28800` e sem `Domain`. No navegador, o cookie aparece em
-Application → Cookies com `Secure`, e `document.cookie` não o mostra.
+Uso o checklist de recuperação para validar `/health`, SPA/JS/CSS/deep-link,
+API JSON, login/logout/cookie/papéis, criação de lote, vitrine, carteira/depósito,
+lances/recusas, saldos entre dois bidders, anti-sniping, histórico recente e
+cancelamento sem lances. O histórico da sala não verifica a cadeia; a auditoria
+pública integral ainda pertence à Story 5.1. Não testo UI futura de WebSocket,
+liquidação, comprovante ou meus arremates neste fechamento.
 
-**WebSocket técnico** (`/api/infra-check/ws`, removido na Story 4.1; é uma rota
-`PUBLIC` na política de acesso até lá). No
-console do navegador, na própria URL pública:
+`/health` responde 200 `{"status":"ok"}` e **não consulta o banco**; por isso
+não substitui smoke de API com dados, autenticação e frontend publicados.
+Sem sessão/papel/origem corretos, requests de escrita podem ser recusados antes
+do domínio. A SPA usa o cookie `__Host-auction_session` em HTTPS; o cookie técnico
+da 1.4 já foi removido na 2.2. O WebSocket técnico `/api/infra-check/ws` ainda
+existe até a 4.1; não é uma sala ao vivo.
 
-```js
-const ws = new WebSocket(`wss://${location.host}/api/infra-check/ws`)
-ws.onopen = () => ws.send('ping')
-ws.onmessage = (e) => console.log('recebido:', e.data)
-ws.onclose = (e) => console.log('fechado:', e.code)
-```
+O primeiro deploy registrou Alembic `0001`, uvicorn na porta fornecida, serviço
+`Live`, HTTP/cookie/WebSocket e redeploy sem reaplicar a migration. O WebSocket
+público teve fechamento `1006`, sem causa determinada; cold start não foi
+observado nem medido. As evidências originais e limitações estão na
+[Story 1.4](_bmad-output/implementation-artifacts/1-4-primeiro-deploy-no-render.md).
+Não as apresento como validação dos Epics 2/3.
 
-Ou pelo terminal, com o pacote `websockets` que já vem com o `uvicorn[standard]`:
-
-```bash
-cd backend && uv run python -c "
-import asyncio, websockets
-async def main(url):
-    async with websockets.connect(url) as ws:
-        await ws.send('ping'); print(await ws.recv())
-asyncio.run(main('wss://casa-de-leiloes-i1xr.onrender.com/api/infra-check/ws'))"
-```
-
-Os dois imprimem `echo:ping`. Na validação pública, o handshake `wss://` abriu
-(HTTP 101) e o tráfego funcionou nos dois sentidos. Nos dois clientes
-(console do Edge e `websockets`), o encerramento foi observado como `1006`,
-sem motivo, embora o código envie `close(1000)` depois do eco e, nos testes
-locais, o fechamento seja `1000`. Não determinei a causa dessa diferença e não
-a trato como comportamento garantido do Render.
-
-A rota técnica fica fora do OpenAPI e não lê nem grava dados.
-
-**Proteção das escritas** (Story 2.1; a validar depois do próximo deploy, ainda
-não executado no Render). Respostas esperadas, pela seção "Erros e proteção das
-escritas":
-
-```bash
-curl -sS -i -X POST -H 'Origin: https://evil.example' -H 'Content-Type: application/json' -d '{}' "$URL/api/nao-existe"  # 403 csrf_origin_mismatch
-curl -sS -i -X POST "$URL/api/nao-existe"                                                                  # 403 csrf_origin_missing
-curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: text/plain' -d x "$URL/api/nao-existe"             # 415 unsupported_media_type
-curl -sS -i -X POST -H "Origin: $URL" -H 'Content-Type: application/json' -d '{}' "$URL/api/nao-existe"    # 405 method_not_allowed (SPA montada)
-```
-
-### Limitações observadas
-
-- **O PostgreSQL gratuito expira em 23/11/2026**, data mostrada pelo painel do
-  Render.
-- Cold start não observado nesta validação. Não houve espera artificial.
+O plano gratuito pode ter cold start; só registro tempo após medição real.
+O primeiro painel mostrou expiração do PostgreSQL em 23/11/2026: confirmar a
+situação atual manualmente. Persistem limites reais: sala sem atualização
+entre navegadores até Epic 4, imagens externas com placeholder, ausência de
+idempotência de POST e de rotação de segredos de integridade; detalhes nas
+seções de cada fluxo e em "Comportamentos que podem surpreender".
 
 ## Catálogo do Art Institute of Chicago
 
@@ -343,8 +354,8 @@ Quem cria o lote a partir da obra escolhida é `POST /api/lots` (veja "Lotes").
 - `GET /api/catalog/artworks?q=termo`: até 20 obras mais relevantes, só
   `is_public_domain=true` e com imagem. Sem paginação. O termo tem de 1 a 100
   caracteres depois de `strip`. O acervo está em inglês.
-- `GET /api/catalog/artworks/{external_id}`: o detalhe com os campos que a Story 2.4
-  vai copiar para o lote. Obra inexistente, fora do domínio público ou sem imagem
+- `GET /api/catalog/artworks/{external_id}`: o detalhe com os campos que `POST /api/lots`
+  copia para o lote como snapshot. Obra inexistente, fora do domínio público ou sem imagem
   dá o mesmo `404 not_found`.
 - A busca e o detalhe só aceitam o leiloeiro: sem login, 401; licitante, 403. Nos dois
   casos a AIC nem é chamada. A resposta nunca é o JSON da AIC, e sempre sai com
@@ -368,8 +379,11 @@ há cache nem nova tentativa automática.
 A busca e o detalhe respondem `503 catalog_unavailable` (conexão, DNS, timeout de
 3 s de conexão e 5 s de leitura, redirecionamento, 403 do Cloudflare, 429, 5xx,
 JSON inválido ou fora do formato) e a interface mostra "O catálogo do museu não
-respondeu". Login, `/health` e o resto da aplicação seguem normais. Lotes futuros
-não dependem da AIC para os dados (AD-12); só a imagem vem do museu.
+respondeu". Login, `/health` e o resto da aplicação seguem normais. A AIC só é usada na
+busca e na seleção: ao criar o lote, os campos da obra são gravados como snapshot no
+PostgreSQL, e vitrine, detalhe e leilão leem esse registro sem nova consulta à AIC. Um
+lote criado continua funcionando mesmo se a AIC ficar indisponível depois (AD-12); só a
+imagem vem do museu.
 
 ### Imagem
 
@@ -440,10 +454,12 @@ e é quem decide. "Revisar lote" revalida os horários antes da revisão.
 No dinheiro, `655.3` é recusado com a dica de usar vírgula (`655,30`): o ponto só vale como
 milhar.
 
-**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): todos os lotes do leiloeiro da
-sessão, do mais recente para o mais antigo, sem paginação e sem limite. É leitura pura
-(só `SELECT`), não consulta a AIC e não calcula "ao vivo", "agendado" nem "encerrado":
-a fase aparece na vitrine pública (veja "Vitrine e página do lote"), não aqui.
+**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): `{as_of, items}` com todos os lotes
+do leiloeiro da sessão, **inclusive os cancelados**, do mais recente para o mais antigo,
+sem paginação e sem limite. É leitura pura (só `SELECT`) e não consulta a AIC. Cada item
+traz, além dos campos da criação, `cancelled_at`, `bid_count` (contagem persistida, só uma
+dica de tela) e `phase` (`scheduled`, `live` ou `ended`), calculada no servidor com o
+`as_of` do banco. Um lote cancelado mostra o selo "Cancelado" no lugar da fase.
 
 ### Lote demo
 
@@ -451,10 +467,126 @@ a fase aparece na vitrine pública (veja "Vitrine e página do lote"), não aqui
 aberto: a obra 27992 ("A Sunday on La Grande Jatte — 1884"), de uma fixture versionada
 em `backend/app/seed_data/demo_artwork.json`, **sem consultar a AIC**. Começa na hora do
 banco e dura 72 horas, com lance inicial de R$ 100,00 e incremento de R$ 10,00, ligado ao
-leiloeiro semeado. "Aberto" quer dizer `is_demo` e `ends_at` no futuro. Se já existe um
-demo aberto, nada é criado; se todos encerraram, nasce um novo. O seed só faz `INSERT`
+leiloeiro semeado. "Aberto" quer dizer `is_demo`, `ends_at` no futuro, `anchor_hmac`
+não nulo (Story 3.4) **e `cancelled_at` nulo** (Story 3.6). Um demo anterior à 3.4, sem
+âncora, não conta e não recebe lance; um demo cancelado também não conta, e o seed nunca o
+reativa. Em ambos os casos o seed cria um demo novo e autenticado e deixa o antigo
+exatamente como estava. Se já existe um demo aberto, nada é criado; se nenhum está aberto
+(todos encerrados, cancelados ou sem âncora), nasce um novo. O seed só faz `INSERT`
 em `lots`: nunca altera nem apaga um lote antigo. Uma trava consultiva do PostgreSQL
 (`pg_advisory_xact_lock`) faz dois seeds simultâneos criarem no máximo um demo.
+
+## Lances
+
+`POST /api/lots/{lot_id}/bids` (só `BIDDER`; o `AUCTIONEER` recebe 403 sem tocar no lote).
+Corpo `{"amount_cents": n}`, inteiro de `1` a `9007199254740991`; qualquer outro campo, ou
+`float`, texto e booleano, é 422 `validation_error`. Um lance aceito é **uma única
+transação do PostgreSQL**: trava o lote (`SELECT ... FOR UPDATE`), lê **um** instante
+`clock_timestamp()` do banco (o navegador nunca decide a hora), autentica o histórico
+anterior, aplica as regras, trava as carteiras em `user_id` crescente, reserva o saldo do
+novo líder, devolve o do anterior, aplica o anti-sniping, grava o lance e a nova âncora, e
+confirma. Qualquer falha desfaz tudo.
+
+| Resposta | Quando |
+| --- | --- |
+| `201` | `{bid: {sequence, bidder_alias, amount_cents, placed_at}, lot: {current_bid_cents, ends_at, anti_sniping_applied}, wallet: {total, committed, available}}`. Nunca `bidder_id`, hashes, HMAC nem segredos. |
+| `422` + código | recusa de negócio, na precedência: `lot_not_started`, `lot_ended`, `below_minimum`, `already_winning`, `insufficient_balance`. Nada é gravado. |
+| `409 lot_integrity_conflict` | o histórico do lote não se autentica. Mensagem única; nada é gravado, reparado ou reassinado. |
+| `404` | lote inexistente. |
+
+Comportamentos que podem surpreender (lances):
+
+- **Anti-sniping cumulativo e sem teto:** um lance aceito com `0 < restante <= 2 min` soma 2
+  minutos ao fim **atual** (lido sob a trava). Depois do fim, o lote nunca reabre; o lance
+  recebe `lot_ended`. Esta etapa só recusa: não fecha nem liquida (isso é da Story 4.3/4.4).
+- **409 de integridade:** antes de qualquer regra, o servidor reconstrói a cadeia SHA-256
+  do lote, confere a âncora HMAC e vincula o líder e o lance atual ao último lance. Qualquer
+  adulteração (alteração, inserção, remoção do meio, truncamento, recálculo sem o segredo)
+  responde 409, mesmo que a regra de negócio recusaria o lance por outro motivo.
+- **Lotes anteriores à 3.4** ficam com `anchor_hmac` nulo: aparecem na vitrine, mas todo
+  lance neles responde 409 (inclusive o demo antigo, até vencer). Nenhum caminho (lance,
+  boot, seed, migration) assina o estado encontrado no banco; um comando manual de
+  autenticação de lotes legados não existe nesta entrega.
+- **Segredos no Render:** `AUDIT_HMAC_SECRET` e `PSEUDONYM_SECRET` precisam existir no
+  painel **antes** do deploy de recuperação 2+3. Sem o de auditoria o seed falha e o servidor não sobe.
+  O seed não compara os três segredos; se dois forem iguais, o servidor falha logo depois.
+  Corrija trocando `PSEUDONYM_SECRET` ou `JWT_SECRET`.
+- **Rotação de segredos não é suportada.** Trocar `AUDIT_HMAC_SECRET` invalida todas as
+  âncoras já assinadas (todo lote, inclusive o demo, passa a responder 409; o demo continua
+  contando como "aberto" até vencer). Trocar `PSEUDONYM_SECRET` depois de existirem lances
+  também bloqueia esses lotes. Trocar o `JWT_SECRET` só derruba as sessões.
+- **Falha de rede depois do commit:** se a conexão cair depois de o servidor enviar o
+  `COMMIT`, o resultado é indeterminado para o cliente: o lance pode ter sido aceito.
+  Repetir pode responder `already_winning`. Não há chave de idempotência.
+- **Limites da âncora:** ela protege o histórico de lances. Restaurar a cadeia **e** a
+  âncora antigas e válidas não é detectado (não há âncora externa), e a âncora não cobre os
+  termos do lote (`ends_at`, lance inicial, incremento) nem os saldos das carteiras.
+- **Estado de lance no lote:** as colunas `current_bid_cents`, `current_leader_id`,
+  `bid_count`, `final_hash` e `anchor_hmac` só mudam num lance aceito. `downgrade` da
+  migration `0005` perde lances e esse estado (só desenvolvimento).
+- A leitura da cadeia a cada tentativa é O(n) e a fila na trava do lote não tem
+  `lock_timeout`: aceitável na escala do desafio.
+
+### A sala do lote (Story 3.5)
+
+Duas leituras alimentam a sala, ambas só de leitura (sem trava, sem escrita, sem autenticar
+a cadeia; um lote legado sem âncora é lido normalmente, e o `POST` dele continua 409):
+
+- `GET /api/lots/{lot_id}/bids` (público): `as_of`, `phase`, `ends_at`, `current_bid_cents`,
+  `minimum_next_bid_cents` (`null` só se nenhum valor até o teto o alcança), `bid_count`
+  (total do lote) e `bids`: os **50 mais recentes**, `sequence` decrescente, cada um com
+  `sequence`, `bidder_alias`, `amount_cents` e `placed_at`. Uma única instrução SQL, com um
+  só `clock_timestamp()`. O limite de 50 é só da sala; a auditoria (5.1) mantém o histórico
+  completo. Nunca expõe `bidder_id`, nome, e-mail, hashes nem HMAC.
+- `GET /api/lots/{lot_id}/bids/mine` (só `BIDDER`): `bidder_alias`, `my_bid_count` (todos os
+  lances daquele alias no lote, mesmo fora dos 50) e `last_bid_cents`. A posição
+  (ganhando, superado ou neutro) é derivada no front destes dois retornos.
+
+Comportamentos que podem surpreender (sala):
+
+- **O contador é uma estimativa visual** baseada no último estado lido, com relógio
+  monotônico do navegador; pode superestimar o tempo restante. **O servidor continua sendo
+  a autoridade** para aceitar ou recusar o lance: chegar a `0:00` não bloqueia o envio e
+  causa uma única releitura por valor de `ends_at`.
+- **A sala não atualiza sozinha** (não há polling nem WebSocket até o Épico 4): outra pessoa
+  só aparece depois de "Atualizar sala", do zero da contagem ou do seu próprio lance. A linha
+  "Situação atualizada às HH:MM:SS" mostra a hora do `/bids` lido.
+- Depois de um `201`, a tela mostra na hora o valor, o novo fim e a carteira da resposta e
+  faz **uma** releitura para o histórico, o mínimo e a posição; se ela falhar, o aceite
+  continua mostrado.
+- **Erro de rede ou 5xx no envio** é resultado incerto: a tela não afirma se o lance entrou,
+  faz uma releitura e nunca reenvia sozinha. Como não há chave de idempotência, repetir à mão
+  ainda pode gravar outro lance.
+- O formulário só valida o **formato** do valor; abaixo do mínimo ou acima do saldo o pedido
+  vai ao servidor, que decide.
+
+### Cancelar lote (Story 3.6)
+
+`POST /api/lots/{lot_id}/cancel` (só `AUCTIONEER`, **sem corpo**; a identidade é a da
+sessão) cancela um lote **seu**, que **ainda não recebeu lances** e **ainda não terminou**.
+Responde `200 {id, cancelled_at}`. Em transação própria, seguindo o mesmo protocolo de
+trava do lote → hora do banco → dono → integridade → regras, escreve só `lots.cancelled_at`: não
+toca em carteiras, em lances nem na âncora. Cancelar de novo um lote íntegro devolve o
+mesmo `200` com o instante original, sem nova escrita. Recusas: `403` (outro leiloeiro ou
+`BIDDER`), `404`, `409 lot_integrity_conflict`, `422 lot_has_bids`, `422 lot_ended`.
+
+Comportamentos que podem surpreender (cancelamento):
+
+- **Cancelado some do público.** Fora da vitrine, e `GET /api/lots/{id}`, `/bids` e
+  `/bids/mine` respondem `404`. O dono continua vendo o lote em "Meus lotes", com o selo
+  "Cancelado". Não existe `phase = cancelled`: a fase continua sendo só temporal.
+- **Lote anterior à 3.4 (sem âncora autenticada) não é cancelável:** a decisão "sem lances"
+  usa a contagem autenticada pelo mesmo gate do lance, e esse lote responde `409`. Não há
+  reparo, reassinatura nem comando administrativo nesta entrega; ele fica na vitrine até
+  vencer. Cancelar o lote demo faz o próximo boot criar outro.
+- **`cancelled_at` não é autenticado pela âncora v1** (como `ends_at` e o dono). Quem edita
+  o banco à mão pode esconder ou reexibir um lote; isso não move saldo.
+- **Sem aviso em tempo real:** a sala já aberta não é avisada (não há WebSocket até o Épico
+  4). Um lance em lote cancelado responde `422 lot_cancelled` e a tela diz "Este lote foi
+  cancelado."; uma leitura pública **posterior** (atualizar ou voltar à sala) responde `404`
+  e pode mostrar "Lote não encontrado.". Isso não significa que o cancelamento falhou.
+- **Erro de rede ou 5xx no cancelamento** é resultado incerto: a tela não afirma sucesso nem
+  falha, relê a lista uma vez e nunca reenvia sozinha.
 
 ## Vitrine e página do lote
 
@@ -498,6 +630,56 @@ curl -sS -i http://localhost:8000/api/lots            # 200, no-store, {"as_of":
 curl -sS -i http://localhost:8000/api/lots/<uuid>      # 200, ou 404 se o UUID não existe
 curl -sS -i http://localhost:8000/api/lots/abc         # 422 validation_error
 curl -sS -i http://localhost:8000/lots/<uuid>          # 200, text/html (SPA montada)
+```
+
+## Carteira
+
+O licitante vê o próprio saldo e faz um **depósito simulado** (valor fictício, sem
+dinheiro real). Valores em **centavos inteiros** (`BIGINT`, sufixo `_cents`), sem `float`.
+
+| Rota | Quem | O que faz |
+| --- | --- | --- |
+| `GET /api/wallet` | só `BIDDER` | `{total_balance_cents, committed_balance_cents, available_balance_cents}`, `Cache-Control: no-store`. Só lê: nenhum `INSERT`, `UPDATE` nem trava (AD-19). |
+| `POST /api/wallet/deposit` | só `BIDDER` | corpo `{"amount_cents": n}`; soma `n` ao total da **própria** carteira e devolve `200` com os mesmos três valores. |
+
+- **Saldo:** o disponível é sempre `total - comprometido`, calculado no servidor, e nunca
+  é gravado. O comprometido é alterado só pelo lance (Story 3.4, veja
+  "Lances"): sobe com o lance do líder e volta ao disponível quando ele é superado. O `AUCTIONEER` recebe 403 nas duas rotas e não tem tela de carteira.
+- **Entrada estrita:** `amount_cents` é um inteiro de `1` a `9007199254740991`. Zero,
+  negativo, `100.5`, `1e2`, texto, booleano, ausente, campo extra (inclusive `user_id`) e
+  valor acima do teto dão 422 `validation_error`. A carteira alterada é sempre a do
+  usuário da sessão.
+- **Teto do saldo:** o total da carteira também não passa de `9007199254740991` centavos
+  (`R$ 90.071.992.547.409,91`, o inteiro seguro do JavaScript; limite técnico, não
+  comercial). Um depósito válido que ultrapassaria esse total recebe 422
+  `balance_limit_exceeded` ("O depósito ultrapassaria o limite de saldo da carteira."),
+  sem `details`, e nada é gravado. O banco impede o mesmo por CHECK, com o mesmo literal da
+  aplicação (`app/money.py`).
+- **Concorrência:** o depósito é uma transação curta que trava a linha da carteira
+  (`SELECT ... FOR UPDATE`), **lê o saldo depois da trava**, confere o teto, atualiza e
+  confirma. Dois depósitos simultâneos na mesma carteira somam os dois, e perto do teto o
+  segundo decide sobre o saldo que o primeiro confirmou.
+- **Carteira para todo usuário:** a migration `0004` cria `wallets` e uma carteira zerada
+  para cada usuário que já existe; o seed completa quem faltar (todo usuário sem carteira,
+  só `INSERT`, nunca altera saldo). Um usuário autenticado sem carteira é violação de
+  invariante: `GET` e `POST` respondem 500 genérico e **nunca criam a carteira**.
+- **Tela:** `/bidder/wallet` ("Carteira" no header do licitante), com o disponível em
+  destaque, o total e o comprometido, e o depósito. O `AUCTIONEER` que digita o endereço
+  vê "Área do licitante", e a página nem chama a API. O anônimo vai a `/login` e, depois
+  de entrar como licitante, volta à carteira.
+
+Como validar (com a aplicação rodando; as escritas exigem `Origin` e JSON, veja
+"Erros e proteção das escritas"):
+
+```bash
+# Entrar como bidder1 e guardar o cookie de sessão
+curl -sS -c /tmp/cookies -X POST http://localhost:5173/api/auth/login \
+  -H 'Origin: http://localhost:5173' -H 'Content-Type: application/json' \
+  -d '{"email":"bidder1@example.com","password":"Demo123!"}'
+curl -sS -b /tmp/cookies http://localhost:5173/api/wallet           # 200, tudo 0 numa carteira nova
+curl -sS -b /tmp/cookies -X POST http://localhost:5173/api/wallet/deposit \
+  -H 'Origin: http://localhost:5173' -H 'Content-Type: application/json' \
+  -d '{"amount_cents": 125000}'                                       # 200, R$ 1.250,00 disponíveis
 ```
 
 ## Erros e proteção das escritas
@@ -571,6 +753,22 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   aberto. Crie um lote para demonstrar.
 - Os valores são limitados a R$ 90.071.992.547.409,91 por limite técnico (inteiro seguro
   do JavaScript), não comercial.
+- A carteira não tem histórico de depósitos nem de movimentos: só o estado atual (total,
+  comprometido, disponível). Cada depósito apenas soma ao total.
+- Não há deduplicação de depósito no servidor (sem `Idempotency-Key`). A tela bloqueia o
+  botão enquanto o envio está pendente e **nunca reenvia sozinha**; se a rede cair ou o
+  servidor responder 5xx, ela faz uma única releitura do saldo e, sem poder confirmar,
+  não afirma que o depósito entrou. Mas um timeout **depois** do commit, seguido de uma
+  nova tentativa **manual** sua, ainda pode duplicar o depósito: confira o saldo antes de
+  repetir.
+- O total da carteira é limitado a R$ 90.071.992.547.409,91 por limite técnico (inteiro
+  seguro do JavaScript), não comercial; depósitos acima disso são recusados.
+- Qualquer pessoa pode depositar nas contas demo da URL pública (a senha é pública), então
+  o saldo de `bidder1` e `bidder2` pode não ser o que você deixou. Se uma delas já
+  estiver no teto e o depósito for recusado ("O depósito ultrapassaria o limite de saldo
+  da carteira."), use a outra conta de licitante: o seed nunca zera um saldo existente.
+- Reverter a migration `0004` (`alembic downgrade 0003`) apaga a tabela `wallets` e, com
+  ela, os saldos: aceitável no desafio, mas irreversível.
 - "Meus lotes" lista todos os lotes, sem paginação, e cada miniatura é uma chamada do
   servidor à AIC (sem cache), então uma lista muito longa pode esbarrar no limite de
   60 req/min e mostrar o placeholder.
@@ -578,10 +776,11 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   20 resultados dispara até 20, contra o limite de 60 req/min por IP. Excedido, o
   restante das imagens cai no placeholder até a janela passar.
 - A situação do lote é uma **fotografia** do `as_of` mostrado na página ("Situação
-  atualizada às HH:mm"): com a página aberta, um lote não passa sozinho de agendado a ao
-  vivo nem de ao vivo a encerrado. A fase só muda num novo carregamento (abrir outra vista,
-  voltar, recarregar). Não há polling, contagem regressiva nem relógio do navegador no
-  estado do lote; a validação de um lance sempre será do servidor.
+  atualizada às HH:mm"): na vitrine, um lote não passa sozinho de agendado a ao
+  vivo nem de ao vivo a encerrado; um novo carregamento atualiza a fase. Na sala
+  da 3.5 há contagem regressiva visual e releitura no zero de cada `ends_at`,
+  em "Atualizar sala" e depois do próprio lance. Ainda não há polling nem
+  WebSocket de sala; o servidor sempre decide a fase e a aceitação do lance.
 - Todo lote encerrado aparece como "Encerrado, apurando resultado" até a liquidação
   existir (Story 4.3). Hoje isso é só texto de interface: não há vencedor, valor final
   nem comprovante, e nenhuma leitura liquida lote.

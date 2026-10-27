@@ -10,6 +10,7 @@ export type AppRoute =
   | { kind: 'login' }
   | { kind: 'create-lot' }
   | { kind: 'my-lots' }
+  | { kind: 'wallet' }
 
 export type Route = AppRoute | { kind: 'not-found' }
 
@@ -32,6 +33,7 @@ export function parseRoute(pathname: string): Route {
   if (path === '/login') return { kind: 'login' }
   if (path === '/auctioneer/lots/new') return { kind: 'create-lot' }
   if (path === '/auctioneer/lots') return { kind: 'my-lots' }
+  if (path === '/bidder/wallet') return { kind: 'wallet' }
   if (path.startsWith(LOT_PREFIX)) {
     const lotId = path.slice(LOT_PREFIX.length)
     if (UUID_PATTERN.test(lotId)) return { kind: 'lot', lotId }
@@ -44,6 +46,7 @@ export function routePath(route: AppRoute): string {
   if (route.kind === 'login') return '/login'
   if (route.kind === 'create-lot') return '/auctioneer/lots/new'
   if (route.kind === 'my-lots') return '/auctioneer/lots'
+  if (route.kind === 'wallet') return '/bidder/wallet'
   return '/'
 }
 
@@ -53,16 +56,29 @@ export function isAuctioneerRoute(
   return route.kind === 'create-lot' || route.kind === 'my-lots'
 }
 
-// Destino seguro depois do login (D8): só rotas internas conhecidas (vitrine, lote e
-// as áreas do leiloeiro). URL absoluta, `//host`, `/login`, texto livre ou qualquer
-// valor que não seja string viram a vitrine. Área do leiloeiro só vale para quem
-// entrou como `AUCTIONEER`. O resultado é sempre o caminho normalizado da rota, nunca
-// o texto recebido (a query, por exemplo, é descartada).
+export function isBidderRoute(route: Route): route is { kind: 'wallet' } {
+  return route.kind === 'wallet'
+}
+
+// Área restrita a um papel (Story 3.1): o anônimo vai ao login e guarda o retorno.
+export function isRestrictedRoute(
+  route: Route,
+): route is { kind: 'create-lot' } | { kind: 'my-lots' } | { kind: 'wallet' } {
+  return isAuctioneerRoute(route) || isBidderRoute(route)
+}
+
+// Destino seguro depois do login (D8): só rotas internas conhecidas (vitrine, lote, as
+// áreas do leiloeiro e a carteira do licitante). URL absoluta, `//host`, `/login`,
+// texto livre ou qualquer valor que não seja string viram a vitrine. Área do leiloeiro
+// só vale para quem entrou como `AUCTIONEER`; a carteira, só para `BIDDER`. O
+// resultado é sempre o caminho normalizado da rota, nunca o texto recebido (a query,
+// por exemplo, é descartada).
 export function safeReturnPath(value: unknown, role: UserRole): string {
   if (typeof value !== 'string') return '/'
   const route = parseRoute(value)
   if (route.kind === 'not-found' || route.kind === 'login') return '/'
   if (isAuctioneerRoute(route) && role !== 'AUCTIONEER') return '/'
+  if (isBidderRoute(route) && role !== 'BIDDER') return '/'
   return routePath(route)
 }
 

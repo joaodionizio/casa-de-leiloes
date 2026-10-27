@@ -1,15 +1,19 @@
 """Contas e lote demo de demonstração (Story 2.2 e 2.4, AD-24, P8, P12, P13).
 
 Idempotente. Usuários: `INSERT ... ON CONFLICT (id) DO NOTHING`, nunca `UPDATE`; uma
-conta que já existe nunca é recriada nem alterada, nem o hash. Lote demo: só `INSERT`,
-e só quando não há demo realmente aberto (`is_demo` e `ends_at > agora do banco`);
-um lote antigo nunca é alterado nem apagado.
+conta que já existe nunca é recriada nem alterada, nem o hash. Carteiras (Story 3.1):
+todo usuário sem carteira ganha uma zerada, só `INSERT`; saldo existente nunca é
+alterado e nenhum saldo demo é pré-carregado. Lote demo: só `INSERT`,
+e só quando não há demo realmente aberto e autenticado (`is_demo`, `ends_at > agora do
+banco` e `anchor_hmac` não nulo, Story 3.4, P3); um lote antigo nunca é alterado,
+apagado nem assinado: um demo legado sem âncora não conta e continua como está.
 
 Offline: o lote vem de uma fixture versionada (`seed_data/demo_artwork.json`) e passa
 pelo mesmo `create_lot` da criação manual, que não fala com a rede. O seed não
 consulta o catálogo do museu nem usa cliente HTTP.
 
-`python -m app.seed` precisa só de `DATABASE_URL`; não importa `app.main`, que
+`python -m app.seed` precisa de `DATABASE_URL` e `AUDIT_HMAC_SECRET` (a âncora vazia do
+demo é assinada na criação, P4); não lê `PSEUDONYM_SECRET` e não importa `app.main`, que
 exige `APP_ORIGIN` e `JWT_SECRET`.
 """
 
@@ -23,7 +27,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
+from app.config import get_audit_settings, get_settings
 from app.db import create_db_engine, create_session_factory
 from app.lots import (
     ArtworkSnapshot,
@@ -35,6 +39,7 @@ from app.lots import (
 )
 from app.security import hash_password
 from app.users import User, UserRole
+from app.wallet import ensure_wallets
 
 logger = logging.getLogger(__name__)
 
@@ -124,13 +129,23 @@ def acquire_seed_lock(session: Session) -> None:
     session.execute(select(func.pg_advisory_xact_lock(SEED_ADVISORY_LOCK_KEY)))
 
 
-def seed_demo_lot(session: Session, now: datetime) -> bool:
+def seed_demo_lot(session: Session, now: datetime, *, audit_hmac_secret: bytes) -> bool:
     """Cria um lote demo se não houver um realmente aberto; devolve se criou.
 
-    "Aberto" (Q4) = `is_demo` e `ends_at > now`. Nunca faz `UPDATE` nem `DELETE`.
+    "Aberto" (Q4 + P3) = `is_demo`, `ends_at > now`, `anchor_hmac` não nulo e não
+    cancelado (Story 3.6): um demo cancelado não conta e nunca é reativado. O
+    predicado escolhe o demo, não autentica: o lance nele passa pelo gate como em
+    qualquer lote. Nunca faz `UPDATE` nem `DELETE` e nunca assina lote encontrado.
     """
     open_demo = session.scalar(
-        select(exists().where(Lot.is_demo.is_(True), Lot.ends_at > now))
+        select(
+            exists().where(
+                Lot.is_demo.is_(True),
+                Lot.ends_at > now,
+                Lot.anchor_hmac.is_not(None),
+                Lot.cancelled_at.is_(None),
+            )
+        )
     )
     if open_demo:
         return False
@@ -146,6 +161,7 @@ def seed_demo_lot(session: Session, now: datetime) -> bool:
         terms=terms,
         auctioneer_id=DEMO_AUCTIONEER_ID,
         now=now,
+        audit_hmac_secret=audit_hmac_secret,
         is_demo=True,
     )
     if isinstance(result, ScheduleViolation):
@@ -154,23 +170,33 @@ def seed_demo_lot(session: Session, now: datetime) -> bool:
     return True
 
 
-def run_seed(session: Session) -> tuple[int, bool]:
-    """Uma transação para usuários e lote; não faz commit. A trava é o primeiro
-    statement; o instante do banco é lido depois dela (análogo ao AD-6) e decide
-    tudo: "existe demo aberto?", `starts_at`, `created_at` e a base de `ends_at`."""
+def run_seed(session: Session, *, audit_hmac_secret: bytes) -> tuple[int, bool]:
+    """Uma transação para usuários, carteiras e lote; não faz commit. A trava é o
+    primeiro statement; o instante do banco é lido depois dela (análogo ao AD-6) e
+    decide tudo: "existe demo aberto?", `starts_at`, `created_at` e a base de
+    `ends_at`."""
     acquire_seed_lock(session)
     users = seed_users(session)  # o leiloeiro precisa existir antes do lote (FK)
+    # Todo usuário sem carteira, não só os semeados. A contagem não entra no retorno
+    # nem no log: o log do seed só afirma o que já foi confirmado pelo commit.
+    ensure_wallets(session)
     now = database_now(session)
-    created = seed_demo_lot(session, now)
+    created = seed_demo_lot(session, now, audit_hmac_secret=audit_hmac_secret)
     return users, created
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
-    engine = create_db_engine(get_settings().database_url.get_secret_value())
+    # As duas configurações antes do engine: sem `AUDIT_HMAC_SECRET` válido o seed falha
+    # sem abrir o banco e sem ecoar o valor.
+    settings = get_settings()
+    audit_hmac_secret = (
+        get_audit_settings().audit_hmac_secret.get_secret_value().encode("utf-8")
+    )
+    engine = create_db_engine(settings.database_url.get_secret_value())
     try:
         with create_session_factory(engine)() as session:
-            inserted, created = run_seed(session)
+            inserted, created = run_seed(session, audit_hmac_secret=audit_hmac_secret)
             session.commit()  # libera a trava consultiva
     finally:
         engine.dispose()

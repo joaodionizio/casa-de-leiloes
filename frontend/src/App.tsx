@@ -12,11 +12,12 @@ import { documentTitle } from './brand'
 import LoginPage from './LoginPage'
 import LotCreation from './LotCreation'
 import LotPage from './LotPage'
+import type { Viewer } from './LotBidPanel'
 import MyLots from './MyLots'
 import { NAVIGATION_EVENT, navigate, replaceRoute } from './navigation'
 import NotFoundPage from './NotFoundPage'
 import {
-  isAuctioneerRoute,
+  isRestrictedRoute,
   parseRoute,
   readNavState,
   routePath,
@@ -24,6 +25,7 @@ import {
 } from './route'
 import SiteHeader from './SiteHeader'
 import VitrinePage from './VitrinePage'
+import WalletPage from './WalletPage'
 
 type HealthState = 'loading' | 'available' | 'unavailable'
 
@@ -57,6 +59,7 @@ function pageTitle(kind: string): string | null {
   if (kind === 'login') return documentTitle('Entrar')
   if (kind === 'create-lot') return documentTitle('Criar lote')
   if (kind === 'my-lots') return documentTitle('Meus lotes')
+  if (kind === 'wallet') return documentTitle('Carteira')
   if (kind === 'not-found') return documentTitle('Página não encontrada')
   return null // a página do lote usa o título da obra
 }
@@ -83,6 +86,30 @@ function AuctioneerOnly({ focusHeading }: AuctioneerOnlyProps) {
         Área do leiloeiro
       </h1>
       <p>Esta área é só para a conta de leiloeiro.</p>
+      <AppLink to="/" className="button button-secondary">
+        Ir para a vitrine
+      </AppLink>
+    </section>
+  )
+}
+
+// Leiloeiro numa área do licitante (Story 3.1, D13): espelho da vista acima. Esta vista
+// não monta a carteira, então nenhuma chamada à API sai.
+interface BidderOnlyProps {
+  focusHeading: boolean
+}
+
+function BidderOnly({ focusHeading }: BidderOnlyProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    if (focusHeading) headingRef.current?.focus()
+  }, [focusHeading])
+  return (
+    <section className="notice-page" aria-labelledby="bidder-only-title">
+      <h1 id="bidder-only-title" ref={headingRef} tabIndex={-1}>
+        Área do licitante
+      </h1>
+      <p>Esta área é só para a conta de licitante.</p>
       <AppLink to="/" className="button button-secondary">
         Ir para a vitrine
       </AppLink>
@@ -145,11 +172,12 @@ function App() {
   }, [])
 
   // Redirecionamentos (D8, D9): quem já está logado não fica em `/login`; anônimo numa
-  // área do leiloeiro vai ao login e volta para ela depois.
+  // área restrita (leiloeiro ou carteira do licitante) vai ao login e volta para ela
+  // depois, se o papel permitir.
   useEffect(() => {
     if (route.kind === 'login' && session.status === 'authenticated') {
       replaceRoute(safeReturnPath(navState.returnTo, session.user.role))
-    } else if (isAuctioneerRoute(route) && session.status === 'anonymous') {
+    } else if (isRestrictedRoute(route) && session.status === 'anonymous') {
       replaceRoute('/login', { returnTo: routePath(route) })
     }
   }, [route, session, navState])
@@ -176,12 +204,13 @@ function App() {
     replaceRoute(safeReturnPath(navState.returnTo, user.role))
   }
 
-  // 401 numa rota do leiloeiro: a sessão acabou (o cookie venceu). Volta ao login com
-  // o aviso e, depois de entrar, à mesma área.
+  // 401 numa rota restrita ou na sala de um lote: a sessão acabou (o cookie venceu).
+  // Volta ao login com o aviso e, depois de entrar, à mesma área ou ao mesmo lote.
   function handleSessionExpired() {
     setSession({ status: 'anonymous' })
     setSessionNotice(null)
-    const returnTo = isAuctioneerRoute(route) ? routePath(route) : '/'
+    const returnTo =
+      isRestrictedRoute(route) || route.kind === 'lot' ? routePath(route) : '/'
     replaceRoute('/login', { returnTo, notice: 'expired' })
   }
 
@@ -199,6 +228,15 @@ function App() {
     setLogoutError(failureMessage(result.failure))
   }
 
+  const lotViewer: Viewer =
+    session.status === 'checking'
+      ? 'checking'
+      : session.status === 'anonymous'
+        ? 'visitor'
+        : session.user.role === 'AUCTIONEER'
+          ? 'auctioneer'
+          : 'bidder'
+
   function renderView() {
     if (route.kind === 'vitrine') {
       return <VitrinePage key={where.id} navState={navState} navigated={navigated} />
@@ -210,6 +248,9 @@ function App() {
           lotId={route.lotId}
           navState={navState}
           navigated={navigated}
+          viewer={lotViewer}
+          owner={session.status === 'authenticated' ? session.user.email : null}
+          onSessionExpired={handleSessionExpired}
         />
       )
     }
@@ -232,6 +273,20 @@ function App() {
               : sessionNotice
           }
           onLoggedIn={handleLoggedIn}
+        />
+      )
+    }
+    // Carteira do licitante (Story 3.1). O leiloeiro vê só a vista de papel errado:
+    // a página da carteira nem monta, então não há `GET /api/wallet`.
+    if (route.kind === 'wallet') {
+      if (session.status === 'anonymous') return null // redirecionando para /login
+      if (session.user.role !== 'BIDDER') return <BidderOnly focusHeading={navigated} />
+      return (
+        <WalletPage
+          key={where.id}
+          owner={session.user.email}
+          focusHeading={navigated}
+          onSessionExpired={handleSessionExpired}
         />
       )
     }

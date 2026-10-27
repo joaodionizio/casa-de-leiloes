@@ -15,8 +15,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import lots
+from app.bid_integrity import GENESIS_HASH, AnchorState, verify_anchor_hmac
 from app.errors import MESSAGES
 from app.lots import MAX_CENTS, Schedule
+from app.seed import load_demo_artwork
 from tests.auth_support import (
     AUCTIONEER_EMAIL,
     BIDDER_EMAIL,
@@ -39,6 +41,8 @@ from tests.lot_support import (
     LOT_COLUMNS,
     count_lots,
     db_now,
+    empty_anchor,
+    integrity_secrets,
     iso,
     lot_rows,
     valid_body,
@@ -632,6 +636,77 @@ def test_no_connection_is_idle_in_a_transaction_while_the_aic_is_called(
     position = timeline.index("AIC")
     assert timeline[:position] == ["SELECT"]
     assert timeline[position + 1 :] == ["SELECT", "INSERT"]
+
+
+# --- Story 3.4: o lote novo nasce autenticado (CA11) ---
+
+
+def test_a_new_lot_is_born_with_a_valid_empty_anchor_for_its_own_id(
+    auctioneer: TestClient, seeded: sessionmaker[Session]
+) -> None:
+    response = post(auctioneer, valid_body(seeded))
+
+    assert response.status_code == 201
+    (row,) = lot_rows(seeded)
+    stored = dict(zip(LOT_COLUMNS, row, strict=True))
+    assert (stored["current_bid_cents"], stored["current_leader_id"]) == (None, None)
+    assert (stored["bid_count"], stored["final_hash"]) == (0, GENESIS_HASH)
+    audit, pseudonym = integrity_secrets()
+    state = AnchorState(v=1, lot_id=stored["id"], bid_count=0, final_hash=GENESIS_HASH)
+    assert verify_anchor_hmac(state, stored["anchor_hmac"], audit_hmac_secret=audit)
+    assert stored["anchor_hmac"] == empty_anchor(stored["id"])
+    # A âncora é do próprio lote e do segredo de auditoria, não do de pseudônimo.
+    assert not verify_anchor_hmac(
+        state, stored["anchor_hmac"], audit_hmac_secret=pseudonym
+    )
+    other = AnchorState(v=1, lot_id=uuid.uuid4(), bid_count=0, final_hash=GENESIS_HASH)
+    assert not verify_anchor_hmac(other, stored["anchor_hmac"], audit_hmac_secret=audit)
+    # Nada do estado de lance vaza pela resposta de criação.
+    for forbidden in ("anchor_hmac", "final_hash", "bid_count", "current_leader_id"):
+        assert forbidden not in response.json()
+
+
+def test_a_lot_whose_anchor_cannot_be_signed_is_never_created(
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: sessionmaker[Session],
+    fake: FakeArtic,
+) -> None:
+    client = make_client(monkeypatch, seeded, fake, raise_server_exceptions=False)
+
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise ValueError("audit_hmac_secret must be non-empty bytes")
+
+    monkeypatch.setattr(lots, "compute_anchor_hmac", refuse)
+    response = post(client, valid_body(seeded))
+    monkeypatch.undo()
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "internal_error"
+    assert count_lots(seeded) == 0
+
+
+def test_create_lot_with_an_invalid_secret_adds_nothing_to_the_session(
+    seeded: sessionmaker[Session],
+) -> None:
+    snapshot = load_demo_artwork()
+    terms = lots.LotTerms(
+        starting_bid_cents=10000,
+        min_increment_cents=1000,
+        starts_at=None,
+        ends_at=db_now(seeded) + timedelta(days=1),
+    )
+    with seeded() as session:
+        with pytest.raises(ValueError):
+            lots.create_lot(
+                session,
+                snapshot=snapshot,
+                terms=terms,
+                auctioneer_id=seeded_id(AUCTIONEER_EMAIL),
+                now=db_now(seeded),
+                audit_hmac_secret=b"",
+            )
+        assert not session.new
+    assert count_lots(seeded) == 0
 
 
 # --- atomicidade ---

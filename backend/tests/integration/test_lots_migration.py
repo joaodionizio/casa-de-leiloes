@@ -85,8 +85,16 @@ def test_lots_table_has_the_agreed_columns_types_and_nullability(
         "artwork_type_title",
         "credit_line",
     ]
+    # Story 3.4: lance atual, líder e âncora são anuláveis; contagem e hash final não.
+    nullable = {
+        *text_columns,
+        "current_bid_cents",
+        "current_leader_id",
+        "anchor_hmac",
+        "cancelled_at",  # Story 3.6: nulo = não cancelado
+    }
     for name in LOT_COLUMNS:
-        assert columns[name]["nullable"] is (name in text_columns), name
+        assert columns[name]["nullable"] is (name in nullable), name
     # Os tipos reais, como o PostgreSQL os guarda, estão no teste seguinte.
 
 
@@ -123,6 +131,11 @@ def test_real_postgresql_column_types(db_engine: Engine) -> None:
     assert types["id"] == ("uuid", None)
     assert types["auctioneer_id"] == ("uuid", None)
     assert types["is_demo"] == ("boolean", None)
+    assert types["current_bid_cents"] == ("bigint", None)
+    assert types["current_leader_id"] == ("uuid", None)
+    assert types["bid_count"] == ("bigint", None)
+    assert types["final_hash"] == ("text", None)
+    assert types["anchor_hmac"] == ("text", None)
 
 
 def test_defaults_names_and_foreign_key(db_engine: Engine) -> None:
@@ -134,8 +147,16 @@ def test_defaults_names_and_foreign_key(db_engine: Engine) -> None:
     assert columns["created_at"]["default"] is None
     assert inspector.get_pk_constraint("lots")["name"] == "pk_lots"
     assert sorted(c["name"] for c in inspector.get_check_constraints("lots")) == [
+        "ck_lots_anchor_hmac_format",
+        "ck_lots_bid_count_matches_current_bid",
+        "ck_lots_bid_count_non_negative",
+        "ck_lots_current_bid_at_least_starting",
+        "ck_lots_current_bid_range",
+        "ck_lots_current_bid_with_leader",
+        "ck_lots_empty_lot_is_genesis",
         "ck_lots_ends_after_starts",
         "ck_lots_external_id_positive",
+        "ck_lots_final_hash_format",
         "ck_lots_image_id_format",
         "ck_lots_min_increment_range",
         "ck_lots_starting_bid_range",
@@ -143,11 +164,20 @@ def test_defaults_names_and_foreign_key(db_engine: Engine) -> None:
     assert [index["name"] for index in inspector.get_indexes("lots")] == [
         "ix_lots_auctioneer_id"
     ]
-    (foreign_key,) = inspector.get_foreign_keys("lots")
-    assert foreign_key["name"] == "fk_lots_auctioneer_id_users"
-    assert foreign_key["referred_table"] == "users"
-    assert foreign_key["constrained_columns"] == ["auctioneer_id"]
-    assert foreign_key["options"].get("ondelete") == "RESTRICT"
+    # Story 3.4: o líder atual é a segunda FK para `users`.
+    foreign_keys = {fk["name"]: fk for fk in inspector.get_foreign_keys("lots")}
+    assert sorted(foreign_keys) == [
+        "fk_lots_auctioneer_id_users",
+        "fk_lots_current_leader_id_users",
+    ]
+    for name, column in (
+        ("fk_lots_auctioneer_id_users", "auctioneer_id"),
+        ("fk_lots_current_leader_id_users", "current_leader_id"),
+    ):
+        foreign_key = foreign_keys[name]
+        assert foreign_key["referred_table"] == "users"
+        assert foreign_key["constrained_columns"] == [column]
+        assert foreign_key["options"].get("ondelete") == "RESTRICT"
     # P7: a mesma obra pode originar vários lotes.
     assert inspector.get_unique_constraints("lots") == []
 

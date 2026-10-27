@@ -115,6 +115,25 @@ def test_messages_are_the_fixed_portuguese_catalog() -> None:
             "Esta obra não pode virar lote. Só são aceitas obras de domínio "
             "público com imagem no acervo do museu."
         ),
+        # Story 3.1: depósito que passaria do teto de saldo, emitido só pelo depósito.
+        "balance_limit_exceeded": (
+            "O depósito ultrapassaria o limite de saldo da carteira."
+        ),
+        # Story 3.4: recusas de negócio do lance (códigos de `BidRefusal`) e o
+        # conflito de integridade, emitidos só pelo `POST /api/lots/{id}/bids`.
+        "lot_not_started": "Este lote ainda não começou.",
+        "lot_ended": "Este lote já foi encerrado.",
+        "below_minimum": "Seu lance está abaixo do mínimo para este lote.",
+        "already_winning": "Você já está ganhando este lote.",
+        "insufficient_balance": "Saldo disponível insuficiente para este lance.",
+        # Story 3.6: o lote cancelado recusa o lance; a mensagem do conflito de
+        # integridade vira neutra (D5) e `lot_has_bids` é do cancelamento.
+        "lot_cancelled": "Este lote foi cancelado.",
+        "lot_integrity_conflict": (
+            "Não foi possível concluir a operação porque a integridade do lote "
+            "não pôde ser confirmada."
+        ),
+        "lot_has_bids": "Este lote não pode ser cancelado porque já recebeu lances.",
     }
 
 

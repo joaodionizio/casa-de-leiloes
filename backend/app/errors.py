@@ -38,6 +38,23 @@ CATALOG_UNAVAILABLE = "catalog_unavailable"
 # Obra que não pode virar lote (Story 2.4, P6): inexistente, fora do domínio público
 # ou sem imagem. Um código só: o motivo interno vai ao log, nunca ao cliente.
 ARTWORK_NOT_ELIGIBLE = "artwork_not_eligible"
+# Depósito que levaria o total da carteira acima do teto técnico (Story 3.1, P3).
+BALANCE_LIMIT_EXCEEDED = "balance_limit_exceeded"
+# Recusas de negócio do lance (Story 3.4, CA2): os valores são os de `BidRefusal`
+# (`app/bid_rules.py`); `errors.py` não importa módulo do app e um teste prova a
+# igualdade dos conjuntos. Saem só do `POST /api/lots/{lot_id}/bids`, com 422.
+LOT_NOT_STARTED = "lot_not_started"
+LOT_ENDED = "lot_ended"
+BELOW_MINIMUM = "below_minimum"
+ALREADY_WINNING = "already_winning"
+INSUFFICIENT_BALANCE = "insufficient_balance"
+LOT_CANCELLED = "lot_cancelled"
+# Histórico do lote que não se autentica (Story 3.4, P7): um código e uma mensagem só,
+# para toda categoria de falha; o detalhe técnico vai ao log interno.
+LOT_INTEGRITY_CONFLICT = "lot_integrity_conflict"
+# Cancelamento recusado porque o lote já recebeu lance (Story 3.6): sai só do
+# `POST /api/lots/{lot_id}/cancel`, com 422.
+LOT_HAS_BIDS = "lot_has_bids"
 
 MESSAGES = {
     "bad_request": "Requisição inválida.",
@@ -62,6 +79,19 @@ MESSAGES = {
         "Esta obra não pode virar lote. Só são aceitas obras de domínio "
         "público com imagem no acervo do museu."
     ),
+    BALANCE_LIMIT_EXCEEDED: "O depósito ultrapassaria o limite de saldo da carteira.",
+    LOT_NOT_STARTED: "Este lote ainda não começou.",
+    LOT_ENDED: "Este lote já foi encerrado.",
+    BELOW_MINIMUM: "Seu lance está abaixo do mínimo para este lote.",
+    ALREADY_WINNING: "Você já está ganhando este lote.",
+    INSUFFICIENT_BALANCE: "Saldo disponível insuficiente para este lance.",
+    LOT_CANCELLED: "Este lote foi cancelado.",
+    # Neutra e reutilizável (Story 3.6, D5): serve ao lance e ao cancelamento.
+    LOT_INTEGRITY_CONFLICT: (
+        "Não foi possível concluir a operação porque a integridade do lote "
+        "não pôde ser confirmada."
+    ),
+    LOT_HAS_BIDS: "Este lote não pode ser cancelado porque já recebeu lances.",
 }
 
 

@@ -92,7 +92,10 @@ test.describe('deep-link', () => {
     await expect(page.locator('#lot-title')).toHaveText('Obra de teste 1')
     await expect(page.getByRole('heading', { name: 'Leilão' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Ficha da obra' })).toBeVisible()
-    await expect(page.getByText('Lance inicial', { exact: true })).toBeVisible()
+    // A sala (3.5) também mostra o lance inicial: o termo estático fica no bloco Leilão.
+    await expect(
+      page.locator('.lot-page-block').getByText('Lance inicial', { exact: true }),
+    ).toBeVisible()
     await expect(page.getByText('Incremento mínimo')).toBeVisible()
     await expect(page.getByRole('button', { name: /dar lance/i })).toHaveCount(0)
 

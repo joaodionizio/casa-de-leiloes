@@ -1523,7 +1523,15 @@ h2[tabindex='-1']:focus-visible {
 
 .lot-page-grid {
   display: grid;
-  gap: 1.5rem;
+  gap: 1rem;
+}
+
+/* Estado e prazo vêm antes da obra no mobile (ordem do DOM); no desktop ficam acima do
+   título, na coluna da ficha. */
+.lot-page-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .lot-page-grid > * {
@@ -1533,13 +1541,25 @@ h2[tabindex='-1']:focus-visible {
 @media (min-width: 64rem) {
   .lot-page-grid {
     grid-template-columns: 3fr 2fr;
-    gap: 2.5rem;
+    grid-template-rows: auto 1fr;
+    column-gap: 2.5rem;
+    row-gap: 0.5rem;
     align-items: start;
   }
 
+  .lot-page-status {
+    grid-column: 2;
+  }
+
   .lot-page-art {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     position: sticky;
     top: 1rem;
+  }
+
+  .lot-page-info {
+    grid-column: 2;
   }
 
   .lot-page-art .artwork-image-large {
@@ -1722,4 +1742,387 @@ h2[tabindex='-1']:focus-visible {
 
 .back-link::after {
   inset: -0.8125rem 0;
+}
+
+/* Carteira (Story 3.1, DESIGN §10, EXPERIENCE §8): três números, o disponível em
+   destaque, e o depósito. Sem gráfico, sem card dentro de card, sem sombra. O estado
+   de aviso leva símbolo e texto, nunca só cor (DESIGN §14). */
+.wallet {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.wallet h1 {
+  margin: 0 0 1.25rem;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+/* Um só nível dentro do `dl` (cada `div` agrupa diretamente o seu `dt`/`dd`): o
+   agrupamento visual do total e do comprometido é feito pelo grid, não por outro
+   `div`. */
+.wallet-balances {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 1rem;
+  margin: 0 0 2rem;
+}
+
+.wallet-balances > div {
+  min-width: 0;
+}
+
+.wallet-balances dt {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.wallet-balances dd {
+  margin: 0;
+}
+
+.wallet-available {
+  grid-column: 1 / -1;
+  margin-bottom: 0.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wallet-available dd {
+  margin-top: 0.25rem;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.wallet-balance dd:first-of-type {
+  margin-top: 0.125rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.wallet-note {
+  margin-top: 0.125rem;
+  font-size: 0.875rem;
+}
+
+@media (min-width: 40rem) {
+  .wallet-available dd {
+    font-size: 3rem;
+  }
+
+  .wallet-balances {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.5rem;
+  }
+}
+
+.wallet-deposit {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.wallet-deposit h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.wallet-deposit-note {
+  margin: -0.5rem 0 0;
+  font-size: 0.9375rem;
+}
+
+.wallet-deposit .button {
+  align-self: stretch;
+}
+
+@media (min-width: 30rem) {
+  .wallet-deposit .button {
+    align-self: flex-start;
+  }
+}
+
+.wallet-notice {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.wallet-notice-success {
+  color: var(--color-success);
+}
+
+.wallet-notice-error {
+  color: var(--color-danger);
+}
+
+.wallet-notice-uncertain {
+  color: var(--color-warning);
+}
+
+/* Sala do lote (Story 3.5): painel de decisão ao lado da obra, histórico abaixo. */
+.bid-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.bid-panel h2,
+.bid-history h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.bid-panel > *,
+.bid-history > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.room-countdown {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.room-label,
+.bid-figures dt {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.room-countdown-value {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.room-phase-note {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.bid-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+
+.bid-figures dd {
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.bid-current {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--color-brand-strong);
+}
+
+.bid-minimum {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.bid-position {
+  margin: 0;
+  font-weight: 600;
+}
+
+.bid-position-winning {
+  color: var(--color-success);
+}
+
+.bid-position-outbid {
+  color: var(--color-warning);
+}
+
+.bid-own-alias,
+.bid-last-own {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.bid-wallet p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.bid-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bid-form .button,
+.room-refresh .button {
+  min-height: 2.75rem;
+}
+
+.bid-shortcut {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.bid-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bid-notice {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.bid-notice-success {
+  color: var(--color-success);
+}
+
+.bid-notice-error {
+  color: var(--color-danger);
+}
+
+.bid-notice-uncertain {
+  color: var(--color-warning);
+}
+
+.room-refresh {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+}
+
+.room-refresh p {
+  margin: 0;
+}
+
+.bid-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  min-width: 0;
+}
+
+.bid-history-count,
+.bid-history p {
+  margin: 0;
+}
+
+.bid-history-outdated {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.bid-history-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.bid-history-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.125rem 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bid-alias {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.bid-amount {
+  grid-column: 3;
+  grid-row: 1;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.bid-time {
+  grid-column: 2 / 4;
+  font-size: 0.8125rem;
+}
+
+.bid-seq {
+  grid-row: 1;
+  color: var(--color-muted);
+}
+
+.lot-page-details {
+  margin-top: 1rem;
+}
+
+/* Cancelar lote (Story 3.6): confirmação inline na linha, sem modal. O estado é sempre
+   texto ("Cancelado"); a cor só reforça. Alvos de toque de ~44 px. */
+.my-lots-notice {
+  margin: 0 0 1rem;
+}
+
+.lot-row-status {
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lot-cancelled-mark {
+  color: var(--color-danger);
+}
+
+.lot-row-actions {
+  grid-column: 1 / -1;
+}
+
+.lot-cancel-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.lot-cancel-confirm p {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lot-row-actions .button {
+  min-height: 2.75rem;
 }

@@ -40,10 +40,8 @@ que não mudam a arquitetura.
   com aprovação, para implementar. Auto mode só se eu pedir.
 - Opus planeja, escreve specs e revisa; Sonnet implementa (`/model`). Quem
   especificou não revisa o que especificou.
-- Monitore `/context`. Use `/clear` entre fases ou tarefas não relacionadas.
-  Use `/compact` quando a sessão estiver ficando longa ou carregada.
-  ~70% pode ser usado como limite conservador interno, não como limite
-  oficial do Claude Code.
+- Monitore `/context` (~70% como limite interno conservador, não oficial). `/clear`
+  entre fases ou tarefas não relacionadas; `/compact` em sessão longa ou carregada.
 - Aponte arquivos com `@` (ex.: `@docs/ARQUITETURA.md`) em vez de pedir busca.
 - Este arquivo fica enxuto (menos de 200 linhas). Detalhe mora em `docs/`.
 
@@ -57,6 +55,7 @@ que não mudam a arquitetura.
 | Testes, `verify`, deploy | AD-17, AD-26, AD-27, AD-28, AD-14 |
 | Front-end, UX, layout, responsividade | `_bmad-output/planning-artifacts/DESIGN.md`, `_bmad-output/planning-artifacts/EXPERIENCE.md`, `_bmad-output/planning-artifacts/VITRINE-BLUEPRINT.md` quando a tarefa envolver a Vitrine, AD-15 e AD-22 |
 | Processo de implementação/review do front-end, skills BMAD no front-end | `docs/FRONTEND-WORKFLOW.md` |
+| Fechamento de épico, review agregado, merge/deploy/smoke e status | `docs/FECHAMENTO-DE-EPICO.md`; recuperação 2+3 em `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md` |
 
 ### Regra para stories de front-end
 - Toda story que toque `frontend/` lê `DESIGN.md` e `EXPERIENCE.md` antes de
@@ -82,23 +81,28 @@ que não mudam a arquitetura.
   simples, `Promise<T>`, contratos HTTP e eventos WebSocket tipados. Evitar
   generics complexos, conditional/mapped types. Sem JavaScript puro.
 - AD-5 Anti-sniping: lance válido com `0 < restante <= 2 min` soma 2 min ao fim
-  atual; lance depois do fim nunca reabre. README: "Comportamentos que podem
-  surpreender".
+  atual; depois do fim nunca reabre. README: "Comportamentos que podem surpreender".
 - AD-6 Hora: `clock_timestamp()` do PostgreSQL, lido depois da trava do lote,
   um único instante por operação. O navegador nunca decide.
-- AD-7 Lance: uma única transação, 16 passos (ver ARQUITETURA.md).
+- AD-7 Lance: uma única transação, 18 passos (ver ARQUITETURA.md). Depois da trava e
+  da hora, autentica cadeia/âncora/HMAC anteriores e vincula lance atual e líder ao
+  último lance (inclusive alias recalculado só do líder atual); só então as regras
+  da 3.2. Falha → 409 `lot_integrity_conflict`, zero efeitos. `sequence` =
+  `bid_count` autenticado + 1, nunca `MAX + 1`.
 - AD-8 Travas: lote primeiro, depois carteiras em `user_id` crescente.
 - AD-9 Fechamento: mesma trava, relê `ends_at`, idempotente,
   `UNIQUE(lot_id)` em `receipts`.
 - AD-10 WebSocket só para a sala; lances por `POST /api/lots/{lot_id}/bids`;
   heartbeat do cliente; snapshot completo ao (re)conectar; 1 processo.
-- AD-11 JWT em cookie HttpOnly, mesma origem; Argon2; papéis `AUCTIONEER`
-  (cria e gerencia os próprios lotes, não dá lance) e `BIDDER` (deposita, dá
-  lances, não cria lote), como `UserRole.AUCTIONEER`/`UserRole.BIDDER`. Nunca
-  LEILOEIRO/LICITANTE em código, banco ou payloads. Stream da sala público.
+- AD-11 JWT em cookie HttpOnly, mesma origem; Argon2; `UserRole.AUCTIONEER` (cria e
+  gerencia os próprios lotes, não dá lance) e `UserRole.BIDDER` (deposita, dá lances,
+  não cria lote); nunca LEILOEIRO/LICITANTE em código, banco ou payloads. Sala pública.
 - AD-12 Art Institute of Chicago; snapshot copiado para o lote na criação.
 - AD-13 Cadeia SHA-256 + âncora HMAC (`AUDIT_HMAC_SECRET`, em variável de
   ambiente, nunca versionado). Trigger só como defesa extra, se houver tempo.
+  Lote novo nasce com âncora vazia assinada; âncora nula nunca aceita lance e nada
+  reassina estado do banco. Segredos de integridade: >= 32 bytes, distintos entre
+  si e do `JWT_SECRET`.
 - AD-14 Render gratuito: um Web Service (FastAPI + API + WebSocket + SPA) e
   PostgreSQL gratuito. `GET /health`. Primeiro deploy no épico 1.
 - AD-15 Catálogo de museu; tokens CSS próprios; dark mode depois dos fluxos
@@ -111,7 +115,8 @@ que não mudam a arquitetura.
   e não liquidado mostra "Encerrado, apurando resultado". Evento só depois do
   commit.
 - AD-20 Pseudônimo por lote: `HMAC(PSEUDONYM_SECRET, "{lot_id}:{user_id}")`,
-  parte do resultado. Segredo diferente do `AUDIT_HMAC_SECRET`.
+  `Licitante-` + 16 hex, persistido em cada lance; a auditoria nunca o recalcula.
+  Segredo diferente do `AUDIT_HMAC_SECRET`.
 - AD-21 Representação canônica v1 (JSON ordenado, UTF-8, UTC com 6 casas e
   `Z`, genesis de 64 zeros). Teste de bytes e hash idênticos.
 - AD-22 Imagem: bytes nunca armazenados; a mídia vem do IIIF, mas o navegador usa a
@@ -157,11 +162,9 @@ que não mudam a arquitetura.
 - `verify` falha na primeira etapa que falhar. Back-end: `pytest`, Ruff,
   `ruff format --check`, integração em PostgreSQL real. Front-end: ESLint,
   `tsc --noEmit`, testes existentes, build de produção do Vite.
-- Testes do front: lógica pura com `node --test` (`npm test`), no `verify` padrão;
-  testes de navegador com Playwright (`npm run test:e2e`, Chromium, API simulada), fora
-  do `verify` padrão. `VERIFY_E2E=1 ./verify.sh` roda os dois (opt-in; exige
-  `npx playwright install chromium`). Os testes de `real-stack.spec.ts` só rodam com
-  `E2E_REAL_BASE_URL`, nem no `verify` padrão nem no opt-in.
+- Front: `node --test` (`npm test`) no `verify` padrão; Playwright (`npm run test:e2e`,
+  Chromium, API simulada) só com `VERIFY_E2E=1 ./verify.sh` (exige `npx playwright
+  install chromium`); `real-stack.spec.ts` só com `E2E_REAL_BASE_URL`, em nenhum dos dois.
 - Nunca afrouxe teste para o código passar. Se falhar, relate o erro.
 
 ## Seed e deploy
@@ -172,31 +175,24 @@ que não mudam a arquitetura.
   limites do histórico, anti-sniping sem teto.
 
 ## Fluxo BMAD
-BMAD em português, artefatos em `_bmad-output/`. Brainstorm, arquitetura (feita),
-UX, épicos e stories (o épico 1 inclui o 1º deploy), sprint planning,
-implementação story a story. PRD dispensado: o enunciado já é a especificação
-(registrar o motivo).
-- Code review por épico como regra geral; para stories de front-end, code review
-  por story conforme `docs/FRONTEND-WORKFLOW.md`.
+BMAD em português, artefatos em `_bmad-output/`, implementação story a story. PRD
+dispensado: o enunciado já é a especificação (registrar o motivo).
+- Review agregado independente obrigatório antes do merge; fonte canônica: `docs/FECHAMENTO-DE-EPICO.md`.
+- Epic 3 `in-progress` até gates, deploy 2+3 e smoke/evidências. Retrospective BMAD opcional.
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
-1. Intervalos do scheduler e do heartbeat; reconexão do cliente com espera crescente.
-2. Validar `Origin` no handshake do WebSocket?
-3. `bidder_alias` persistido na linha do lance ou recalculado na auditoria?
-4. Ordem na inicialização: catch-up antes do seed e antes do tráfego normal.
-   (Demo aberto e trava do seed resolvidos na 2.4; o catch-up fica para a 4.4.)
-5. Limite exato dos 2 min: `now` fixo; caminho real com margens.
-6. Só quem de fato fechou o lote publica o evento de encerramento.
-7. Smoke test: "API indisponível" exige falha simulada.
-8. Nome e cálculo do estado "Encerrado, apurando resultado" nas leituras.
-   (Resolvida na 2.5: só `phase`; "Encerrado, apurando resultado" para `ended`.)
-9. Tentativa de lance em lote vencido: fechar primeiro, depois responder.
-10. Nomes ainda não definidos: rota do WebSocket, rotas do comprovante e do
-    link, segredo do JWT, ferramenta de teste do front. (Resolvidos na 1.2:
-    `compose.yaml` na raiz, Python 3.13, PostgreSQL 18, `DATABASE_URL` e
-    `TEST_DATABASE_URL`. Ferramenta de teste do front, em parte na 2.4:
-    `node --test` para lógica pura; na 2.5, Playwright como camada de navegador
-    opt-in, fora do `verify` padrão: `VERIFY_E2E=1 ./verify.sh`.)
+IDs históricos preservados; detalhes e decisões fechadas na arquitetura.
+- **Q1:** intervalos do scheduler/heartbeat e reconexão com espera crescente.
+- **Q2:** validar `Origin` no handshake do WebSocket da sala (4.1)?
+- **Q4:** catch-up antes do seed/tráfego (4.4); demo já definido nas 2.4/3.4/3.6.
+- **Q6:** implementar/validar que só quem fechou publica o evento (4.4).
+- **Q9:** fechar antes de recusar lance vencido (4.4); hoje só recusa.
+- **Q10:** rotas do WebSocket da sala, do comprovante e do link.
+
+Fechadas: Q3 na 3.3 (`bidder_alias` persistido por bid, 16 hex; auditoria nunca recalcula histórico;
+vínculo do líder/participação atuais podem calcular alias operacional, 3.4/3.5). Q5 nas 3.2/3.4:
+limite exato com `now` fixo, caminho real com margens. Q7 na 2.3: falha simulada/`scripts.smoke_artic`;
+Q8 na 2.5: `phase`. Q10 parcial: Compose/versões/bancos (1.2), `JWT_SECRET`/auth (2.2), testes (2.4/2.5).
 
 ## Armadilhas conhecidas
 (Cada problema que custar tempo vira uma linha aqui.)

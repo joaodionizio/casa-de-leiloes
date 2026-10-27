@@ -2,14 +2,14 @@
 
 > Status: diretriz de processo do projeto.
 >
-> Este documento responde **"como o Claude Code trabalha no front-end?"**. Ele
+> Este documento responde **"como os agentes Claude Code/Codex trabalham no front-end?"**. Ele
 > não responde "como o front-end deve parecer": isso pertence a `DESIGN.md`,
 > `EXPERIENCE.md` e aos blueprints de tela. Aqui só mando ler essas fontes; não
 > repito o conteúdo delas.
 
 ## 1. Propósito
 
-Defini este processo para que qualquer sessão do Claude Code ou skill do BMAD
+Defini este processo para que qualquer sessão do Claude Code/Codex ou skill do BMAD
 planeje, implemente e revise as stories de front-end do mesmo jeito.
 
 Divisão das fontes:
@@ -59,6 +59,11 @@ leitura obrigatória nas stories dessa tela.
 
 ## 4. Fluxo oficial
 
+O fluxo abaixo é por story. Ele não fecha o épico: review agregado, merge
+manual e deploy/smoke seguem a fonte canônica
+[`FECHAMENTO-DE-EPICO.md`](FECHAMENTO-DE-EPICO.md). Reviews por story não
+substituem esse gate, e o próximo épico aguarda as evidências públicas.
+
 ```text
 1. bmad-spec          (Opus)
 2. minha revisão/aprovação
@@ -71,8 +76,11 @@ leitura obrigatória nas stories dessa tela.
 9. Git, feito por mim
 ```
 
-Opus planeja, especifica e revisa; Sonnet implementa. Quem especificou não
-revisa o próprio trabalho quando for possível separar as sessões.
+Opus/Sonnet acima registram a distribuição original do Claude Code. Durante o
+Epic 3, passei a usar também Codex para implementação/correções/reviews. Escolho
+o modelo conforme a tarefa e registro o modelo efetivo; no fechamento do épico
+exijo sessão/modelo independente da implementação. Quem especificou não revisa
+o próprio trabalho quando for possível separar as sessões. A decisão é minha.
 
 As regras do `CLAUDE.md` valem dentro de todas as skills: nenhuma delas executa
 Git (nem commit, nem diff, nem status). Quando um passo da skill depender de

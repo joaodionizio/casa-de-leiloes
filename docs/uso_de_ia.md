@@ -1,5 +1,82 @@
 # Uso de IA no desenvolvimento — ÁTRIO (antes Casa de Leilões)
 
+## Evolução do processo e estado atual — 26/10/2026
+
+Os registros por story abaixo são cronológicos. Frases como "ficou em review",
+"Epic 3 in-progress" ou "3.3 backlog" descrevem aquela sessão; fechamentos
+posteriores não apagam a evidência original. O sprint e os arquivos vivos regem
+o estado atual. Não reclassifico reviews por story como reviews agregados.
+
+### Claude Code e Codex durante o Epic 3
+
+Usei Claude Code anteriormente e durante o Epic 3 para planejamento,
+implementação e reviews; Codex passou a assumir parte das implementações,
+correções e revisões. Por exemplo, a correção da 3.2 registra Codex/GPT-6.1,
+e as 3.4/3.5 registram build com Claude e review independente com modelos GPT.
+Os relatos de cada sessão identificam o modelo quando há evidência, inclusive
+quando diferiu do solicitado. Não atribuo retroativamente a um modelo uma
+sessão sem confirmação.
+
+Decidi separar implementação e review por modelo/sessão para reduzir viés,
+combinar review adversarial, mutation testing direcionado, correções aprovadas
+e re-review focado. Usei PostgreSQL real onde saldo, travas, concorrência e
+integridade exigiam. As stories 3.1–3.6 registram os casos e resultados reais;
+não extrapolo esses números para a auditoria atual. É metodologia de
+desenvolvimento/revisão que escolhi, não requisito adicional da Verzel.
+As decisões de produto, arquitetura, aceite de findings, Git e deploy
+continuam sob minha responsabilidade humana.
+
+### BMAD 6.12.4 e compatibility shims
+
+Durante o Epic 3, skills como `bmad-create-story` não apareciam. O diagnóstico
+registrado nas stories 3.2/3.3 e nesta auditoria foi mudança de distribuição,
+não corrupção da instalação: esses comandos antigos passaram ao grupo
+compatibility shims/deprecated, e a instalação estava com shims desabilitados.
+`bmad-build` é o caminho atual de implementação; `create-story` permanece como
+compatibilidade, sem precisar reescrever stories concluídas.
+
+Conforme o histórico informado por mim para esta auditoria, usei o instalador
+oficial com os shims habilitados, sem trocar a versão BMAD. A evidência viva em
+`_bmad/_config/manifest.yaml` registra **6.12.4**, `installShims: true` e os IDEs
+`claude-code` e `codex`. Os READMEs em `_bmad/core/v6-shims/` e
+`_bmad/bmm/v6-shims/` explicam a compatibilidade. Na conferência desta sessão,
+os conjuntos de nomes `bmad-*/SKILL.md` em `.claude/skills/` e `.agents/skills/`
+foram iguais, sem diferenças. Não inventei uma contagem de skills nem reinstalei
+ou alterei a configuração nesta tarefa.
+
+### Auditoria administrativa antes do fechamento do Epic 3
+
+Decidi corrigir documentação/status e centralizar os gates em
+`docs/FECHAMENTO-DE-EPICO.md`, com checklist manual em
+`docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`. O Epic 2 foi concluído localmente e
+incorporado à `main` (informação minha); seu deploy foi postergado por falha de
+processo. A recuperação será conjunta 2+3. Não existe evidência formal localizada
+de reviews agregados originais dos Epics 1/2: os reviews por story permanecem
+válidos, e preparei integração retrospectiva 1/2 e review normal do Epic 3.
+Os arquivos `code-review-epic-1/2/3.md` são **templates pendentes**, sem review
+executado ou aprovação.
+
+A Story 1.4 tinha evidências públicas e sprint `done`, mas cabeçalho `review`;
+sincronizei o cabeçalho e Epic 1 `done`, sem fingir que o review agregado original
+foi realizado. Preservei Epic 2 `done` histórico com a dívida operacional
+explícita. Epic 3 continua **`in-progress`** até todos os gates, mesmo com as
+stories 3.x concluídas; não iniciei Epic 4. Retrospective BMAD é opcional.
+
+A tarefa administrativa foi executada no Codex, modelo efetivo **GPT-6.1 Sol**
+(informado pelo ambiente); o pedido citava GPT-6 Astra High. Registrei essa
+limitação sem afirmar uma troca de modelo que não ocorreu. A IA inspecionou os
+arquivos vivos, código de configuração/startup/rotas, migrations, specs e
+registros históricos, e consultou a documentação oficial do Render para a
+opção de deploy manual. O painel e o ambiente público não foram inspecionados.
+
+Fiz apenas conferência estática/documental e comparação de arquivos locais;
+não executei `verify`, pytest, Playwright ou mutações nesta tarefa. O harness
+de integração recria o schema do banco de teste, e testes destrutivos estavam
+fora da autorização desta auditoria. O verify completo final e os smokes
+continuam gates pendentes, sem reutilizar números históricos como resultado
+novo. Nenhum código de aplicação, migration, segredo ou regra de negócio foi
+alterado; nenhum Git, PR ou deploy foi executado e nenhum `.env*` foi lido.
+
 ## Story 1.1 — Fundação mínima do monorepo
 
 Usei o Claude Code com Opus para planejamento e revisão e Sonnet para implementação.
@@ -440,3 +517,441 @@ Usei o Claude Code com Opus para especificar (spec aprovada por mim, com P1 a P9
 - Confirmou que M1, L1, L2, L3 e L4 foram resolvidos (L4: nenhum 429/503 manual novo na 2.5; o 503 com placeholder é da 2.3), que a interface não mostra mais "Casa de Leilões", que `AtrioMark` e o favicon usam a mesma geometria e que o nome acessível da marca contém o texto visível nas três larguras.
 - Ficaram cinco LOWs não corrigidos, listados na story: o título conferido sem nova tentativa em `brand.spec.ts`; o contorno do rail testado só no viewport padrão; nenhuma asserção explícita de não sobreposição dos alvos; "arco" no adendo da AD-15 e no `deferred-work.md`; e um ramo não usado de `documentTitle`.
 - Story 2.5 e a linha dela no `sprint-status.yaml` marcadas como `done`; o `epic-2` continua `in-progress`. O Epic 3 não foi iniciado. O commit é meu; sem deploy.
+
+## Story 3.1 — Carteira e depósito simulado
+
+Usei o Claude Code com Opus para criar a story e a spec (P1 a P8 decididas por mim antes da spec, D1 a D16 detalhadas dentro delas, e dois refinamentos meus na revisão final) e com Sonnet para implementar, em sessão separada, pelo `bmad-build`. A IA implementou direto, sem subagente, a partir da spec. O Git foi meu, como sempre.
+
+### O que eu decidi
+
+- P1 a P8: `wallets.user_id` como PK e FK com `ON DELETE RESTRICT`, sem `id` nem timestamps; backfill na migration e garantia genérica no seed (todo usuário sem carteira); `app/money.py` como fonte única do teto e 422 com `code` próprio `balance_limit_exceeded`; depósito sob `SELECT ... FOR UPDATE`; `GET /api/wallet` e `POST /api/wallet/deposit` só para `BIDDER`; saldo inicial zero; `/bidder/wallet` sem React Router; sem `Idempotency-Key`, sem retry automático e com uma única releitura em erro ambíguo.
+- Dois refinamentos da revisão final, que prevalecem sobre a spec: (1) o log do seed **não afirma** nada antes do commit, então a spec D10 (`seed: %d wallet(s) inserted` dentro de `run_seed`) não foi implementada; (2) o teste de concorrência **não pode depender só de `pg_locks`**: a prova é a sincronização controlada de duas transações reais e o estado final no PostgreSQL, e o `pg_locks` é evidência auxiliar.
+- Sem ledger, sem histórico de movimentos, sem lógica de lance: `committed_balance_cents` existe e fica `0`.
+
+### O que a IA fez
+
+- Leu a story e a spec inteira, conferiu o código real (a próxima revisão era mesmo a `0004`, `MAX_CENTS` e `Cents` moravam em `lots.py`, `docs/deferred-work.md` não existe e o arquivo real é `_bmad-output/implementation-artifacts/deferred-work.md`) e seguiu a ordem da spec: `app/money.py` e refatoração de `lots.py`; migration `0004` com backfill; módulo `app/wallet.py` (modelo, regra pura, serviço, rotas); seed; testes; front; Playwright; documentação.
+- Preservou o contrato do `run_seed` (`(users, created)`) e a propriedade de só logar depois do commit: `ensure_wallets` roda na mesma transação, e a contagem de carteiras simplesmente não é registrada. Um teste confere que `run_seed` não loga nada sobre carteira antes do commit e que o subprocesso do seed não menciona carteira no log.
+- Escreveu os testes de concorrência em PostgreSQL real com duas sessões e conexões: a sessão A trava a carteira e segura a trava; B (thread própria) chega ao `SELECT` da carteira (aviso pelo evento `before_cursor_execute`, sem `sleep`); só então A confirma. Cobre dois depósitos que se somam, perto do teto com recusa e com aceite (decididos sobre o saldo que A confirmou), o mesmo pelo HTTP, corrida livre com `Barrier`, controle negativo (padrão ler-somar-gravar perde um depósito) e leitura que não espera a trava. `pg_stat_activity`/`pg_locks` entram só como evidência auxiliar de que B esperou.
+- Provou por mutação temporária que os testes pegam o problema: tirar `.with_for_update()` fez falhar os testes C1 a C5 (por exemplo, total final `1500` em vez de `1800`, e `MAX − 6` em vez de `MAX`) e o de serviço do `FOR UPDATE`; tirar só o `populate_existing` fez falhar apenas o teste de serviço que pré-carrega a carteira na `Session` (os de concorrência usam sessões novas e não o detectam). Os dois arquivos foram restaurados e conferidos com `diff`.
+- Escreveu o front: `route.ts` (`/bidder/wallet`, `isBidderRoute`, `isRestrictedRoute` como type guard, `safeReturnPath`), `api/wallet.ts` (guarda de resposta e classificação conhecido × ambíguo), `walletFeedback.ts` (textos puros), `WalletPage.tsx`, `BidderOnly` no `App.tsx`, link "Carteira" no header e a seção de CSS; o duplo envio é barrado por uma `ref` síncrona, além do botão `disabled`. Olhou as capturas de tela em 1440 e 375 px (spec temporária descartável, removida).
+- Atualizou conscientemente só o que o contrato mudou: `clean_users` (`TRUNCATE wallets, lots, users`, sem `CASCADE`), tabelas do `test_database.py`, paths do OpenAPI, `MESSAGES`, `EXPECTED_POLICIES`, o teste "as seis rotas" do front e a asserção `/carteira/i` de `session.spec.ts` (agora escopada ao `main`, com a asserção positiva do link no header).
+
+### Onde a IA errou ou divergiu da spec
+
+- Divergência deliberada: sem o log `wallet(s) inserted` (D10), por decisão minha acima; o teste do subprocesso passou a afirmar a ausência do log em vez da presença.
+- `wait_for_blocked_lock` devolve `bool` em vez de levantar `AssertionError` como previa o plano: o teste decide, e o `pg_locks` fica como auxiliar.
+- O primeiro observador de trava contava `FOR UPDATE` a partir do segundo statement, mas só era ligado depois de A travar; os testes esperaram 15 s e falharam. A IA corrigiu a contagem e depois trocou o gatilho para o primeiro `SELECT` de `wallets` de B (com ou sem `FOR UPDATE`), para a mutação falhar pelo **estado final** e não por um passo de sincronização.
+- Os casos de CHECK do plano esperavam uma CHECK específica, mas o PostgreSQL informa a primeira que falha e um total negativo também deixa `committed > total`; os testes passaram a aceitar o conjunto de CHECKs ligadas à regra violada.
+- Outros tropeços corrigidos na hora: variáveis do banco de teste esquecidas num comando (`Unsafe test database`; nenhum `.env*` foi lido), cópia do baseline com `for` no zsh (sem divisão de palavras), leitura de atributo expirado depois do `rollback` num teste, `RequestInfo` inexistente no `tsconfig` do app, ordem dos botões (header antes do formulário) e `isRestrictedRoute` que precisava ser type guard.
+- `fetchWallet` ganhou um `AbortSignal` opcional (a spec previa sem argumentos) para a tela abortar a leitura ao desmontar.
+- Acessibilidade do aviso do depósito: erros conhecidos usam `role="alert"`; sucesso e incerteza usam `role="status"` (a spec previa `status` para todos).
+
+### Limitações e observações
+
+- **Teste manual ainda é meu**, como no roteiro do `test-plan.md` §10: depositar como `bidder1`, valores inválidos, duplo clique, servidor parado, `AUCTIONEER` sem "Carteira", 375 e 320 px, teclado. Os testes de navegador usam API simulada e só Chromium; o visual real e o servidor parado de verdade não foram observados por mim nesta sessão. O `bmad-code-review` também é meu e não foi rodado; a story fica em `review`.
+- Idempotência continua fora: uma nova tentativa **manual** depois de um timeout pós-commit pode duplicar o depósito (`deferred-work.md` e README).
+- Comandos executados (saída real nesta sessão): `./verify.sh` e `VERIFY_E2E=1 ./verify.sh`, ambos com exit 0: Ruff e `ruff format --check` ok (66 arquivos), 1174 testes do back-end (1058 registrados ao fim da 2.5), ESLint, `tsc` (app, node e e2e), 107 testes do front com `node --test`, build do Vite e `docker build`; no opt-in, 123 testes de navegador passando e 5 ignorados (pilha real, só com `E2E_REAL_BASE_URL`). Sem git, sem deploy e sem smoke externo.
+
+### Code review e correções (25/10/2026)
+
+- **Review.** Rodei o `bmad-code-review` com sete camadas (Blind Hunter e Edge Case Hunter em back-end e front-end, Verification Gap, Acceptance Auditor e Project Auditor). Cinco camadas caíram por limite da API e foram retomadas depois. Resultado: nenhum BLOCKER ou HIGH, e um MEDIUM (F-08): a `WalletPage` remonta a cada navegação (`key={where.id}`), e o bloqueio do depósito pendente vivia na instância. Outro clique em "Carteira" ou Back/Forward durante o `POST` trazia o botão ativo de novo e permitia um segundo depósito. Os demais achados eram LOW (F-01 a F-07, F-09 a F-13).
+- **O que eu decidi.** Corrigir F-08 com o depósito em andamento **fora da página e escopado por conta**, nunca uma promessa global sem dono. Corrigir também F-01 a F-03, F-05 a F-07 e F-09 a F-13. Ficou de fora F-04 (expansão opcional de cobertura e2e).
+- **O que a IA fez.**
+  - Criou `src/walletDeposit.ts`: um registro de depósito por conta (o e-mail da sessão), com o envio e a releitura única do erro ambíguo. A página, ao montar com um depósito da mesma conta pendente, nasce com "Depositando…" e o campo travado e mostra o resultado daquele `POST`. A conta B nunca herda o bloqueio nem o resultado da conta A. Uma leitura que começou antes de um saldo vindo do depósito não o sobrescreve.
+  - **F-01:** acrescentou `readOnly` opcional no `MoneyField` e apagou o "confirmado" antigo ao editar o valor.
+  - **F-02:** colocou a região `status` sempre montada.
+  - **F-12:** deixou o `dl` válido.
+  - **F-03:** completou os casos do classificador.
+  - **F-09:** pôs a guarda `ValueError` em `apply_deposit` para valor que não é `Cents`.
+  - **F-11:** escreveu os testes de política antes do corpo.
+  - **F-06:** passou a evidência de espera de trava para `pg_blocking_pids`, restrita a este banco.
+  - **F-05 e F-07:** limpou testes e corrigiu nomes de teste.
+  - **F-10:** acrescentou uma linha no README sobre as contas demo no teto.
+  - **F-13:** sincronizou os trechos desatualizados da story e da spec.
+- **Mutação do F-08.** Com a página voltando a nascer com `pending=false` ao remontar (o comportamento anterior), o novo teste de navegador falhou ("Depositando…" não encontrado). O arquivo foi restaurado e conferido com `cmp`.
+- **Onde divergiu.** A spec previa `depositFailureNotice('ambiguous') === 'reread'`. A decisão de reler passou para `sendDeposit`, e o teste correspondente mudou de lugar (`walletDeposit.test.ts`), sem afrouxar. O erro de campo vindo do servidor continua sem reanúncio quando o foco já está no campo: é o padrão do `MoneyField` da 2.4, que eu não quis mudar aqui.
+- **Processo.** O `CLAUDE.md` pede Sonnet para implementar. Esta rodada de correções rodou no Opus, na mesma sessão que fez o review; registro isso para decidir se as correções pedem uma revisão independente antes do `done`.
+- **Comandos executados (saída real):** `./verify.sh` e `VERIFY_E2E=1 ./verify.sh`, ambos com exit 0. Ruff e `ruff format --check` ok (66 arquivos), 1187 testes do back-end, ESLint, `tsc`, 114 testes do front com `node --test`, build do Vite e `docker build`. No opt-in, 127 testes de navegador passando e 5 ignorados (pilha real). Sem git e sem deploy.
+
+### Re-review independente e aprovação final (25/10/2026)
+
+- **Por quê.** As correções foram implementadas no Opus, na mesma sessão do review, e não no Sonnet que o `CLAUDE.md` prevê; quem corrigiu não podia aprovar a própria correção. Fiz antes o roteiro manual do F-08.
+- **Como.** Pedi uma re-review em sessão nova do Opus, só das correções, das regressões e principalmente do F-08, sem refazer o review inteiro, sem git, sem deploy e sem alterar código.
+- **Resultado.** F-08 confirmado como corrigido, F-01 a F-03 e F-05 a F-13 também; nenhum BLOCKER, HIGH ou MEDIUM introduzido. A re-review achou dois LOWs novos: LOW-1 (ao voltar pelo login com o `POST` pendente, o botão pode ficar em "Depositando…" até a próxima navegação, sem segundo `POST`) e LOW-2 (na remontagem, a confirmação pode não ser anunciada pelo leitor de tela). Comandos executados por ela: `npm test` (114 pass) e o `wallet.spec.ts` do Playwright três vezes (84 passed).
+- **O que eu decidi.** Aceitar F-04, LOW-1 e LOW-2 como LOWs opcionais, sem corrigir agora e sem nova story, e aprovar o fechamento: a Story 3.1 ficou `done`.
+
+## Story 3.2 — Regras de aceitação do lance com hora injetada
+
+Usei o Claude Code com Opus para criar a story e a spec (P1 a P13 e C1 decididas por mim antes da spec, D1 a D14 detalhadas dentro delas) e com Sonnet para implementar, em sessão separada, pelo `bmad-build`. A IA implementou direto, sem subagente, a partir da spec. O Git foi meu, como sempre.
+
+### O que eu decidi
+
+- P1 a P13 e C1: domínio puro (sem banco, HTTP, transação nem relógio próprio), dataclasses congeladas, cinco códigos de recusa fora do `errors.py`, precedência do AD-7 (período → mínimo → líder → saldo) como contrato, mínimo `int | None` sem clamp, `lot_phase` extraída para um módulo puro com defesa de fuso e de janela, e o saldo fora da tentativa (C1).
+- Nada de HTTP, migration, tabela de lances, trava, `clock_timestamp()` real nem PostgreSQL novo: isso é da 3.4 e da 3.5.
+
+### O que a IA fez
+
+- Leu a story e os cinco arquivos da spec e seguiu a ordem do `implementation-map.md`: `lot_time.py` e a reexportação em `lots.py` (testes de fase, OpenAPI e vitrine continuaram verdes sem editar nenhum), depois `bid_rules.py`, os três arquivos de teste e as mutações.
+- Implementou a composição pré/pós-carteira como na spec: `evaluate_bid` só valida o saldo e encadeia `evaluate_pre_wallet` e `evaluate_post_wallet`; a prova de "cada regra roda uma vez" é por espião (`monkeypatch`) em `lot_phase`, `minimum_bid_cents` e `evaluate_post_wallet`.
+- Escreveu a tabela de precedência de 36 linhas à mão, com o esperado digitado em cada linha, e os oito testes nomeados; a mesma tabela alimenta os testes da pré-carteira e da composição. A guarda de relógio é por AST, com um teste que prova que o detector encontra `datetime.now()` e `time.monotonic()`.
+- Executou M1 a M11 com um script temporário (cópia, mutação, testes, restauração por cópia e `cmp`), todas derrubaram os testes previstos e todas voltaram idênticas; o resultado está na story.
+
+### Onde a IA errou ou divergiu da spec
+
+- Nenhum desvio de comportamento. A primeira versão do `bid_rules.py` passou do limite de 88 colunas do Ruff em comentários e docstrings; foi só ajuste de redação.
+- Tropeço de ambiente: o primeiro `pytest` focado falhou com `Unsafe test database` por falta de `TEST_DATABASE_URL` no shell (os valores locais fictícios são os do `verify.sh`; nenhum `.env*` foi lido).
+- A M6 (`<` → `<=` no mínimo) derrubou muito mais testes do que o previsto (53), porque o auxiliar `eligible_bid()` usa o mínimo exato; os testes-alvo (`test_first_bid_minimum` e `test_next_bid_minimum`) estão entre os que falharam.
+
+### Limitações e observações
+
+- `EligibleBid` impede uso acidental (construção direta e `dataclasses.replace` levantam `ValueError`), mas não é fronteira de segurança contra código Python arbitrário.
+- `app.money` importa `pydantic`, então `bid_rules` o carrega de forma transitiva; a allowlist trata dos imports diretos.
+- Não há teste manual específico: a story não cria UI nem endpoint. O `bmad-code-review` é meu e não foi rodado; a story fica em `review`.
+- Comandos executados (saída real nesta sessão): `./verify.sh` e `VERIFY_E2E=1 ./verify.sh`, ambos com exit 0: Ruff e `ruff format --check` ok (71 arquivos), 1553 testes do back-end, ESLint, `tsc`, 114 testes do front com `node --test`, build do Vite e `docker build`; no opt-in, 127 testes de navegador passando e 5 ignorados (pilha real). Sem git, sem deploy.
+
+
+### Correções aprovadas do code review — F-01 a F-03 (26/10/2026)
+
+Decidi corrigir somente F-01, F-02 e F-03 e manter a Story 3.2 em `review`, sem nova
+rodada de code review. Esta sessão executou no Codex com GPT-6.1, e não no Sonnet
+solicitado no texto inicial; registro essa diferença de processo.
+
+- **F-01:** a IA acrescentou um teste com dois objetos UUID distintos de mesmo valor,
+  verificando `==`, `is not` e `ALREADY_WINNING` nas avaliações pré-carteira e completa.
+  A mutação temporária `==` → `is` produziu **1 failed** (exit 1): retornou
+  `EligibleBid` em vez da recusa. A restauração ocorreu em `finally`, e `cmp`
+  confirmou conteúdo idêntico (exit 0), sem Git.
+- **F-02:** o detector AST passou a reconhecer referências de atributos de relógio,
+  inclusive `field(default_factory=datetime.now)`, `datetime.utcnow` e `time.time`.
+  O autoteste cobre chamadas e factories. Casos válidos continuam aceitos: `now`
+  injetado, `eligible.now`, data fixa e factory `list`. O primeiro reforço capturou
+  indevidamente `eligible.now`; a IA restringiu as referências aos qualificadores
+  de relógio e acrescentou um teste de regressão para esse dado de domínio.
+- **F-03:** a IA qualificou a equivalência da composição para entradas estruturalmente
+  válidas e explicitou D8: saldo separado validado antecipadamente, com `ValueError`
+  para corrupção antes de qualquer recusa de negócio. Só docstrings foram alteradas
+  no módulo produtivo; a comparação das ASTs sem docstrings confirmou comportamento
+  executável idêntico.
+- **Resultados reais:** focados após restauração, **355 passed em 0,16 s**, exit 0;
+  `./verify.sh`, exit 0: Ruff, formatação (71 arquivos), **1563 passed, 1 warning em
+  50,59 s**, ESLint, typecheck, **114 testes do front-end**, Vite e Docker build ok.
+  O aviso de depreciação é de `httpx` no `starlette.testclient`. Não repeti o E2E
+  opt-in, conforme solicitado.
+- **Ambiente:** cache temporário do `uv` por bloqueio do cache padrão; banco e origem
+  fictícios locais do `verify.sh` nos testes focados; acesso ao PostgreSQL fora do
+  sandbox. Nenhum `.env*` foi lido. Duas linhas longas interromperam o primeiro
+  `verify`; a formatação foi corrigida antes da execução completa aprovada.
+- **Estado:** arquivo de sprint idêntico ao inicial; 3.2 `review`, Epic 3
+  `in-progress`, 3.3 `backlog`. Sem Git, deploy, nova revisão ou início da 3.3.
+
+
+### Correção N-01 após re-review independente (26/10/2026)
+
+A re-review confirmou F-01 e F-03, classificou F-02 como parcial e apontou N-01
+(MEDIUM): o guardrail aceitava `field(default_factory=dt.now)` com alias normal.
+Decidi corrigir somente esse guardrail e sincronizar a redação de D8 na spec,
+mantendo a Story 3.2 em `review` e sem nova revisão nesta sessão.
+
+- A IA passou a montar o mapa de aliases a partir de `import` e `from ... import ...`
+  absolutos de `datetime`/`time`, resolvendo cadeias AST até nomes canônicos. A guarda
+  encontra chamadas e referências a callable pelo dono e pelo nome proibido, em vez
+  de depender de nomes literais ou classificar qualquer `.now` como relógio.
+- Preservou os testes anteriores e acrescentou as formas normais com e sem aliases,
+  inclusive factories `dt.now`, `dt.utcnow`, `clock.time` e função importada com alias.
+  Os controles negativos cobrem objetos de domínio, nomes locais, imports de outros
+  módulos, data fixa e factory `list`.
+- Ignorar temporariamente `alias.asname` em `ImportFrom` fez o teste explícito de
+  `default_factory=dt.now` falhar: `[] != ['now']`, **1 failed em 0,03 s**, exit 1.
+  Restauração em `finally`, conferida com `cmp` (exit 0).
+- Sincronizou apenas a docstring ilustrativa e as garantias do `domain-contract.md`
+  com D8: composição equivalente para entradas estruturalmente válidas e saldo
+  separado validado antes de recusas de negócio, com `ValueError` para corrupção.
+  Todos os módulos Python de `backend/app` permaneceram byte a byte idênticos.
+- Resultados reais: pureza **52 passed em 0,04 s**; domínio da 3.2 após restauração
+  **405 passed em 0,22 s**; `./verify.sh` exit 0: Ruff, formatação (71 arquivos),
+  **1592 passed, 1 warning em 49,75 s**, lint, typecheck, **114 testes do front-end**,
+  Vite e Docker build aprovados. Mantive o warning herdado de Starlette/httpx.
+- Ambiente: cache temporário do `uv`, valores locais fictícios do `verify.sh` nos
+  testes e acesso ao PostgreSQL fora do sandbox, sem leitura de `.env*`. Duas linhas
+  longas foram formatadas com Ruff antes do verify. Sem desvio funcional e sem E2E
+  opt-in, conforme o escopo solicitado.
+- Sprint idêntica ao início: 3.2 `review`, Epic 3 `in-progress`, 3.3 `backlog`.
+  Sem Git, deploy, nova revisão ou início da Story 3.3.
+
+
+### Re-review independente final e fechamento da Story 3.2 (26/10/2026)
+
+A revisão independente final confirmou F-01, F-02, F-03 e N-01 corrigidos,
+D8/documentação sincronizada, nenhum novo finding real e compatibilidade com a Story
+3.4 pronta sem redesenho. Com a recomendação **APROVADA PARA DONE**, decidi concluir
+a Story 3.2 e atualizar seu status para `done`.
+
+Este fechamento usou as evidências já registradas da última correção (52 testes de
+pureza, 405 de domínio, verify exit 0, 1592 testes do back-end e 114 do front-end),
+sem repetir testes ou nova revisão. O warning herdado Starlette/httpx segue fora do
+escopo. Alterei somente documentação/status, preservando o histórico, o Epic 3 em
+`in-progress` e a Story 3.3 em `backlog`. Sem Git, commit, push, deploy ou início da 3.3.
+
+
+## Story 3.3 — Integridade histórica pura (26/10/2026)
+
+Decidi implementar somente a Story 3.3 a partir da spec aprovada e dos companions,
+preservando P1–P20/A1–A5 e os ajustes S-01/S-02. Autorizei testes, mutações e
+verify completo; reservei a revisão independente para outra etapa. A entrega fica
+em `review`, sem `bmad-code-review` e sem `done`.
+
+A IA criou o módulo puro `bid_integrity.py`: três dataclasses congeladas com
+construtores nomeados e validação estrita, pseudônimo HMAC-SHA-256, bytes JSON v1,
+SHA-256 por lance, HMAC completo da âncora, compare_digest e verificação ordenada
+de cadeia. Acrescentou a matriz em `test_bid_integrity.py` (95 casos coletados)
+e ampliou a guarda de pureza existente sem alterar o detector de relógio da 3.2.
+Os nove golden vectors foram copiados como literais independentes da spec; os
+spies delegam à implementação real de HMAC, JSON e compare_digest.
+
+Exigi a receita de autenticar e vincular o estado anterior antes de extensão.
+A IA a demonstrou em composição local de teste: recálculo de histórico com
+assinatura antiga, alteração de count/hash, truncamento, resumo antigo sobre
+cadeia alterada e replay de âncora vazia de outro lote bloqueiam a extensão e
+não emitem nova âncora. Vazio do lote correto exige assinatura válida; ausência
+dela dá ValueError. Controles positivos emitem uma nova âncora válida. Isto não
+implementa a transação da 3.4 nem prova adulteração no PostgreSQL da 5.1.
+
+Resultados reais desta sessão:
+
+- Focados com regressões 3.1/3.2: **573 passed em 0,35 s**, exit 0; após as
+  mutações e restauração, **573 passed em 0,34 s**, exit 0.
+- **M1–M13** executadas isoladamente e mortas: ordenação/separadores JSON,
+  SHA-512, previous_hash ausente, aceitar uppercase, alias de 8 hex, igualdade
+  comum no HMAC, count omitido, microssegundos opcionais, secret vazio, bool,
+  sequência e links ignorados. Também executei as mutações pedidas de **ignorar
+  lot_id** e **genesis incorreto**. Todas geraram falha de comportamento (exit 1),
+  sem sintaxe/coleta; restauração em finally e cmp exit 0 em cada caso.
+  A tabela da seção 13 da story identifica os testes que mataram cada mutante.
+- `./verify.sh` **exit 0**: Ruff, formato de **73 arquivos**, PostgreSQL real de
+  teste, **1719 passed, 1 warning em 49,42 s**, ESLint, typecheck, **114 testes
+  frontend**, Vite e Docker build. O warning herdado de Starlette/httpx permanece.
+  Não houve E2E opt-in, pois não mudou interface.
+
+O primeiro comando focado parou por bloqueio de PostgreSQL no sandbox; com acesso
+local autorizado, a tentativa anterior à criação do módulo falhou na coleta por
+ModuleNotFoundError. Não apresento essa coleta como teste vermelho comportamental.
+As falhas comportamentais registradas são as mutações realmente executadas. Ruff
+apontou linhas longas no rascunho e removeu `.encode("utf-8")` no auto-fix UP012;
+a IA formatou os arquivos e restaurou a expressão explícita normativa com um
+noqa local antes da verificação final. Não houve alteração funcional do contrato.
+
+Usei cache uv temporário, valores locais fictícios publicados em verify.sh e o
+harness PostgreSQL existente. Nenhum `.env*`, credencial ou segredo operacional
+foi lido pelo agente. Logs temporários em `/private/tmp/atrio-3-3-verify.log` e
+`/private/tmp/atrio-3-3-mutations-dgnokzg3/`. Sem Git ou deploy, sem dependências,
+migration, endpoint, frontend ou persistência nova. A 3.4 não foi iniciada.
+
+Registrei a sincronização de Q3/P7/A1 em ARQUITETURA/CLAUDE/epics como pendência
+antes da integração 3.4: alias histórico persistido por evento, nunca recalculado
+na auditoria, formato de 16 hex e rotação transparente não suportada. Esses
+documentos foram preservados. Alias pode colidir; segredo comprometido e rollback
+integral de cadeia/âncora antigas válidas permanecem limites do desenho aprovado.
+A revisão independente continua pendente por minha instrução explícita.
+
+### Code review, correção do F-01 e fechamento da Story 3.3 (26/10/2026)
+
+A revisão independente apontou um único finding, F-01 (LOW): os testes não
+distinguiam `type(x) is int` de `isinstance(x, int)` com tratamento separado de
+`bool`, então uma subclasse de `int` passaria numa regressão futura. O código
+produtivo já estava correto. Aprovei corrigir só isso; a IA acrescentou testes com
+subclasses locais de `int`, `str` e `bytes` (a spec exige tipos exatos) e provou
+por mutação temporária que a suíte passa a falhar. Restaurou o módulo por cópia,
+sem alterar produção e sem Git.
+
+Re-review final: F-01 corrigido, nenhuma regressão, qualidade dos novos testes
+adequada, `test_bid_integrity.py` com 105 passed, subclasses em 10 testes / 13
+asserções, mutações de int/str/bytes mortas e nenhum arquivo produtivo alterado.
+Último `./verify.sh` completo após a correção: 1729 passed no back-end, 114 no
+front-end, Ruff, typecheck, build do Vite e Docker build aprovados, com 1 warning
+herdado de Starlette/httpx. Com a recomendação **APROVADA PARA DONE**, decidi
+concluir a Story 3.3. Este fechamento alterou só documentação e status, sem rodar
+testes, sem Git e sem iniciar a 3.4. A sincronização de Q3/P7/A1 continua pendente
+antes da integração da 3.4.
+
+## Story 3.4 — Lance transacional com travas e anti-sniping (26/10/2026)
+
+Decidi implementar somente a Story 3.4, a partir da spec aprovada (`/bmad-spec`, review
+adversarial, SR-01 a SR-09 corrigidos) e do `/bmad-build`. Pedi para não redesenhar, não
+tocar em `backend/.env.example`, não rodar Git e parar em `review`, sem `/bmad-code-review`.
+
+A IA (Claude Sonnet 5.5 nesta sessão; o pedido citava outro modelo) escreveu a migration
+`0005`, `app/bids.py` (modelo, gate, serviço, rota), as configurações de integridade, a âncora
+vazia em `create_lot` e no seed, e a matriz de testes em PostgreSQL real: migration, serviço,
+rota, concorrência (inclusive o controle negativo que provoca `40P01`), 23 adulterações
+G1–G23 mais G9b/G10b/G11b e a fixture `drop_checks`, que recusa CHECK fora de `lots` e `bids` e
+recria exatamente o que removeu.
+
+Verificações realmente executadas: `pytest` com 1970 testes passando e `./verify.sh` completo
+com exit 0. Executei 37 mutações dirigidas, uma por vez e restauradas; 35 morreram. As duas
+que sobreviveram foram analisadas, não escondidas: uma é equivalente (o ORM não inclui no
+`UPDATE` um atributo que não mudou) e a outra é defesa sem efeito observável hoje (o
+`rollback()` antes do serviço).
+
+Registro de um erro: a IA escreveu por engano um comando com `git status`; ele foi bloqueado e
+nada de Git foi executado. Não foi testado: PostgreSQL com carga real, falha de conexão depois
+do envio do `COMMIT` (indeterminada por natureza) nem o deploy no Render.
+
+### Review independente e fechamento da Story 3.4 (26/10/2026)
+
+O build foi feito com Claude Sonnet 5.5. Iniciei o review independente com
+GPT-6 Astra High; ele atingiu o limite de uso antes da consolidação, depois de
+encontrar um LOW, sem concluir toda a auditoria. Fiz a revisão focada complementar
+com um modelo mais econômico, cobrindo writers, HTTP/security, qualidade dos testes
+e mutation spot-check. Nenhuma falha MEDIUM+ foi encontrada; o único finding,
+F-01 LOW documental, foi corrigido no exemplo Docker do README. Resultado
+consolidado: 0 BLOCKER, 0 HIGH, 0 MEDIUM, nenhum LOW técnico; recomendação final:
+aprovada. Fechei a 3.4 como `done`, mantendo o Epic 3 `in-progress` e a 3.5 em `backlog`.
+
+Essa experiência me levou a reservar modelos High para tarefas de alto risco real
+e usar modelos Medium para verificações focadas e consolidação, em vez de usar
+High em todas as etapas.
+
+## Story 3.5 — Dar lance pela sala do lote (26/10/2026)
+
+- **Preparação:** create-story e revisão da spec com Claude Sonnet 5.5; elaboração
+  da spec com GPT-6.1 Sol Medium.
+- **O que a IA fez:** com a story e a spec já aprovadas por mim (D1–D5 fechadas), o Claude
+  Sonnet 5.5 implementou os dois read models (`GET /bids` e `GET /bids/mine`) em `bids.py`, a
+  sala no front (contrato HTTP, feedback por `code`, posição, contagem, envio pendente por
+  conta e lote, painel, formulário e histórico), o ajuste do retorno ao lote em 401, os testes
+  e a nota do README. Não alterou o motor da 3.4 nem tocou em Git ou em `.env*`.
+- **O que revisei/decidi:** as decisões vinham da spec; a revisão do código é minha, antes do
+  commit. O build não abriu decisão nova.
+- **Onde a IA errou e foi corrigida durante o trabalho:** um `Countdown.tsx` e um
+  `countdown.ts` na mesma pasta colidem em sistemas de arquivos que ignoram caixa (o `tsc`
+  acusou); o componente virou `CountdownTimer.tsx`. Alguns testes meus tinham aritmética
+  errada ou cenários impossíveis (um licitante dando lances seguidos recebe `already_winning`)
+  e foram corrigidos no teste, não no código. Um teste da 3.4 que exigia 405 em `GET` no
+  caminho do lance ficou obsoleto por decisão da spec e perdeu só essa linha.
+- **Review e correções:** o code review independente com GPT-6.1 Sol Medium encontrou
+  6 MEDIUM (F-01 a F-06) e 1 LOW opcional (F-07). F-01 a F-06 foram corrigidos e F-07
+  recebeu cobertura adicional. O re-review focado e independente com GPT-6.1 Sol Medium
+  confirmou as correções, considerou a cobertura suficiente e não encontrou regressão
+  concreta: **APROVADA PARA DONE**. A Story 3.5 foi fechada como `done`.
+- **Verificação após as correções:** `VERIFY_E2E=1 ./verify.sh`, exit 0; pytest 1987,
+  npm test 147 e Playwright 168 passaram; Ruff/format, ESLint, tsc, Vite build e docker
+  build OK. O re-review posterior executou apenas teste focado, sem alterar código.
+  O fechamento documental não repetiu essas verificações.
+- **Estratégia atual:** modelos High ficam reservados para problemas realmente críticos;
+  tarefas normais e reviews focados usam Medium/Sonnet quando suficientes. Implementador
+  e reviewer são independentes quando possível.
+
+## Story 3.6 — Leiloeiro cancela lote sem lances (26/10/2026)
+
+- **Preparação:** story e spec aprovadas por mim antes do build (D1 a D7 fechadas).
+- **O que a IA fez:** o Claude Sonnet 5.5 implementou a migration `0006`, o módulo
+  `app/lot_cancellation.py` (reusa a trava, a hora e o gate da 3.4 por import), o
+  `lot_cancelled` no lance, os filtros de cancelado nas leituras públicas e no seed, o novo
+  read model de `GET /api/lots/mine`, o painel "Meus lotes" com confirmação inline, o único
+  novo código da sala, os testes (integração, concorrência C1/C2/C3, migration, `node --test`
+  e Playwright) e a nota do README. Não tocou em Git nem em `.env*`.
+- **O que revisei/decidi:** as decisões vinham da spec; a revisão do código é minha, antes do
+  commit. O build não abriu decisão nova.
+- **Onde a IA errou durante o trabalho:** o primeiro `verify` falhou no Ruff por duas linhas
+  longas na docstring da migration (eu só tinha checado `app/`); o primeiro C3 reutilizava o
+  mesmo licitante entre rodadas e quebrava o invariante de carteira por causa do reset do
+  próprio teste, então passou a usar um licitante novo por rodada.
+- **Mutações executadas** (uma por vez, restauração conferida com `cmp`): M1 (decidir
+  `lot_has_bids` com o `bid_count` lido antes do `FOR UPDATE`), M2 (sem trava), M3 (sem gate),
+  M4 (ignora `lot_has_bids`), M5 (sem dono), M6 (sem `lot_ended`), M7 (relógio do Python, duas
+  variantes), M8 (já cancelado antes do gate), M9 (filtro movido para `WHERE` ou removido, em
+  quatro variantes, só nas consultas com `LEFT JOIN`) e uma extra (`lot_cancelled` antes do
+  gate). Todas reprovaram ao menos um teste.
+- **Verificação:** `VERIFY_E2E=1 ./verify.sh`, exit 0: pytest 2036 passaram, `npm test`
+  158 passaram, Playwright 189 passaram; Ruff, format, ESLint, `tsc`, build do Vite e docker
+  build OK.
+- **Code review e correção:** o review independente não encontrou HIGH/MEDIUM. O LOW F-01
+  (C2 e C3 sem o snapshot de todas as carteiras) foi corrigido só nos testes, sem tocar em
+  código produtivo. O arquivo `test_lot_cancellation_concurrency.py` rodou 3 vezes depois
+  do ajuste: 5 passaram em cada uma. O `verify` completo não foi repetido (só assertions de
+  teste mudaram).
+- **Status:** Story 3.6 `done`; Epic 3 segue `in-progress`. Sem Git, sem deploy.
+
+## Protótipo navegável de referência do front-end (26/10/2026)
+
+Esta etapa não criou identidade nem alterou código de aplicação. Registro como cheguei até
+ela e o que a IA fez.
+
+### Como a direção visual foi formada
+
+- Usei o Figma Make no início para prototipar os principais fluxos. Revisei e ajustei esse
+  primeiro protótipo e descartei parte da direção visual inicial, que parecia produto SaaS
+  ou plataforma de cursos.
+- Depois defini uma identidade própria para o produto, baseada na marca roxa do projeto, com
+  a obra como protagonista (hoje ÁTRIO — Leilões de Arte).
+- Usei IA como apoio para comparar alternativas, organizar feedback, identificar problemas e
+  formalizar as decisões. As decisões que aprovei viraram `DESIGN.md`, `EXPERIENCE.md` e
+  `VITRINE-BLUEPRINT.md`.
+- Como referências de leilão, destaco as três que o próprio desafio indica: Catawiki,
+  LiveAuctioneers e Superbid. Também observei padrões consolidados de descoberta e
+  organização de catálogos para validar decisões de escala e navegação. Não usei
+  exclusivamente as referências do desafio e não copiei identidade de nenhuma.
+
+### O que a IA fez nesta etapa
+
+- Usei a skill `bmad-ux` depois, para transformar essas decisões **já aprovadas** em um
+  protótipo navegável, e não para criar uma identidade nova. A IA leu os documentos
+  vinculantes, propôs o mapa de telas e as decisões abertas e parou para eu decidir antes de
+  gerar qualquer arquivo.
+- Gerou o protótipo em `ux-designs/casa-de-leiloes/`, em HTML, CSS e JavaScript simples:
+  **9 telas mais um hub de avaliação** (Vitrine, Login, Meus lotes, Criar lote, Sala,
+  Carteira, Meus arremates, Comprovante e Auditoria). O hub escolhe tela, cenário, papel e
+  larguras, e concentra a indicação de qual story entrega cada elemento, que não aparece nas
+  telas.
+- Baixou 10 obras reais de domínio público do Art Institute of Chicago, **apenas como assets
+  do protótipo**, registradas em `SOURCES.md`. A regra de produção do AD-22 não mudou: a
+  aplicação usa o IIIF por proxy e não armazena imagens de obras.
+- Usei o protótipo para testar estados, escala (por exemplo 12 ao vivo, 20 próximos, 50
+  encerrados, 120 lances), responsividade e acessibilidade básica.
+
+### O que eu decidi
+
+- D1 a D5 da etapa: posição do usuário na Sala (estado, último lance, quantidade e "Você" no
+  histórico, sem definir endpoint nem payload); `00:00` com "Confirmando encerramento com o
+  servidor…" e botão desabilitado; obras reais no protótipo; sem página de arquivo e sem
+  link sem destino; produto planejado até a Story 5.3, com informação de story só no hub.
+- Na aprovação final: formato do cronômetro só como apresentação (`MM:SS`, `HH:MM:SS`,
+  `2 d 04 h`); lote em destaque fora do rail "Ao vivo"; sem histórico de movimentos na
+  Carteira; auditoria adulterada sem apontar o lance divergente; sans com numerais tabulares
+  para valores dinâmicos; Sala em duas colunas no tablet como referência; conteúdo fictício
+  não vinculante. Estão em `ux-designs/casa-de-leiloes/PROTOTIPO.md`.
+
+### Verificações realmente executadas
+
+- Um script Playwright (Chromium) fez **284 carregamentos, de 71 combinações de tela e
+  cenário, em 320, 390, 820 e 1280 px**, verificando erros de console, requisições que
+  falham, rolagem horizontal, `alt`, rótulos, alvos de toque de 44 px e contraste calculado.
+- A primeira rodada encontrou problemas reais de layout e de alvo de toque (estouro
+  horizontal em 320 px, tabela de "Meus lotes" em 820 px, rail colado na borda, título
+  espremido nas linhas de encerrados, link com 21 px de altura), que foram corrigidos. A
+  rodada final **não reportou problemas dentro das verificações implementadas**.
+- **Não foram testados:** leitor de tela completo, navegação integral por teclado, Firefox,
+  Safari, impressão física nem dispositivo real.
+
+### Limites
+
+- O protótipo **não é código de produção** e não deve ser copiado para `frontend/`. Nenhuma
+  lógica simulada de API, autenticação, WebSocket, tempo ou regra de leilão foi transferida
+  para a aplicação real. Estados, textos, rotas, hashes e valores do protótipo são fictícios e
+  não vinculantes; as stories definem os contratos reais.
+- Não rodei `verify` nesta etapa: ela só adicionou documentação e o protótipo. Não houve Git.
+
+## Correção do F-01 (MEDIUM) do review agregado do Epic 3 — 26/10/2026
+
+- O review agregado apontou que a sala podia ficar bloqueada: o `POST` pendente terminava
+  entre a renderização e o efeito da remontagem, e o efeito, ao consultar de novo o
+  registro, não achava a entry e abandonava a promise.
+- Corrigi só na sala: `LotPage` captura a entry na primeira renderização e o efeito segue a
+  capturada (`bidToFollow`, que exige a mesma conta e o mesmo lote). `WalletPage` não foi tocada.
+- Teste focado (`bidSubmission.test.ts`): registro já liberado, a capturada ainda é
+  acompanhada, um único envio, e nunca vale para outra conta/lote. É teste puro: não há
+  infraestrutura de componente no projeto, então o efeito em si não é exercitado.
+- `VERIFY_E2E=1 ./verify.sh` posterior à correção: exit 0; 2036 backend, 160 front, 189
+  Playwright (5 skipped); Ruff, format, ESLint, tsc, Vite e docker build passaram.
+- Sem Git, sem backend. Epic 3 segue `in-progress`; re-review pendente.

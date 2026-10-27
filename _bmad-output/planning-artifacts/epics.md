@@ -17,8 +17,16 @@ inputDocuments:
 Este documento divide o projeto casa-de-leiloes em épicos e stories. Não fiz PRD
 porque o enunciado (`docs/desafio-elite-dev.md`) já é a especificação. As
 decisões técnicas vêm de `docs/ARQUITETURA.md` (AD-1 a AD-30, vinculantes) e a
-ordem temporal vem de `docs/CRONOGRAMA.md`. Não há documento de UX: a pasta
-`ux-designs/` está vazia; a direção visual vem do AD-15.
+ordem temporal original vem de `docs/CRONOGRAMA.md`. Na criação original dos
+épicos ainda não havia documentos específicos de UX; depois criei
+`DESIGN.md`, `EXPERIENCE.md` e `VITRINE-BLUEPRINT.md` nesta pasta, além de
+`docs/FRONTEND-WORKFLOW.md` para o processo. Eles passaram a reger as stories de
+front-end: enunciado/story > arquitetura > documentos UX/blueprint no seu
+escopo > protótipos. `ux-designs/` hoje contém um protótipo de referência, sem
+substituir contratos. Nome atual do produto: ÁTRIO; nomes técnicos preservados.
+O frontmatter de aprovação/inputs registra a criação original, não um snapshot
+do estado atual. Status vivos estão no sprint; o fechamento segue o processo
+canônico abaixo.
 
 Regras desta divisão:
 - cada story é um commit coerente, com planejamento, implementação, `verify`,
@@ -28,7 +36,7 @@ Regras desta divisão:
 - tabelas nascem na story que precisa delas;
 - os critérios dizem o que precisa funcionar, não como implementar além das ADs;
 - a arquitetura é vinculante: a divisão se ajusta às ADs, nunca o contrário.
-  Por isso, todo lance nasce íntegro (AD-7 passo 15, AD-13, AD-20, AD-21) já no
+  Por isso, todo lance nasce íntegro (AD-7 passos 13 a 17, AD-13, AD-20, AD-21) já no
   Épico 3;
 - quando uma story depende de uma questão aberta (Q1 a Q10 de
   `docs/ARQUITETURA.md`) ou de um detalhe ainda não decidido, isso está indicado
@@ -36,7 +44,16 @@ Regras desta divisão:
 
 **Critério de saída de todo épico (do princípio do cronograma):** o `verify`
 passa e o deploy está atualizado, com o fluxo do épico funcionando na URL
-pública.
+pública. O procedimento completo e a regra de status são canônicos em
+[`docs/FECHAMENTO-DE-EPICO.md`](../../docs/FECHAMENTO-DE-EPICO.md): review
+agregado independente antes do merge, deploy manual da `main`, smoke público e
+evidências antes de `done` e do próximo épico; retrospective BMAD opcional.
+
+**Exceções históricas (26/10/2026):** Epic 1 tem deploy documentado, mas review
+agregado original não localizado. Epic 2 foi concluído localmente e incorporado
+à `main` (informação do usuário), sem deploy correspondente por falha de processo.
+Preservo seu `done` histórico com essa pendência explícita. Recuperação conjunta
+2+3 após os reviews; Epic 3 permanece `in-progress` até todos os gates.
 
 ### Decisões já tomadas sobre a divisão
 
@@ -98,7 +115,7 @@ NFR6: Uso de IA descrito (onde, como, o que foi revisado).
 - AR2 (AD-3): dinheiro em centavos, `BIGINT`, sufixo `_cents`; CHECKs de não negativo e `committed_balance_cents <= total_balance_cents`; sem float.
 - AR3 (AD-4): React + Vite + TypeScript simples; contratos HTTP e eventos WebSocket tipados.
 - AR4 (AD-6, AD-26): hora do PostgreSQL (`clock_timestamp()`) lida depois da trava do lote, um instante por operação; o domínio recebe `now`.
-- AR5 (AD-7, AD-8): lance em uma única transação de 16 passos, incluindo o registro de auditoria; travas: lote, depois carteiras em `user_id` crescente.
+- AR5 (AD-7, AD-8): lance em uma única transação (18 passos desde o refinamento da Story 3.4, com autenticação do estado anterior antes das regras), incluindo o registro de auditoria; travas: lote, depois carteiras em `user_id` crescente.
 - AR6 (AD-9, AD-19): fechamento sob a mesma trava, idempotente, `UNIQUE(lot_id)` em `receipts`; scheduler + catch-up na inicialização e na tentativa de lance; leituras nunca liquidam; evento só depois do commit.
 - AR7 (AD-10, AD-25): WebSocket só para a sala; lances por REST; heartbeat do cliente; snapshot completo ao (re)conectar; um processo; Session curta em threadpool.
 - AR8 (AD-11, AD-29): JWT de 8 h em cookie HttpOnly, mesma origem; Argon2; CSRF por JSON + `Origin`/`Referer`; sem CORS permissivo; toda rota declara política de acesso.
@@ -112,7 +129,9 @@ NFR6: Uso de IA descrito (onde, como, o que foi revisado).
 
 ### Requisitos de UX
 
-Não há documento de UX. Requisitos visuais vêm do AD-15:
+Na divisão original, os requisitos visuais abaixo vinham do AD-15. Hoje são
+complementados por `DESIGN.md`, `EXPERIENCE.md` e `VITRINE-BLUEPRINT.md`,
+conforme a ordem de autoridade acima; preservo o inventário e seus critérios:
 - UX1: identidade de catálogo de museu, com tokens CSS próprios.
 - UX2: estados ("ganhando", "superado", "encerrado") nunca indicados só por cor.
 - UX3: valores e cronômetro muito legíveis; layout responsivo.
@@ -147,6 +166,7 @@ OPT5: Épico 6 (6.7)
 NFR1: Épico 1 (1.4) e critério de saída de todo épico
 NFR2: Épicos 2 e 6 (2.3, 2.5, 6.1)
 NFR3: Épicos 1 e 6 (1.4, 6.3)
+NFR5: Épico 1 (1.1 React/Python; 1.2 PostgreSQL)
 NFR6: todas as stories; consolidado em 6.3
 
 ## Lista de épicos
@@ -615,7 +635,12 @@ Como qualquer pessoa que vá auditar um lote,
 Quero que existam funções determinísticas de pseudônimo, serialização canônica, hash encadeado e assinatura da âncora,
 Para que o motor de lances grave cada lance íntegro desde o primeiro.
 
-**ADs:** AD-13, AD-20, AD-21. **Depende de:** Q3 (`bidder_alias` persistido na linha do lance ou recalculado; define os dados de entrada do hash e o que a story 3.4 grava).
+**ADs:** AD-13, AD-20, AD-21. **Dependência original Q3, resolvida na 3.3:**
+`bidder_alias` persistido em cada bid; auditoria usa o persistido, nunca recalcula
+aliases históricos. Formato definitivo: `Licitante-` + 16 hex uppercase. O
+exemplo curto dos critérios originais abaixo é histórico; contrato final na spec
+da 3.3, implementado na 3.4. Vínculos operacionais do líder/usuário atual são
+tratados separadamente nas 3.4/3.5.
 
 **Critérios de aceite:**
 
@@ -1149,10 +1174,14 @@ Decididas na criação da story indicada, não aqui:
 - 1.4: resolvida em 24/10/2026; decisões P1 a P14 no arquivo da própria story,
   `_bmad-output/implementation-artifacts/1-4-primeiro-deploy-no-render.md`.
   Rotas técnicas: `GET /api/infra-check/cookie` (cookie `__Host-infra_check`) e
-  `/api/infra-check/ws` (WebSocket), ambas fora do OpenAPI. O cookie técnico será
+  `/api/infra-check/ws` (WebSocket), ambas fora do OpenAPI. O cookie técnico foi
   removido na 2.2 (cookie real do JWT). Depois da 2.2, só o WebSocket técnico continua
   temporariamente; a 2.2 o classifica como rota pública na política de acesso até ele
   ser removido ou substituído na 4.1 (sala ao vivo).
-- 3.3: Q3 (`bidder_alias` persistido ou recalculado), agora necessária até 25/10.
-- 4.1: significado exato de "posição do usuário nos lances".
-- Demais Q1 a Q10: indicadas em cada story.
+- 3.3: Q3 resolvida em 26/10/2026 (`bidder_alias` persistido em cada lance; a
+  auditoria nunca o recalcula); registro no AD-20 e na story da 3.3.
+- Posição do usuário: a 3.5 definiu alias próprio, quantidade, último lance e
+  ganhando/superado/neutro; a 4.1 fará sua atualização por WebSocket. O texto de
+  dependência da 4.1 preserva a pergunta original, não reabre a decisão da 3.5.
+- Q5 resolvida nas 3.2/3.4; Q7 na 2.3; Q8 na 2.5; Q10 parcialmente nas
+  1.2/2.2/2.4/2.5. Questões realmente abertas: lista viva no `CLAUDE.md`.

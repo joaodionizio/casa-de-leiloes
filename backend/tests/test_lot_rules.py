@@ -335,6 +335,7 @@ def test_the_persistence_level_knows_nothing_about_the_network() -> None:
 
     assert sorted(parameters) == [
         "auctioneer_id",
+        "audit_hmac_secret",
         "is_demo",
         "now",
         "session",

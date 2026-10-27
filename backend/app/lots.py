@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Response
+from fastapi import Depends, FastAPI, Request, Response
 from pydantic import (
     AfterValidator,
     AwareDatetime,
@@ -40,16 +40,18 @@ from sqlalchemy import (
     Select,
     String,
     Text,
+    and_,
     false,
     func,
     select,
-    true,
+    text,
 )
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.sql.expression import CTE
 
 from app.access import NO_STORE, AccessPolicy, api_route, require_auctioneer
 from app.artic import IMAGE_ID_PATTERN, ArticClient, CatalogUnavailable
+from app.bid_integrity import GENESIS_HASH, AnchorState, compute_anchor_hmac
 from app.catalog import (
     MAX_EXTERNAL_ID,
     ArtworkDetail,
@@ -58,6 +60,7 @@ from app.catalog import (
     get_artwork,
     image_url_for,
 )
+from app.config import IntegrityConfig
 from app.db import Base, get_session
 from app.errors import (
     ARTWORK_NOT_ELIGIBLE,
@@ -65,15 +68,12 @@ from app.errors import (
     error_response,
     error_responses,
 )
+from app.lot_time import LotPhase, lot_phase
+from app.money import MAX_CENTS, Cents
 from app.users import User
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
-
-# Number.MAX_SAFE_INTEGER (D3): o maior inteiro que o consumidor JavaScript
-# representa sem perda. Limite técnico, não comercial; a mesma faixa vale na API, no
-# serviço e nas CHECKs do banco (A4).
-MAX_CENTS = 9_007_199_254_740_991
 
 # Estrutura do horário aceito pela API (D2). O offset é opcional aqui de propósito:
 # sem ele o `AwareDatetime` devolve `timezone_aware`, o erro certo. Número, data sem
@@ -114,7 +114,6 @@ ApiDatetime = Annotated[
     BeforeValidator(_api_datetime_input),
     AfterValidator(_api_datetime_normalizable),
 ]
-Cents = Annotated[StrictInt, Field(gt=0, le=MAX_CENTS)]
 ExternalId = Annotated[StrictInt, Field(gt=0, le=MAX_EXTERNAL_ID)]
 
 
@@ -158,7 +157,14 @@ def snapshot_from_detail(detail: ArtworkDetail) -> ArtworkSnapshot:
 
 
 class Lot(Base):
-    """Espelha a migration `0003`; o esquema dos testes vem sempre dela."""
+    """Espelha as migrations `0003`, `0005` e `0006`; o esquema dos testes vem sempre
+    delas.
+
+    `anchor_hmac` nulo é o lote legado, não autenticado: recusa lance (Story 3.4).
+    `cancelled_at` (Story 3.6) nulo = não cancelado. Toda escrita em `bids`, no estado
+    de lance **e em `cancelled_at`** passa pela trava do lote (`lock_lot`); só o
+    serviço de cancelamento (`app.lot_cancellation`) escreve `cancelled_at`, e nada o
+    limpa. A âncora v1 não o cobre."""
 
     __tablename__ = "lots"
     __table_args__ = (
@@ -177,6 +183,29 @@ class Lot(Base):
             "'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
             name="image_id_format",
         ),
+        CheckConstraint(
+            f"current_bid_cents > 0 AND current_bid_cents <= {MAX_CENTS}",
+            name="current_bid_range",
+        ),
+        CheckConstraint(
+            "current_bid_cents >= starting_bid_cents",
+            name="current_bid_at_least_starting",
+        ),
+        CheckConstraint(
+            "(current_bid_cents IS NULL) = (current_leader_id IS NULL)",
+            name="current_bid_with_leader",
+        ),
+        CheckConstraint(
+            "(bid_count = 0) = (current_bid_cents IS NULL)",
+            name="bid_count_matches_current_bid",
+        ),
+        CheckConstraint("bid_count >= 0", name="bid_count_non_negative"),
+        CheckConstraint("final_hash ~ '^[0-9a-f]{64}$'", name="final_hash_format"),
+        CheckConstraint(
+            f"bid_count > 0 OR final_hash = '{GENESIS_HASH}'",
+            name="empty_lot_is_genesis",
+        ),
+        CheckConstraint("anchor_hmac ~ '^[0-9a-f]{64}$'", name="anchor_hmac_format"),
     )
 
     # Sem default no banco para `id` e `created_at`: a aplicação os fornece (o
@@ -202,6 +231,18 @@ class Lot(Base):
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     is_demo: Mapped[bool] = mapped_column(server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Estado de lance (Story 3.4). Só `create_lot` e `app.bids.place_bid` escrevem
+    # nestas colunas, o segundo sempre sob a trava do lote (`lock_lot`).
+    current_bid_cents: Mapped[int | None] = mapped_column(BigInteger)
+    current_leader_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    bid_count: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
+    final_hash: Mapped[str] = mapped_column(
+        Text, server_default=text(f"'{GENESIS_HASH}'")
+    )
+    anchor_hmac: Mapped[str | None] = mapped_column(Text)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # --- regra pura (AD-26): recebe `now`, nunca lê o relógio ---
@@ -244,27 +285,6 @@ def resolve_schedule(
     return Schedule(starts_at=start.astimezone(UTC), ends_at=ends_at.astimezone(UTC))
 
 
-class LotPhase(StrEnum):
-    """Fase temporal do lote (2.4 §7, Story 2.5 P2). Derivada, nunca persistida: fim
-    temporal não é liquidação, que só nasce na 4.3 (P8)."""
-
-    SCHEDULED = "scheduled"
-    LIVE = "live"
-    ENDED = "ended"
-
-
-def lot_phase(starts_at: datetime, ends_at: datetime, now: datetime) -> LotPhase:
-    """`now < starts_at` agendado; `starts_at <= now < ends_at` ao vivo; `now >=
-    ends_at` encerrado. Compara instantes: o offset de cada argumento não importa."""
-    if now.tzinfo is None:
-        raise ValueError("now must be timezone-aware")
-    if now < starts_at:
-        return LotPhase.SCHEDULED
-    if now < ends_at:
-        return LotPhase.LIVE
-    return LotPhase.ENDED
-
-
 # --- serviço, nível externo (só a criação manual) ---
 
 
@@ -303,6 +323,24 @@ def database_now(session: Session) -> datetime:
     return session.execute(select(func.clock_timestamp())).scalar_one().astimezone(UTC)
 
 
+def lock_lot(session: Session, lot_id: uuid.UUID) -> Lot | None:
+    """Trava a linha do lote (`SELECT ... FOR UPDATE`) e devolve o estado confirmado
+    mais recente. Só a tabela `lots`, sem `JOIN`: a releitura depois da espera vale
+    para a linha travada, e a cadeia é lida num statement posterior (Story 3.4, D2).
+    `populate_existing` força a releitura mesmo que a `Session` já tenha o objeto."""
+    return session.scalars(
+        select(Lot)
+        .where(Lot.id == lot_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+
+
+def get_integrity_config(request: Request) -> IntegrityConfig:
+    config: IntegrityConfig = request.app.state.integrity_config
+    return config
+
+
 def create_lot(
     session: Session,
     *,
@@ -310,15 +348,26 @@ def create_lot(
     terms: LotTerms,
     auctioneer_id: uuid.UUID,
     now: datetime,
+    audit_hmac_secret: bytes,
     is_demo: bool = False,
 ) -> Lot | ScheduleViolation:
-    """Aplica a regra de horário e grava o lote. Sem rede: não recebe cliente HTTP
-    nem consulta o catálogo. Não faz commit: quem chama decide."""
+    """Aplica a regra de horário e grava o lote, já com a âncora vazia assinada
+    (`bid_count = 0`, hash genesis, HMAC do próprio `lot_id`). Sem rede: não recebe
+    cliente HTTP nem consulta o catálogo. Não faz commit: quem chama decide.
+
+    Só este caminho assina estado vazio, e o `id` vem do servidor: nenhum chamador
+    consegue assinar um lote que já existe. A HMAC é calculada antes de o objeto
+    existir; segredo inválido levanta `ValueError` sem ter adicionado nada."""
     schedule = resolve_schedule(terms.starts_at, terms.ends_at, now)
     if isinstance(schedule, ScheduleViolation):
         return schedule
+    lot_id = uuid.uuid4()
+    anchor_hmac = compute_anchor_hmac(
+        AnchorState(v=1, lot_id=lot_id, bid_count=0, final_hash=GENESIS_HASH),
+        audit_hmac_secret=audit_hmac_secret,
+    )
     lot = Lot(
-        id=uuid.uuid4(),
+        id=lot_id,
         auctioneer_id=auctioneer_id,
         **snapshot.model_dump(),
         starting_bid_cents=terms.starting_bid_cents,
@@ -327,6 +376,11 @@ def create_lot(
         ends_at=schedule.ends_at,
         is_demo=is_demo,
         created_at=now,
+        current_bid_cents=None,
+        current_leader_id=None,
+        bid_count=0,
+        final_hash=GENESIS_HASH,
+        anchor_hmac=anchor_hmac,
     )
     session.add(lot)
     session.flush()
@@ -357,8 +411,19 @@ class LotResponse(BaseModel):
     created_at: datetime
 
 
+class MyLotResponse(LotResponse):
+    """Item da lista do leiloeiro (Story 3.6, D7): o `LotResponse` mais o cancelamento,
+    a contagem persistida (dica de UX, não autenticada) e a fase temporal. O 201 da
+    criação continua usando o `LotResponse`."""
+
+    cancelled_at: datetime | None
+    bid_count: int
+    phase: LotPhase
+
+
 class MyLotsResponse(BaseModel):
-    items: list[LotResponse]
+    as_of: datetime
+    items: list[MyLotResponse]
 
 
 def lot_response(lot: Lot) -> LotResponse:
@@ -381,6 +446,17 @@ def lot_response(lot: Lot) -> LotResponse:
         starts_at=lot.starts_at.astimezone(UTC),
         ends_at=lot.ends_at.astimezone(UTC),
         created_at=lot.created_at.astimezone(UTC),
+    )
+
+
+def my_lot_response(lot: Lot, as_of: datetime) -> MyLotResponse:
+    return MyLotResponse(
+        **lot_response(lot).model_dump(),
+        cancelled_at=(
+            None if lot.cancelled_at is None else lot.cancelled_at.astimezone(UTC)
+        ),
+        bid_count=lot.bid_count,
+        phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
     )
 
 
@@ -436,9 +512,36 @@ def _clock_cte() -> CTE:
 
 def public_snapshot_statement() -> Select:
     """O único statement da vitrine: o instante e todos os lotes no mesmo snapshot.
-    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes."""
+    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes. O
+    cancelado (Story 3.6, D3) é excluído na condição do JOIN, nunca num `WHERE`: o
+    `WHERE` apagaria a linha do `as_of` quando só há lotes cancelados."""
     clock = _clock_cte()
-    return select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, true())
+    return (
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, Lot.cancelled_at.is_(None))
+    )
+
+
+def my_lots_statement(auctioneer_id: uuid.UUID) -> Select:
+    """O statement da lista do leiloeiro (Story 3.6, D7): o instante e os lotes do dono
+    no mesmo snapshot, **inclusive os cancelados**. Parte do CTE, então há `as_of` mesmo
+    sem lotes; a ordem é a de sempre, `created_at DESC, id DESC`."""
+    clock = _clock_cte()
+    return (
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, Lot.auctioneer_id == auctioneer_id)
+        .order_by(Lot.created_at.desc().nulls_last(), Lot.id.desc().nulls_last())
+    )
+
+
+def read_my_lots_snapshot(
+    session: Session, auctioneer_id: uuid.UUID
+) -> tuple[datetime, list[Lot]]:
+    rows = session.execute(my_lots_statement(auctioneer_id)).all()
+    as_of = rows[0].as_of.astimezone(UTC)
+    return as_of, [row.Lot for row in rows if row.Lot is not None]
 
 
 def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
@@ -450,11 +553,13 @@ def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
 def read_public_lot_snapshot(
     session: Session, lot_id: uuid.UUID
 ) -> tuple[datetime, Lot | None]:
-    # A condição do id fica no JOIN, nunca num WHERE: o WHERE apagaria a linha do
-    # `as_of` quando o lote não existe.
+    # A condição do id (e a do cancelamento, D3) fica no JOIN, nunca num WHERE: o WHERE
+    # apagaria a linha do `as_of` quando o lote não existe ou está cancelado.
     clock = _clock_cte()
     row = session.execute(
-        select(clock.c.as_of, Lot).select_from(clock).outerjoin(Lot, Lot.id == lot_id)
+        select(clock.c.as_of, Lot)
+        .select_from(clock)
+        .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
     ).one()
     return row.as_of.astimezone(UTC), row.Lot
 
@@ -539,6 +644,7 @@ def register_lot_routes(app: FastAPI) -> None:
         user: User = Depends(require_auctioneer),
         session: Session = Depends(get_session),
         client: ArticClient = Depends(get_artic_client),
+        integrity: IntegrityConfig = Depends(get_integrity_config),
     ) -> LotResponse | Response:
         # D1: guardo o id antes do rollback (que expira o `User`) e encerro a
         # leitura da autenticação antes da AIC. Nenhuma transação fica aberta
@@ -571,6 +677,7 @@ def register_lot_routes(app: FastAPI) -> None:
             terms=body,
             auctioneer_id=auctioneer_id,
             now=now,
+            audit_hmac_secret=integrity.audit_hmac_secret,
         )
         if isinstance(result, ScheduleViolation):
             session.rollback()
@@ -595,14 +702,15 @@ def register_lot_routes(app: FastAPI) -> None:
         user: User = Depends(require_auctioneer),
         session: Session = Depends(get_session),
     ) -> MyLotsResponse:
-        # Leitura pura (AD-19): só SELECT, só o dono da sessão, sem a AIC, sem limite.
-        lots = session.scalars(
-            select(Lot)
-            .where(Lot.auctioneer_id == user.id)
-            .order_by(Lot.created_at.desc(), Lot.id.desc())
-        ).all()
+        # Leitura pura (AD-19): um SELECT, só o dono da sessão, sem a AIC, sem limite.
+        # Inclui os cancelados (D3); a fase vem do `as_of` do banco, não do navegador.
+        as_of, lots = read_my_lots_snapshot(session, user.id)
+        result = MyLotsResponse(
+            as_of=as_of, items=[my_lot_response(lot, as_of) for lot in lots]
+        )
+        session.rollback()
         response.headers["Cache-Control"] = "no-store"
-        return MyLotsResponse(items=[lot_response(lot) for lot in lots])
+        return result
 
     @api_route(
         app,
