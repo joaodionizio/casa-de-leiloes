@@ -3,7 +3,11 @@
 ## Deferred from: code review of 2-1-formato-de-erros-e-validacao-de-origin.md (24/10/2026)
 
 - O `loc` do 422 pode ecoar chaves escolhidas pelo cliente em modelos `dict[str, ...]` ou `extra="forbid"`, e `details` não tem limite de itens. Inalcançável com as rotas atuais; mudar o conteúdo do `loc` exige rever a D1 da 2.1.
-- `sprint-status.yaml` ainda registra `epic-1: in-progress` e a 1.4 como `review`. Pré-existente; fechar quando o épico 1 for formalmente encerrado.
+- **Resolvido administrativamente em 26/10/2026:** este review registrou
+  `epic-1: in-progress` e 1.4 `review`. O sprint já tinha 1.4 `done`; corrigi o
+  cabeçalho da story e Epic 1 para `done`, com base nas evidências públicas da
+  própria 1.4. Não executei novo deploy nem inventei review agregado histórico;
+  integração retrospectiva dos Epics 1/2 segue pendente no processo canônico.
 
 ## Deferred from: code review of 2-2-login-papéis-e-política-de-acesso.md (24/10/2026)
 
@@ -82,3 +86,26 @@ Obrigações para as próximas stories (`spec-story-3-4-lance-transacional/curre
 - **Rotação de segredos (A1 da 3.3, F-4, SR-09):** não suportada. Trocar `AUDIT_HMAC_SECRET` invalida todas as âncoras (o demo, com `anchor_hmac` não nulo, continua "aberto" até vencer e responde 409); trocar `PSEUDONYM_SECRET` bloqueia lotes com lances.
 - **Sem `lock_timeout`, sem `statement_timeout` e sem retry de deadlock (D13):** uma fila longa na trava do lote prende conexões e threads do pool; um deadlock fora do protocolo vira 500 genérico. Aceito na escala do desafio.
 - **Ponto de atenção do build:** `SELECT ... FOR UPDATE` em `lots` seguido de `UPDATE` parcial do lote viola a CHECK `(bid_count = 0) = (current_bid_cents IS NULL)` (CHECK não é adiável). Por isso o serviço grava o lote num único `UPDATE` final (D1). Candidata a "Armadilhas conhecidas" do `CLAUDE.md`, que eu decido.
+
+
+## Auditoria administrativa de processo — 26/10/2026
+
+- **Deploy Epic 2 pendente:** conclusão local e incorporação à `main` informadas
+  pelo usuário; deploy postergado por falha de processo. Recuperação **2+3**,
+  sem deploy isolado do Epic 2, seguindo `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`.
+- **Reviews agregados:** não localizei artefatos formais originais dos Epics 1/2.
+  Reviews por story são preservados; executar integração retrospectiva 1/2 e
+  agregado normal do Epic 3 no candidato confirmado, antes do merge/deploy.
+  Os três `code-review-epic-N.md` são templates pendentes, não reviews realizados.
+- **Epic 3 permanece `in-progress`:** verify completo final, estudo quando
+  aplicável, reviews/correções/re-review, merge manual, deploy, smoke público e
+  evidências ainda exigem confirmação/execução. A correção final de assertions
+  da 3.6 teve testes focados; não afirmo verify completo posterior.
+- **Notas de transição acima preservadas como histórico:** a 3.6 já reutiliza o
+  gate `authenticate_previous_state`, filtra cancelados nas leituras e no seed,
+  e grava `cancelled_at` sob a trava do lote. As previsões "Para a Story 3.6" e
+  "Hoje só create_lot/place_bid escrevem" descrevem o estado na 3.4; não são
+  pendências atuais. Catch-up/liquidação/estado terminal/4.3/4.4/5.1/6.6 continuam
+  futuros; nenhuma dessas stories foi iniciada nesta auditoria.
+- Fonte única dos gates: `docs/FECHAMENTO-DE-EPICO.md`. Não transformei a
+  retrospective opcional do BMAD em obrigação do projeto.

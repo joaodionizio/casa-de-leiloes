@@ -1,5 +1,82 @@
 # Uso de IA no desenvolvimento — ÁTRIO (antes Casa de Leilões)
 
+## Evolução do processo e estado atual — 26/10/2026
+
+Os registros por story abaixo são cronológicos. Frases como "ficou em review",
+"Epic 3 in-progress" ou "3.3 backlog" descrevem aquela sessão; fechamentos
+posteriores não apagam a evidência original. O sprint e os arquivos vivos regem
+o estado atual. Não reclassifico reviews por story como reviews agregados.
+
+### Claude Code e Codex durante o Epic 3
+
+Usei Claude Code anteriormente e durante o Epic 3 para planejamento,
+implementação e reviews; Codex passou a assumir parte das implementações,
+correções e revisões. Por exemplo, a correção da 3.2 registra Codex/GPT-6.1,
+e as 3.4/3.5 registram build com Claude e review independente com modelos GPT.
+Os relatos de cada sessão identificam o modelo quando há evidência, inclusive
+quando diferiu do solicitado. Não atribuo retroativamente a um modelo uma
+sessão sem confirmação.
+
+Decidi separar implementação e review por modelo/sessão para reduzir viés,
+combinar review adversarial, mutation testing direcionado, correções aprovadas
+e re-review focado. Usei PostgreSQL real onde saldo, travas, concorrência e
+integridade exigiam. As stories 3.1–3.6 registram os casos e resultados reais;
+não extrapolo esses números para a auditoria atual. É metodologia de
+desenvolvimento/revisão que escolhi, não requisito adicional da Verzel.
+As decisões de produto, arquitetura, aceite de findings, Git e deploy
+continuam sob minha responsabilidade humana.
+
+### BMAD 6.12.4 e compatibility shims
+
+Durante o Epic 3, skills como `bmad-create-story` não apareciam. O diagnóstico
+registrado nas stories 3.2/3.3 e nesta auditoria foi mudança de distribuição,
+não corrupção da instalação: esses comandos antigos passaram ao grupo
+compatibility shims/deprecated, e a instalação estava com shims desabilitados.
+`bmad-build` é o caminho atual de implementação; `create-story` permanece como
+compatibilidade, sem precisar reescrever stories concluídas.
+
+Conforme o histórico informado por mim para esta auditoria, usei o instalador
+oficial com os shims habilitados, sem trocar a versão BMAD. A evidência viva em
+`_bmad/_config/manifest.yaml` registra **6.12.4**, `installShims: true` e os IDEs
+`claude-code` e `codex`. Os READMEs em `_bmad/core/v6-shims/` e
+`_bmad/bmm/v6-shims/` explicam a compatibilidade. Na conferência desta sessão,
+os conjuntos de nomes `bmad-*/SKILL.md` em `.claude/skills/` e `.agents/skills/`
+foram iguais, sem diferenças. Não inventei uma contagem de skills nem reinstalei
+ou alterei a configuração nesta tarefa.
+
+### Auditoria administrativa antes do fechamento do Epic 3
+
+Decidi corrigir documentação/status e centralizar os gates em
+`docs/FECHAMENTO-DE-EPICO.md`, com checklist manual em
+`docs/DEPLOY-RECUPERACAO-EPICS-2-3.md`. O Epic 2 foi concluído localmente e
+incorporado à `main` (informação minha); seu deploy foi postergado por falha de
+processo. A recuperação será conjunta 2+3. Não existe evidência formal localizada
+de reviews agregados originais dos Epics 1/2: os reviews por story permanecem
+válidos, e preparei integração retrospectiva 1/2 e review normal do Epic 3.
+Os arquivos `code-review-epic-1/2/3.md` são **templates pendentes**, sem review
+executado ou aprovação.
+
+A Story 1.4 tinha evidências públicas e sprint `done`, mas cabeçalho `review`;
+sincronizei o cabeçalho e Epic 1 `done`, sem fingir que o review agregado original
+foi realizado. Preservei Epic 2 `done` histórico com a dívida operacional
+explícita. Epic 3 continua **`in-progress`** até todos os gates, mesmo com as
+stories 3.x concluídas; não iniciei Epic 4. Retrospective BMAD é opcional.
+
+A tarefa administrativa foi executada no Codex, modelo efetivo **GPT-6.1 Sol**
+(informado pelo ambiente); o pedido citava GPT-6 Astra High. Registrei essa
+limitação sem afirmar uma troca de modelo que não ocorreu. A IA inspecionou os
+arquivos vivos, código de configuração/startup/rotas, migrations, specs e
+registros históricos, e consultou a documentação oficial do Render para a
+opção de deploy manual. O painel e o ambiente público não foram inspecionados.
+
+Fiz apenas conferência estática/documental e comparação de arquivos locais;
+não executei `verify`, pytest, Playwright ou mutações nesta tarefa. O harness
+de integração recria o schema do banco de teste, e testes destrutivos estavam
+fora da autorização desta auditoria. O verify completo final e os smokes
+continuam gates pendentes, sem reutilizar números históricos como resultado
+novo. Nenhum código de aplicação, migration, segredo ou regra de negócio foi
+alterado; nenhum Git, PR ou deploy foi executado e nenhum `.env*` foi lido.
+
 ## Story 1.1 — Fundação mínima do monorepo
 
 Usei o Claude Code com Opus para planejamento e revisão e Sonnet para implementação.
@@ -864,3 +941,17 @@ ela e o que a IA fez.
   para a aplicação real. Estados, textos, rotas, hashes e valores do protótipo são fictícios e
   não vinculantes; as stories definem os contratos reais.
 - Não rodei `verify` nesta etapa: ela só adicionou documentação e o protótipo. Não houve Git.
+
+## Correção do F-01 (MEDIUM) do review agregado do Epic 3 — 26/10/2026
+
+- O review agregado apontou que a sala podia ficar bloqueada: o `POST` pendente terminava
+  entre a renderização e o efeito da remontagem, e o efeito, ao consultar de novo o
+  registro, não achava a entry e abandonava a promise.
+- Corrigi só na sala: `LotPage` captura a entry na primeira renderização e o efeito segue a
+  capturada (`bidToFollow`, que exige a mesma conta e o mesmo lote). `WalletPage` não foi tocada.
+- Teste focado (`bidSubmission.test.ts`): registro já liberado, a capturada ainda é
+  acompanhada, um único envio, e nunca vale para outra conta/lote. É teste puro: não há
+  infraestrutura de componente no projeto, então o efeito em si não é exercitado.
+- `VERIFY_E2E=1 ./verify.sh` posterior à correção: exit 0; 2036 backend, 160 front, 189
+  Playwright (5 skipped); Ruff, format, ESLint, tsc, Vite e docker build passaram.
+- Sem Git, sem backend. Epic 3 segue `in-progress`; re-review pendente.

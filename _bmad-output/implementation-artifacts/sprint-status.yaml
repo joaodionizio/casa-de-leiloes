@@ -3,7 +3,9 @@
 # Epic Status:
 #   - backlog: Epic not yet started
 #   - in-progress: Epic actively being worked on
-#   - done: All stories in epic completed
+#   - done: Fechamento concluído conforme docs/FECHAMENTO-DE-EPICO.md
+#     Stories done são necessárias, mas não bastam: verify/review/merge/deploy/smoke.
+#     Exceções históricas dos Epics 1/2 estão documentadas na fonte canônica.
 
 # Story Status:
 #   - backlog: Story only exists in epic file
@@ -24,7 +26,7 @@
 # WORKFLOW NOTES:
 # ===============
 # - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
-# - Stories can be worked in parallel if team capacity allows
+# - Projeto: uma story por vez; próximo épico só após gates e autorização humana.
 # - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
@@ -35,13 +37,16 @@ project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 development_status:
-  epic-1: in-progress
+  # Auditoria administrativa 26/10/2026: 1.x concluídas e deploy da 1.4 documentado.
+  epic-1: done
   1-1-fundação-mínima-do-monorepo: done
   1-2-postgresql-com-bancos-isolados-e-migrations: done
   1-3-spa-na-mesma-origem-e-imagem-multi-stage: done
   1-4-primeiro-deploy-no-render: done
   epic-1-retrospective: optional
 
+  # done histórico preservado: conclusão local; deploy postergado por falha de processo.
+  # Recuperação conjunta 2+3 e reviews retrospectivos pendentes (docs/FECHAMENTO-DE-EPICO.md).
   epic-2: done
   2-1-formato-de-erros-e-validacao-de-origin: done
   2-2-login-papéis-e-política-de-acesso: done
@@ -50,6 +55,8 @@ development_status:
   2-5-vitrine-pública-e-página-do-lote: done
   epic-2-retrospective: optional
 
+  # Todas as 3.x done; permanece in-progress até TODOS os gates, inclusive
+  # reviews 3/1/2, verify final, merge manual, deploy 2+3 e smoke público com evidências.
   epic-3: in-progress
   3-1-carteira-e-depósito-simulado: done
   3-2-regras-de-aceitação-do-lance-com-hora-injetada: done

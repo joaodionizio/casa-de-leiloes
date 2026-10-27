@@ -55,6 +55,7 @@ que não mudam a arquitetura.
 | Testes, `verify`, deploy | AD-17, AD-26, AD-27, AD-28, AD-14 |
 | Front-end, UX, layout, responsividade | `_bmad-output/planning-artifacts/DESIGN.md`, `_bmad-output/planning-artifacts/EXPERIENCE.md`, `_bmad-output/planning-artifacts/VITRINE-BLUEPRINT.md` quando a tarefa envolver a Vitrine, AD-15 e AD-22 |
 | Processo de implementação/review do front-end, skills BMAD no front-end | `docs/FRONTEND-WORKFLOW.md` |
+| Fechamento de épico, review agregado, merge/deploy/smoke e status | `docs/FECHAMENTO-DE-EPICO.md`; recuperação 2+3 em `docs/DEPLOY-RECUPERACAO-EPICS-2-3.md` |
 
 ### Regra para stories de front-end
 - Toda story que toque `frontend/` lê `DESIGN.md` e `EXPERIENCE.md` antes de
@@ -176,22 +177,22 @@ que não mudam a arquitetura.
 ## Fluxo BMAD
 BMAD em português, artefatos em `_bmad-output/`, implementação story a story. PRD
 dispensado: o enunciado já é a especificação (registrar o motivo).
-- Code review por épico como regra geral; para stories de front-end, code review
-  por story conforme `docs/FRONTEND-WORKFLOW.md`.
+- Review agregado independente obrigatório antes do merge; fonte canônica: `docs/FECHAMENTO-DE-EPICO.md`.
+- Epic 3 `in-progress` até gates, deploy 2+3 e smoke/evidências. Retrospective BMAD opcional.
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
-1. Intervalos do scheduler e do heartbeat; reconexão do cliente com espera crescente.
-2. Validar `Origin` no handshake do WebSocket?
-3. (Resolvida na 3.3: `bidder_alias` persistido por lance; nunca recalculado na auditoria.)
-4. Catch-up antes do seed e do tráfego normal (4.4). Demo aberto e trava: 2.4 e 3.4.
-5. Limite exato dos 2 min: `now` fixo; caminho real com margens.
-6. Só quem de fato fechou o lote publica o evento de encerramento.
-7. Smoke test: "API indisponível" exige falha simulada.
-8. (Resolvida na 2.5: leituras expõem só `phase`; `ended` = "Encerrado, apurando resultado".)
-9. Tentativa de lance em lote vencido: fechar primeiro, depois responder.
-10. Nomes em aberto: rota do WebSocket, rotas do comprovante e do link. (Resolvidos:
-    `compose.yaml`, Python 3.13, PostgreSQL 18, `DATABASE_URL`/`TEST_DATABASE_URL` na
-    1.2; `JWT_SECRET` na 2.2; testes do front na 2.4/2.5, ver "Testes e verify".)
+IDs históricos preservados; detalhes e decisões fechadas na arquitetura.
+- **Q1:** intervalos do scheduler/heartbeat e reconexão com espera crescente.
+- **Q2:** validar `Origin` no handshake do WebSocket da sala (4.1)?
+- **Q4:** catch-up antes do seed/tráfego (4.4); demo já definido nas 2.4/3.4/3.6.
+- **Q6:** implementar/validar que só quem fechou publica o evento (4.4).
+- **Q9:** fechar antes de recusar lance vencido (4.4); hoje só recusa.
+- **Q10:** rotas do WebSocket da sala, do comprovante e do link.
+
+Fechadas: Q3 na 3.3 (`bidder_alias` persistido por bid, 16 hex; auditoria nunca recalcula histórico;
+vínculo do líder/participação atuais podem calcular alias operacional, 3.4/3.5). Q5 nas 3.2/3.4:
+limite exato com `now` fixo, caminho real com margens. Q7 na 2.3: falha simulada/`scripts.smoke_artic`;
+Q8 na 2.5: `phase`. Q10 parcial: Compose/versões/bancos (1.2), `JWT_SECRET`/auth (2.2), testes (2.4/2.5).
 
 ## Armadilhas conhecidas
 (Cada problema que custar tempo vira uma linha aqui.)

@@ -1,6 +1,14 @@
 # Story 1.4: Primeiro deploy no Render
 
-Status: review
+Status: done
+
+> Sincronização administrativa em 26/10/2026: corrigi o cabeçalho que ainda
+> dizia `review`; o sprint já registrava `done`. A fase pública abaixo registra
+> deploy, cookie, WebSocket, redeploy e validação confirmados por mim. Preservei
+> os limites observados (inclusive cold start não medido e fechamento WS 1006).
+> Não executei novo deploy/review nesta correção; o review agregado histórico
+> não foi localizado e a integração retrospectiva segue pendente conforme
+> `docs/FECHAMENTO-DE-EPICO.md`. Os textos de preparação abaixo são históricos.
 
 Chave do sprint: `1-4-primeiro-deploy-no-render`
 Épico: 1 (Fundação e aplicação publicada), Dia 2 (23/10) do cronograma

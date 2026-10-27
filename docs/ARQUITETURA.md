@@ -5,9 +5,12 @@
 > e `/api/*` como estão). O texto abaixo, escrito antes do rebranding, preserva
 > "Casa de Leilões" onde descreve decisões anteriores.
 
-Fase: **ARQUITETURA CONCLUÍDA**. Nenhum bloqueador aberto. As questões que
-restam são de implementação e não mudam a arquitetura. Nenhuma linha de código
-de aplicação foi escrita.
+Fase: **ARQUITETURA CONCLUÍDA; IMPLEMENTAÇÃO EM ANDAMENTO**. O estado original
+pré-código foi superado: há implementação das stories dos Epics 1, 2 e 3.
+As ADs abaixo preservam suas decisões e alternativas históricas; o estado vivo
+de entrega fica no sprint e o fechamento operacional segue
+`docs/FECHAMENTO-DE-EPICO.md`. Questões restantes são de implementação.
+Esta atualização de cabeçalho (26/10/2026) não declara o Epic 3 encerrado.
 
 Todas as decisões abaixo (AD-1 a AD-30) são **vinculantes**: código que as
 contraria está errado. Para mudar uma, altero primeiro este documento. Toda
