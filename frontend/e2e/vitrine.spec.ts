@@ -106,13 +106,13 @@ test.describe('deep-link', () => {
     expect(api.count(`GET /api/lots/${lotId(1)}`)).toBe(2)
   })
 
-  test('lote inexistente mostra "Lote não encontrado"; rota inválida não chama a API', async ({
+  test('lote inexistente mostra "Lote indisponível ou não encontrado"; rota inválida não chama a API', async ({
     page,
   }) => {
     const api = await mockApi(page, { lots: LOTS })
 
     await page.goto(`/lots/${lotId(999)}`)
-    await expect(page.locator('#lot-title')).toHaveText('Lote não encontrado')
+    await expect(page.locator('#lot-title')).toHaveText('Lote indisponível ou não encontrado')
 
     await page.goto('/lots/abc')
     await expect(page.locator('h1:visible')).toHaveText('Página não encontrada')

@@ -71,7 +71,11 @@ development_status:
   # Story 4.1 implementada em 27/10/2026; verify e VERIFY_E2E=1 verify passaram.
   # Pendentes: meu teste manual no navegador e o review independente. Sem prova no Render.
   4-1-sala-ao-vivo-por-websocket-snapshot-e-atualizações: review
-  4-2-heartbeat-e-reconexão-automática: backlog
+  # 4.2: QH-01–16 decididas; spec consolidada/autovalidada em 27/10/2026.
+  # Chave ASCII por decisão humana; arquivo da story mantém nome acentuado.
+  # Build 4.2 verificado em 27/10/2026: dois verify e smoke local reais concluídos.
+  # Pronta para teste manual do dono; code review não executado nesta sessão.
+  4-2-heartbeat-e-reconexao-automatica: review
   4-3-fechamento-liquidação-idempotente-e-comprovante-base: backlog
   4-4-gatilhos-do-fechamento-e-evento-de-encerramento: backlog
   4-5-resultado-dos-lotes-no-painel-do-leiloeiro: backlog

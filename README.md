@@ -342,7 +342,7 @@ Não as apresento como validação dos Epics 2/3.
 
 O plano gratuito pode ter cold start; só registro tempo após medição real.
 O primeiro painel mostrou expiração do PostgreSQL em 23/11/2026: confirmar a
-situação atual manualmente. Persistem limites reais: ausência de reconexão automática na sala (4.2),
+situação atual manualmente. Persistem limites reais: conexões públicas sem teto, publicação pós-commit sem prazo,
 imagens externas com placeholder, ausência de
 idempotência de POST e de rotação de segredos de integridade; detalhes nas
 seções de cada fluxo e em "Comportamentos que podem surpreender".
@@ -567,14 +567,22 @@ Comportamentos que podem surpreender (sala):
   leituras e a releitura do estado. Com muitas conexões novas no mesmo lote, ou um banco
   lento, a resposta chega mais tarde; se o navegador desistir antes, a tela trata o lance
   como incerto (a escrita já está confirmada). Nesta entrega não há timeout de publicação
-  nem teto de conexões na sala pública; ambos ficam para a Story 4.2, junto da Q1.
-- **Sem heartbeat ou reconexão automática nesta entrega (4.2):** queda detectada mostra
-  atualizações indisponíveis e mantém o último estado marcado como desatualizado. Se o
-  navegador avisar que ficou **offline**, a tela também fecha a conexão atual e marca as
-  atualizações ao vivo como indisponíveis; voltar a ficar online não reconecta.
-  "Atualizar sala" relê REST e, se der certo, diz que os dados foram atualizados por
-  leitura manual (sem afirmar que a conexão voltou); recarregar/reabrir a página cria
-  outra conexão.
+  nem teto de conexões na sala pública; ambos foram explicitamente adiados na Story 4.2 (QH-11/12).
+- **Heartbeat e recuperação automática (Story 4.2):** a conexão só é declarada
+  conectada após um snapshot válido. O cliente envia ping JSON imediatamente e depois
+  a cada 20 s; espera o pong correlacionado por 10 s. Abrir e receber o primeiro snapshot
+  têm prazo total de 30 s. Falhas recuperam com backoff exponencial de 1–30 s e equal
+  jitter (espera entre 50% e 100% do teto corrente); só snapshot mais primeiro pong
+  zeram o backoff. Offline suspende tentativas; online abre uma vez imediatamente.
+  Nenhum lance é reenviado. A última sala, digitação e foco são preservados; a recuperação
+  lê snapshot completo, sem replay. "Atualizar sala" continua disponível por REST e
+  leitura manual bem-sucedida não comprova saúde WS. Um 404 público confirmado encerra
+  tentativas como indisponível/não encontrado, sem inferir cancelamento.
+- **Clientes abandonados são removidos:** 60 s sem ping válido ou falha de fila/envio
+  isolam só aquele cliente. Send e close têm limite de 10 s por operação; heartbeat
+  não lê o banco nem altera o lote. SQL em andamento termina no worker e fecha sua
+  Session mesmo se o cliente abandonar a conexão. Suspensão do navegador pode atrasar
+  timers e causar reconexão; ao voltar, deadlines são reavaliados sem rajada.
   A linha "Situação atualizada às HH:MM:SS" mostra o instante do snapshot do servidor.
 - Depois de um `201`, a tela mostra na hora o valor, o novo fim e a carteira da resposta e
   faz **uma** releitura para o histórico, o mínimo e a posição; se ela falhar, o aceite

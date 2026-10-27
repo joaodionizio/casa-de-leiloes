@@ -24,9 +24,19 @@ function send(socket: WebSocketRoute, room: BidRoom, type = 'bid_accepted', id =
   socket.send(JSON.stringify({ type, lot_id: id, room }))
 }
 
-test('snapshots replace state, preserve input/focus, coalesce duplicates and expose disconnect without retry', async ({ page }) => {
+function initialize(socket: WebSocketRoute, id = LOT) {
+  socket.onMessage((data) => {
+    const payload = JSON.parse(String(data))
+    if (payload.type === 'ping') socket.send(JSON.stringify({ type: 'pong', id: payload.id }))
+  })
+  send(socket, state(), 'room_snapshot', id)
+}
+
+test('snapshots replace state, preserve input/focus, coalesce duplicates and recover disconnect', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
   await page.goto(`/lots/${LOT}`)
   await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
@@ -57,20 +67,20 @@ test('snapshots replace state, preserve input/focus, coalesce duplicates and exp
   await expect(page.locator('.bid-current')).toHaveText('R$\u00a0120,00')
   expect(api.count(MINE)).toBe(calls)
   await sockets[0].close({ code: 1011 })
-  await expect(page.getByText('Atualizações ao vivo indisponíveis.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Reconectando à sala…', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Atualizar sala' }).click()
   await expect.poll(() => api.count(ROOM)).toBeGreaterThan(1)
   // Fresh by manual reading, live updates still out; the socket is not "connected" again.
   await expect(page.getByText('Dados atualizados por leitura manual', { exact: false })).toBeVisible()
   await expect(page.getByText('Estado desatualizado', { exact: false })).toHaveCount(0)
   await expect(page.getByText('Sala conectada', { exact: false })).toHaveCount(0)
-  expect(sockets).toHaveLength(1)
+  expect(sockets).toHaveLength(1) // paused retry never races the manual refresh
   expect(api.bidPosts).toHaveLength(0)
 })
 
 test('old REST cannot replace WS and terminal cancellation at zero cannot be reversed', async ({ page }) => {
   let socket: WebSocketRoute
-  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value })
+  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value; initialize(value, value.url().split('/').at(-1)!) })
   const api = await mockApi(page, { lots: LOTS })
   const held = api.hold(ROOM)
   await page.goto(`/lots/${LOT}`)
@@ -95,7 +105,7 @@ test('old REST cannot replace WS and terminal cancellation at zero cannot be rev
 
 test('201 N after WS N+1 confirms attempt and wallet without replacing newer price, minimum, history or end', async ({ page }) => {
   let socket: WebSocketRoute
-  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value })
+  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value; initialize(value, value.url().split('/').at(-1)!) })
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
   let release: () => void = () => undefined
   const gate = new Promise<void>((resolve) => { release = resolve })
@@ -133,7 +143,7 @@ test('201 N after WS N+1 confirms attempt and wallet without replacing newer pri
 
 test('WS invalidates private position while mine is delayed or fails; session changes reuse public socket', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket); send(socket, state(1, { bids: initial }), 'room_snapshot') })
   const initial = makeBids(1, 11000, [OWN_ALIAS])
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', rooms: { [LOT]: { bids: initial } }, wallet: { total: 500000, committed: 0 } })
   await page.goto(`/lots/${LOT}`)
@@ -164,7 +174,7 @@ test('WS invalidates private position while mine is delayed or fails; session ch
 
 test('WS during pending POST and remount keeps one submission and follows its result', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
   let release: () => void = () => undefined
   const gate = new Promise<void>((resolve) => { release = resolve })
@@ -201,7 +211,7 @@ test('WS during pending POST and remount keeps one submission and follows its re
 test('countdown zero and manual REST round cannot undo a concurrent WS extension', async ({ page }) => {
   await page.clock.install()
   let socket: WebSocketRoute
-  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value })
+  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value; initialize(value, value.url().split('/').at(-1)!) })
   const api = await mockApi(page, { lots: LOTS })
   await page.goto(`/lots/${LOT}`)
   await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
@@ -219,12 +229,13 @@ test('countdown zero and manual REST round cannot undo a concurrent WS extension
   await expect(page.getByText('Confirmando encerramento com o servidor…')).toHaveCount(0)
 })
 
-test('going offline closes the socket, marks the room stale, keeps the last state and never reconnects by itself', async ({ page, context }) => {
+test('offline closes current generation; online immediately recovers through a new snapshot', async ({ page, context }) => {
   const sockets: WebSocketRoute[] = []
   let closedByPage = 0
   await page.routeWebSocket('**/ws/lots/*', (socket) => {
     sockets.push(socket)
-    socket.onClose(() => { closedByPage += 1 })
+    socket.onClose(() => { closedByPage++ })
+    initialize(socket)
   })
   const api = await mockApi(page, { lots: LOTS })
   await page.goto(`/lots/${LOT}`)
@@ -232,36 +243,36 @@ test('going offline closes the socket, marks the room stale, keeps the last stat
   send(sockets[0], state(2), 'room_snapshot')
   await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
   await context.setOffline(true)
-  await expect(page.getByText('Atualizações ao vivo indisponíveis.', { exact: false })).toBeVisible()
-  await expect(page.getByText('Estado desatualizado', { exact: false })).toBeVisible()
-  await expect.poll(() => closedByPage).toBe(1) // the current socket was closed, not just labelled
-  await expect(page.getByText('Sala conectada', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('Sem conexão com a rede')).toBeVisible()
+  await expect.poll(() => closedByPage).toBe(1)
   await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
-  await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
   await context.setOffline(false)
-  await page.getByRole('button', { name: 'Atualizar sala' }).click()
-  await expect.poll(() => api.count(ROOM)).toBeGreaterThan(1)
-  // A successful manual read says so; it does not claim the data is stale nor that the socket is back.
-  await expect(page.getByText('Dados atualizados por leitura manual', { exact: false })).toBeVisible()
-  await expect(page.getByText('Estado desatualizado', { exact: false })).toHaveCount(0)
-  await expect(page.getByText('Sala conectada', { exact: false })).toHaveCount(0) // GET passing is not a socket
-  expect(sockets).toHaveLength(1) // `online` and the refresh never reconnect
+  await expect.poll(() => sockets.length).toBe(2)
+  send(sockets[1], state(3), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await expect(page.locator('.bid-current')).toHaveText('R$ 130,00')
+  expect(api.bidPosts).toHaveLength(0)
 })
 
 test('socket error or close, before or after connecting, never erases the room', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
   let attempts = 0
   await page.routeWebSocket('**/ws/lots/*', (socket) => { attempts += 1; void socket.close({ code: 1011 }) })
   await mockApi(page, { lots: LOTS })
   await page.goto(`/lots/${LOT}`)
-  await expect(page.getByText('Atualizações ao vivo indisponíveis.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Reconectando à sala…', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
   await expect(page.locator('.bid-current')).toBeVisible()
   expect(attempts).toBe(1)
+  await page.clock.runFor(1_000)
+  await expect.poll(() => attempts).toBe(2)
+  await expect(page.locator('.bid-current')).toBeVisible()
 })
 
 test('failed manual refresh keeps the last valid state locally and a later one applies the newer room', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const api = await mockApi(page, { lots: LOTS })
   await page.goto(`/lots/${LOT}`)
   await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
@@ -286,9 +297,305 @@ test('failed manual refresh keeps the last valid state locally and a later one a
   expect(sockets).toHaveLength(1)
 })
 
+for (const privateFailure of [false, true]) {
+  for (const recoveredCount of [2, 3]) {
+    test(`reconnect snapshot clears public stale after failed manual refresh: count=${recoveredCount}, privateFailure=${privateFailure}`, async ({ page }) => {
+      await page.clock.install()
+      await page.clock.pauseAt(new Date())
+      const sockets: WebSocketRoute[] = []
+      await page.routeWebSocket('**/ws/lots/*', (socket) => {
+        sockets.push(socket)
+        socket.onMessage((data) => {
+          const payload = JSON.parse(String(data))
+          if (payload.type === 'ping') socket.send(JSON.stringify({ type: 'pong', id: payload.id }))
+        })
+        if (sockets.length === 1) send(socket, state(2), 'room_snapshot')
+      })
+      const api = await mockApi(page, {
+        lots: LOTS, session: privateFailure ? 'BIDDER' : undefined,
+        rooms: { [LOT]: { bids: makeBids(2, 11000) } },
+      })
+      if (privateFailure) {
+        for (const path of [`/api/lots/${LOT}/bids/mine`, '/api/wallet']) {
+          await page.route(`**${path}`, (route) => route.fulfill({ status: 503, json: { status: 503, code: 'internal_error', message: 'Indisponível' } }))
+        }
+      }
+      await page.goto(`/lots/${LOT}`)
+      const connected = page.getByText('Sala conectada', { exact: false })
+      const staleRoom = page.getByText('Não foi possível atualizar a sala.', { exact: false })
+      const staleHistory = page.getByText('Histórico possivelmente desatualizado.')
+      await expect(connected).toBeVisible()
+      await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+      await expect(page.locator('.bid-history-list li')).toHaveCount(2)
+      await sockets[0].close({ code: 1011 })
+      await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+      const reads = api.count(ROOM)
+      const held = api.hold(ROOM)
+      await page.getByRole('button', { name: 'Atualizar sala' }).click()
+      await expect.poll(() => api.count(ROOM)).toBe(reads + 1)
+      held.fail()
+      await expect(staleRoom).toBeVisible()
+      await expect(staleHistory).toBeVisible()
+      await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+      await expect(page.locator('.bid-history-list li')).toHaveCount(2)
+      await page.clock.runFor(1_000)
+      await expect.poll(() => sockets.length).toBe(2)
+      await expect(connected).toHaveCount(0) // open alone cannot clear the warnings
+      await expect(staleRoom).toBeVisible()
+      await expect(staleHistory).toBeVisible()
+      send(sockets[1], state(recoveredCount), 'room_snapshot')
+      await expect(connected).toBeVisible()
+      await expect(staleRoom).toHaveCount(0)
+      await expect(staleHistory).toHaveCount(0)
+      await expect(page.locator('.bid-current')).toHaveText(recoveredCount === 2 ? 'R$ 120,00' : 'R$ 130,00')
+      await expect(page.locator('.bid-history-list li')).toHaveCount(recoveredCount)
+      if (privateFailure) {
+        await expect(page.getByText('Não foi possível carregar sua participação.')).toBeVisible()
+        await expect(page.getByText('Não foi possível carregar a carteira.')).toBeVisible()
+      }
+      expect(api.bidPosts).toHaveLength(0)
+    })
+  }
+}
+
+// A public snapshot must never certify previously loaded private data after failure.
+for (const failure of ['mine', 'wallet', 'both'] as const) {
+  test(`retained private data stays stale through identical recovery snapshot: ${failure}`, async ({ page }) => {
+    await page.clock.install()
+    await page.clock.pauseAt(new Date())
+    const initial = makeBids(1, 11000, [OWN_ALIAS])
+    const publicState = state(1, { bids: initial })
+    const sockets: WebSocketRoute[] = []
+    await page.routeWebSocket('**/ws/lots/*', (socket) => {
+      sockets.push(socket)
+      socket.onMessage((data) => socket.send(JSON.stringify({ type: 'pong', id: JSON.parse(String(data)).id })))
+      if (sockets.length === 1) send(socket, publicState, 'room_snapshot')
+    })
+    const api = await mockApi(page, {
+      lots: LOTS, session: 'BIDDER', rooms: { [LOT]: { bids: initial } },
+      wallet: { total: 500000, committed: 11000 },
+    })
+    await page.goto(`/lots/${LOT}`)
+    const winning = page.getByText('✓ Você está ganhando')
+    const balance = page.locator('.bid-wallet strong')
+    const mineError = page.getByText('Não foi possível carregar sua participação.')
+    const walletError = page.getByText('Não foi possível carregar a carteira.')
+    const publicError = page.getByText('Não foi possível atualizar a sala.', { exact: false })
+    const historyError = page.getByText('Histórico possivelmente desatualizado.')
+    await expect(winning).toBeVisible()
+    await expect(balance).toHaveText('R$ 4.890,00')
+    await sockets[0].close({ code: 1011 })
+    await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+    const roomRead = api.hold(ROOM)
+    const mineRead = api.hold(MINE)
+    const walletRead = api.hold('GET /api/wallet')
+    const previous = api.count(MINE)
+    await page.getByRole('button', { name: 'Atualizar sala' }).click()
+    await expect.poll(() => api.count(MINE)).toBe(previous + 1)
+    await expect(winning).toHaveCount(0) // M1: pending private data is not current.
+    await expect(mineError).toHaveCount(0)
+    if (failure === 'wallet') roomRead.release()
+    else roomRead.fail()
+    if (failure === 'wallet') mineRead.release()
+    else mineRead.fail()
+    if (failure === 'mine') walletRead.release()
+    else walletRead.fail()
+    await expect(publicError).toHaveCount(failure === 'wallet' ? 0 : 1)
+    await expect(historyError).toHaveCount(failure === 'wallet' ? 0 : 1)
+    await expect(mineError).toHaveCount(failure === 'wallet' ? 0 : 1)
+    await expect(walletError).toHaveCount(failure === 'mine' ? 0 : 1)
+    await expect(balance).toHaveText('R$ 4.890,00')
+    await page.clock.runFor(1_000)
+    await expect.poll(() => sockets.length).toBe(2)
+    const privateReads = api.count(MINE)
+    send(sockets[1], publicState, 'room_snapshot')
+    await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+    await expect(publicError).toHaveCount(0)
+    await expect(historyError).toHaveCount(0)
+    await expect(mineError).toHaveCount(failure === 'wallet' ? 0 : 1)
+    await expect(walletError).toHaveCount(failure === 'mine' ? 0 : 1)
+    await expect(winning).toHaveCount(failure === 'wallet' ? 1 : 0)
+    await expect(page.getByText('↑ Você foi superado')).toHaveCount(0)
+    await expect(balance).toHaveText('R$ 4.890,00')
+    expect(api.count(MINE)).toBe(privateReads) // identical snapshot does no private validation
+    if (failure === 'both') {
+      // Recover each resource independently; a successful sibling cannot clear its error.
+      for (const failingResource of ['wallet', 'mine']) {
+        const held = api.hold(failingResource === 'mine' ? MINE : 'GET /api/wallet')
+        const key = failingResource === 'mine' ? MINE : 'GET /api/wallet'
+        const before = api.count(key)
+        await page.getByRole('button', { name: 'Atualizar sala' }).click()
+        await expect.poll(() => api.count(key)).toBe(before + 1)
+        if (failingResource === 'wallet') await expect(mineError).toBeVisible() // start does not clear stale
+        held.fail()
+        await expect(page.getByRole('button', { name: 'Atualizar sala', exact: true })).toHaveAttribute('aria-busy', 'false')
+        await expect(mineError).toHaveCount(failingResource === 'mine' ? 1 : 0)
+        await expect(walletError).toHaveCount(failingResource === 'wallet' ? 1 : 0)
+      }
+    }
+    // A genuine current private response updates data and clears only its own error.
+    const newer = makeBids(2, 11000, [OWN_ALIAS, OTHER_ALIAS])
+    api.setBids(LOT, newer)
+    await page.route('**/api/wallet', (route) => route.fulfill({ json: {
+      total_balance_cents: 600000, committed_balance_cents: 0, available_balance_cents: 600000,
+    } }))
+    await page.getByRole('button', { name: 'Atualizar sala' }).click()
+    await expect(page.getByText('↑ Você foi superado')).toBeVisible()
+    await expect(balance).toHaveText('R$ 6.000,00')
+    await expect(mineError).toHaveCount(0)
+    await expect(walletError).toHaveCount(0)
+    expect(api.bidPosts).toHaveLength(0)
+  })
+}
+
+test('superseded private HTTP 200 delivered after current failure cannot clear stale', async ({ page }) => {
+  // Only A ignores transport cancellation. Production AbortSignals and generation
+  // checks remain intact, and real routed HTTP responses still pass both API parsers.
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window)
+    const probe = { armed: false, started: [] as string[], consumed: [] as Array<{
+      path: string; status: number; aborted: boolean; body: unknown
+    }> }
+    Object.assign(window, { supersededPrivateProbe: probe })
+    window.fetch = async (input, options) => {
+      const path = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin).pathname
+      const isA = probe.armed && (path.endsWith('/bids/mine') || path === '/api/wallet')
+      if (!isA) return nativeFetch(input, options)
+      const applicationSignal = options?.signal
+      if (!applicationSignal) throw new Error('A must carry its production AbortSignal')
+      probe.started.push(path)
+      const response = await nativeFetch(input, { ...options, signal: undefined })
+      const readJson = response.json.bind(response)
+      response.json = async () => {
+        const body: unknown = await readJson()
+        probe.consumed.push({ path, status: response.status, aborted: applicationSignal.aborted, body })
+        return body
+      }
+      return response
+    }
+  })
+  const initial = makeBids(1, 11000, [OWN_ALIAS])
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => {
+    sockets.push(socket); initialize(socket)
+    send(socket, state(1, { bids: initial }), 'room_snapshot')
+  })
+  const api = await mockApi(page, {
+    lots: LOTS, session: 'BIDDER', rooms: { [LOT]: { bids: initial } },
+    wallet: { total: 500000, committed: 11000 },
+  })
+  await page.goto(`/lots/${LOT}`)
+  const winning = page.getByText('✓ Você está ganhando')
+  const outbid = page.getByText('↑ Você foi superado')
+  const balance = page.locator('.bid-wallet strong')
+  const mineError = page.getByText('Não foi possível carregar sua participação.')
+  const walletError = page.getByText('Não foi possível carregar a carteira.')
+  await expect(winning).toBeVisible()
+  await expect(balance).toHaveText('R$ 4.890,00')
+
+  let phase: 'A' | 'B' | 'C' = 'A'
+  let receivedA = 0
+  let releaseA: () => void = () => undefined
+  const gateA = new Promise<void>((resolve) => { releaseA = resolve })
+  const oldMine = { bidder_alias: OWN_ALIAS, my_bid_count: 1, last_bid_cents: 11000 }
+  const oldWallet = { total_balance_cents: 100000, committed_balance_cents: 11000, available_balance_cents: 89000 }
+  const currentMine = { bidder_alias: OWN_ALIAS, my_bid_count: 1, last_bid_cents: 11000 }
+  const currentWallet = { total_balance_cents: 600000, committed_balance_cents: 0, available_balance_cents: 600000 }
+  for (const resource of ['mine', 'wallet'] as const) {
+    const path = resource === 'mine' ? `/api/lots/${LOT}/bids/mine` : '/api/wallet'
+    await page.route(`**${path}`, async (route) => {
+      const requestPhase = phase
+      if (requestPhase === 'A') {
+        receivedA++
+        await gateA
+        return route.fulfill({ status: 200, json: resource === 'mine' ? oldMine : oldWallet })
+      }
+      if (requestPhase === 'B') return route.fulfill({ status: 503, json: { status: 503, code: 'internal_error' } })
+      return route.fulfill({ status: 200, json: resource === 'mine' ? currentMine : currentWallet })
+    })
+  }
+  await page.evaluate(() => {
+    const probe = (window as unknown as { supersededPrivateProbe: { armed: boolean } }).supersededPrivateProbe
+    probe.armed = true
+  })
+  const incoming = state(2, { bids: makeBids(2, 11000, [OWN_ALIAS, OTHER_ALIAS]).reverse() })
+  api.setBids(LOT, [...incoming.bids].reverse())
+  send(sockets[0], incoming) // A: required private revalidation remains pending.
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { supersededPrivateProbe: { started: string[] } }).supersededPrivateProbe.started.length,
+  )).toBe(2)
+  await expect.poll(() => receivedA).toBe(2)
+  await expect(winning).toHaveCount(0)
+  await page.evaluate(() => {
+    (window as unknown as { supersededPrivateProbe: { armed: boolean } }).supersededPrivateProbe.armed = false
+  })
+  phase = 'B'
+  await page.getByRole('button', { name: 'Atualizar sala' }).click() // logically supersedes A
+  await expect(mineError).toBeVisible()
+  await expect(walletError).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Atualizar sala', exact: true })).toHaveAttribute('aria-busy', 'false')
+  await expect(balance).toHaveText('R$ 4.890,00')
+  // Only now can the two old successful responses reach the application.
+  releaseA()
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { supersededPrivateProbe: { consumed: unknown[] } }).supersededPrivateProbe.consumed.length,
+  )).toBe(2)
+  const consumed = await page.evaluate(() =>
+    (window as unknown as { supersededPrivateProbe: { consumed: unknown[] } }).supersededPrivateProbe.consumed,
+  )
+  expect(consumed).toEqual(expect.arrayContaining([
+    { path: `/api/lots/${LOT}/bids/mine`, status: 200, aborted: true, body: oldMine },
+    { path: '/api/wallet', status: 200, aborted: true, body: oldWallet },
+  ]))
+  // Both JSON reads have resolved. Drain the app's promise continuations and React
+  // commit before asserting; a public frame would not establish this ordering.
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  }))
+  await expect(mineError).toBeVisible()
+  await expect(walletError).toBeVisible()
+  await expect(winning).toHaveCount(0)
+  await expect(outbid).toHaveCount(0)
+  await expect(balance).toHaveText('R$ 4.890,00') // A's R$ 890,00 must not replace it.
+  await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+  await expect(page.locator('.bid-history-list li')).toHaveCount(2)
+
+  phase = 'C'
+  await page.getByRole('button', { name: 'Atualizar sala' }).click()
+  await expect(outbid).toBeVisible()
+  await expect(balance).toHaveText('R$ 6.000,00')
+  await expect(mineError).toHaveCount(0)
+  await expect(walletError).toHaveCount(0)
+  expect(api.bidPosts).toHaveLength(0)
+})
+
+test('a late failed public refresh cannot restore stale after a same-state snapshot', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  let socket: WebSocketRoute
+  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value; initialize(value) })
+  const api = await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  const reads = api.count(ROOM)
+  const held = api.hold(ROOM)
+  await page.getByRole('button', { name: 'Atualizar sala' }).click()
+  await expect.poll(() => api.count(ROOM)).toBe(reads + 1)
+  // Same public values, later as_of: no round cancellation or private reread.
+  const clockBefore = await page.locator('.as-of').textContent()
+  send(socket!, state(0, { as_of: '2026-10-25T14:35:00Z' }), 'room_snapshot')
+  await expect(page.locator('.as-of')).not.toHaveText(clockBefore!)
+  held.fail()
+  await expect(page.getByRole('button', { name: 'Atualizar sala', exact: true })).toHaveAttribute('aria-busy', 'false')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await expect(page.getByText('Não foi possível atualizar a sala.', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('Histórico possivelmente desatualizado.')).toHaveCount(0)
+  await expect(page.getByText('Nenhum lance ainda.').last()).toBeVisible()
+})
+
 test('lot_cancelled is terminal and moves focus; a pending read and a later frame cannot bring the room back', async ({ page }) => {
   let socket: WebSocketRoute
-  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value })
+  await page.routeWebSocket('**/ws/lots/*', (value) => { socket = value; initialize(value, value.url().split('/').at(-1)!) })
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
   await page.goto(`/lots/${LOT}`)
   await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
@@ -313,7 +620,7 @@ test('lot_cancelled is terminal and moves focus; a pending read and a later fram
 
 test('an ambiguous POST superseded by a newer frame is resolved by the coalesced revalidation', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
   await page.route(`**/api/lots/${LOT}/bids`, async (route) => {
     if (route.request().method() !== 'POST') return route.fallback()
@@ -361,21 +668,23 @@ const RESOLVED = 'O estado abaixo é o atual do servidor'
 
 test('a private read replaced by a manual refresh never resolves the ambiguous POST as complete', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const { api, room, mine, pending } = await ambiguousPostThenFrame(page, sockets)
   const during = api.count(MINE)
   await page.getByRole('button', { name: 'Atualizar sala' }).click() // aborts the in-flight /mine
   await expect.poll(() => api.count(MINE)).toBeGreaterThan(during)
   room.release()
   mine.fail() // the replacing round's private read fails
-  await expect(page.getByText('Não foi possível atualizar a sala.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Não foi possível carregar sua participação.')).toBeVisible()
+  await expect(page.getByText('Não foi possível atualizar a sala.', { exact: false })).toHaveCount(0)
+  await expect(page.getByText('Histórico possivelmente desatualizado.')).toHaveCount(0)
   await expect(page.getByText(RESOLVED, { exact: false })).toHaveCount(0)
   await expect(pending).toBeVisible()
 })
 
 test('a private revalidation that fails directly keeps the ambiguous POST partial', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const { room, mine, pending } = await ambiguousPostThenFrame(page, sockets)
   mine.fail()
   await expect(page.getByText('Não foi possível carregar sua participação.')).toBeVisible()
@@ -386,7 +695,7 @@ test('a private revalidation that fails directly keeps the ambiguous POST partia
 
 test('a replaced private read is decided by the round that replaced it', async ({ page }) => {
   const sockets: WebSocketRoute[] = []
-  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
   const { api, room, mine, pending } = await ambiguousPostThenFrame(page, sockets)
   const during = api.count(MINE)
   await page.getByRole('button', { name: 'Atualizar sala' }).click()
@@ -396,3 +705,206 @@ test('a replaced private read is decided by the round that replaced it', async (
   await expect(page.getByText(RESOLVED, { exact: false })).toBeVisible()
   await expect(pending).toHaveCount(0)
 })
+
+test('open awaits snapshot, lost pong reconnects automatically, and snapshot alone never resends commands', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  const pings: Array<{ socket: number; id: number }> = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => {
+    const index = sockets.length
+    sockets.push(socket)
+    socket.onMessage((data) => { pings.push({ socket: index, id: JSON.parse(String(data)).id }) })
+  })
+  const api = await mockApi(page, { lots: LOTS, session: 'BIDDER' })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Conectando à sala…')).toBeVisible()
+  await expect(page.getByText('Sala conectada', { exact: false })).toHaveCount(0)
+  send(sockets[0], state(1)) // bid event before first snapshot is ignored
+  await expect(page.getByText('Conectando à sala…')).toBeVisible()
+  send(sockets[0], state(2), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await expect.poll(() => pings.length).toBe(1)
+  await page.getByLabel('Valor do lance').fill('222,00')
+  await page.clock.runFor(10_000)
+  await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+  await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+  await page.clock.runFor(1_000)
+  await expect.poll(() => sockets.length).toBe(2)
+  await expect(page.getByText('Sala conectada', { exact: false })).toHaveCount(0)
+  send(sockets[1], state(3), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await expect(page.locator('.bid-current')).toHaveText('R$ 130,00')
+  await expect(page.getByLabel('Valor do lance')).toHaveValue('222,00')
+  await expect(page.getByLabel('Valor do lance')).toBeFocused()
+  expect(api.bidPosts).toHaveLength(0)
+})
+
+test('one diagnostic per recovery episode; 503 retries WS while confirmed 404 is terminal', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  const api = await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
+  let diagnostics = 0
+  await page.route(`**/api/lots/${LOT}/bids`, async (route) => {
+    diagnostics++
+    await route.fulfill({ status: 503, json: { error: { code: 'internal_error' } } })
+  })
+  await sockets[0].close({ code: 1008 })
+  await expect.poll(() => diagnostics).toBe(1)
+  await page.clock.runFor(1_000)
+  await expect.poll(() => sockets.length).toBe(2)
+  await sockets[1].close({ code: 1008 })
+  await page.clock.runFor(2_000)
+  await expect.poll(() => sockets.length).toBe(3)
+  expect(diagnostics).toBe(1)
+  send(sockets[2], state(), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await page.route(`**/api/lots/${LOT}/bids`, async (route) => {
+    await route.fulfill({ status: 404, json: { error: { code: 'lot_not_found' } } })
+  })
+  await sockets[2].close({ code: 1011 })
+  await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+  await page.clock.runFor(4_000)
+  await expect.poll(() => sockets.length).toBe(4)
+  await sockets[3].close({ code: 1008 })
+  await expect(page.getByRole('heading', { name: 'Lote indisponível ou não encontrado' })).toBeVisible()
+  await page.clock.runFor(120_000)
+  expect(sockets).toHaveLength(4)
+  expect(api.bidPosts).toHaveLength(0)
+})
+
+for (const width of [320, 375, 1280]) {
+  test(`recovery status and keyboard refresh remain accessible at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 850 })
+    const sockets: WebSocketRoute[] = []
+    await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
+    const api = await mockApi(page, { lots: LOTS })
+    await page.goto(`/lots/${LOT}`)
+    await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+    await page.evaluate(() => window.dispatchEvent(new Event('offline')))
+    // Synthetic event retires the socket. navigator remains online, so visible
+    // explicitly reevaluates health; this test claims UI behavior only.
+    await expect(page.getByText('Sem conexão com a rede')).toBeVisible()
+    const button = page.getByRole('button', { name: 'Atualizar sala' })
+    await button.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.count(ROOM)).toBeGreaterThan(1)
+    await expect(button).toBeFocused()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await expect(page.locator('.room-refresh [role="status"]')).toHaveText('Sem conexão com a rede')
+  })
+}
+
+test('opening timeout and navigation invalidate pending retries across lots and back remount', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Conectando à sala…')).toBeVisible()
+  await page.clock.runFor(29_999)
+  await expect(page.getByText('Conectando à sala…')).toBeVisible()
+  await page.clock.runFor(1)
+  await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+  // Navigate with History API so the previous instance's retry stays in this JS realm.
+  await page.evaluate((url) => { history.pushState(null, '', url); dispatchEvent(new PopStateEvent('popstate')) }, `/lots/${lotId(2)}`)
+  await expect.poll(() => sockets.length).toBe(2)
+  send(sockets[1], state(2), 'room_snapshot', lotId(2))
+  await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+  sockets[1].onMessage((data) => { sockets[1].send(JSON.stringify({ type: 'pong', id: JSON.parse(String(data)).id })) })
+  await page.clock.runFor(2_000)
+  expect(sockets).toHaveLength(2)
+  await page.goBack()
+  await expect.poll(() => sockets.length).toBe(3)
+  send(sockets[2], state(3), 'room_snapshot')
+  await expect(page.locator('.bid-current')).toHaveText('R$ 130,00')
+})
+
+test('manual room newer than reconnect snapshot is retained while transport becomes connected', async ({ page }) => {
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await mockApi(page, { lots: LOTS, rooms: { [LOT]: { bids: makeBids(3, 11000) } } })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.locator('.bid-current')).toHaveText('R$ 130,00')
+  await expect(page.getByText('Conectando à sala…')).toBeVisible()
+  send(sockets[0], state(1), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await expect(page.locator('.bid-current')).toHaveText('R$ 130,00')
+})
+
+test('snapshot invalidates an old coalesced diagnostic 404 without ending the recovered room', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket) })
+  await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
+  let release: () => void = () => undefined
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  let reads = 0
+  await page.route(`**/api/lots/${LOT}/bids`, async (route) => {
+    reads++
+    await gate
+    await route.fulfill({ status: 404, json: { error: { code: 'lot_not_found' } } })
+  })
+  await page.getByRole('button', { name: 'Atualizar sala' }).click()
+  await expect.poll(() => reads).toBe(1)
+  await sockets[0].close({ code: 1008 })
+  await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+  expect(reads).toBe(1)
+  await page.clock.runFor(1_000)
+  await expect.poll(() => sockets.length).toBe(2)
+  send(sockets[1], state(), 'room_snapshot')
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  release()
+  await expect(page.getByRole('button', { name: 'Atualizar sala' })).toBeVisible()
+  await page.clock.runFor(16)
+  await expect(page.getByRole('heading', { name: 'Lote indisponível ou não encontrado' })).toHaveCount(0)
+})
+
+for (const failure of ['lot_cancelled', 'not_found'] as const) {
+  test(`POST ${failure} during reconnect confirms terminal and prevents late recovery`, async ({ page }) => {
+    await page.clock.install()
+    await page.clock.pauseAt(new Date())
+    const sockets: WebSocketRoute[] = []
+    await page.routeWebSocket('**/ws/lots/*', (socket) => { sockets.push(socket); initialize(socket) })
+    const api = await mockApi(page, { lots: LOTS, session: 'BIDDER', wallet: { total: 500000, committed: 0 } })
+    let posts = 0
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    await page.route(`**/api/lots/${LOT}/bids`, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback()
+      posts++
+      await gate
+      const status = failure === 'lot_cancelled' ? 422 : 404
+      await route.fulfill({ status,
+        json: { status, code: failure === 'not_found' ? 'lot_not_found' : failure, message: 'MENSAGEM DO SERVIDOR' } })
+    })
+    await page.goto(`/lots/${LOT}`)
+    await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+    await page.getByLabel('Valor do lance').fill('110,00')
+    await page.getByRole('button', { name: 'Dar lance' }).click()
+    await expect.poll(() => posts).toBe(1)
+    await sockets[0].close({ code: 1011 })
+    await expect(page.getByText('Reconectando à sala…')).toBeVisible()
+    const reads = api.count(ROOM)
+    release()
+    const heading = page.getByRole('heading', { name: failure === 'lot_cancelled'
+      ? 'Este lote foi cancelado' : 'Lote indisponível ou não encontrado' })
+    await expect(heading).toBeVisible()
+    if (failure === 'lot_cancelled') await expect(heading).toBeFocused()
+    await page.evaluate(() => window.dispatchEvent(new Event('online')))
+    await page.clock.runFor(120_000)
+    await expect(heading).toBeVisible()
+    expect(sockets).toHaveLength(1)
+    expect(posts).toBe(1)
+    expect(api.count(ROOM)).toBe(reads)
+    await expect(page.getByRole('heading', { name: 'Sala do lote' })).toHaveCount(0)
+  })
+}

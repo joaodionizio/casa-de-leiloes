@@ -114,6 +114,10 @@ def test_public_real_snapshot_is_one_pure_query_and_closes_session(
             assert frame["type"] == "room_snapshot"
             assert frame["room"]["bid_count"] == 0
             assert len(statements) == 1
+            for ping_id in range(1, 4):
+                ws.send_json({"type": "ping", "id": ping_id})
+                assert ws.receive_json() == {"type": "pong", "id": ping_id}
+            assert len(statements) == 1
             assert all(thread != loop_thread for thread in threads)
             sql = statements[0].upper()
             assert "CLOCK_TIMESTAMP()" in sql and "LATERAL" in sql
@@ -678,3 +682,145 @@ def test_legacy_room_is_public_read_only(setup):
         assert ws.receive_json()["room"]["bid_count"] == 0
     assert lot_state(factory, identifier)["anchor_hmac"] is None
     assert db_snapshot(factory) == before
+
+
+def test_reconnect_after_committed_write_loses_transport_before_publication(
+    setup, monkeypatch
+):
+    client, factory = setup
+    identifier = live_lot(factory)
+    assert login(client, HTTPS_ORIGIN, BIDDER_EMAIL).status_code == 200
+    reached, release = threading.Event(), threading.Event()
+    original = lot_room.signal_committed
+    posts = []
+
+    def signal(app, lot_id, *args, **kwargs):
+        assert len(bid_rows(factory, lot_id)) == 1
+        reached.set()
+        assert release.wait(5)
+        return original(app, lot_id, *args, **kwargs)
+
+    monkeypatch.setattr(lot_room, "signal_committed", signal)
+    with ThreadPoolExecutor(1) as pool:
+        try:
+            with client.websocket_connect(f"/ws/lots/{identifier}") as old:
+                assert old.receive_json()["room"]["bid_count"] == 0
+                future = pool.submit(post, client, identifier)
+                posts.append(future)
+                assert reached.wait(5)
+                # Context closes before publication can run: committed event is lost.
+        finally:
+            release.set()
+        assert future.result(5).status_code == 201
+    with client.websocket_connect(f"/ws/lots/{identifier}") as recovered:
+        frame = recovered.receive_json()
+        assert frame["type"] == "room_snapshot"
+        assert frame["room"]["bid_count"] == 1
+        assert frame["room"]["current_bid_cents"] == 10000
+        assert len(frame["room"]["bids"]) == 1
+        assert (
+            datetime.fromisoformat(frame["room"]["ends_at"])
+            == lot_state(factory, identifier)["ends_at"]
+        )
+    assert len(posts) == 1
+    assert not client.app.state.room_manager.rooms
+
+
+def test_reconnect_recovers_missed_window_and_total_without_replay(setup):
+    client, factory = setup
+    identifier = live_lot(factory, min_increment_cents=1)
+    with client.websocket_connect(f"/ws/lots/{identifier}") as before:
+        assert before.receive_json()["room"]["bid_count"] == 0
+    for index in range(51):
+        email = BIDDER_EMAIL if index % 2 == 0 else OTHER_BIDDER_EMAIL
+        assert login(client, HTTPS_ORIGIN, email).status_code == 200
+        assert post(client, identifier, 10000 + index).status_code == 201
+    with client.websocket_connect(f"/ws/lots/{identifier}") as recovered:
+        frame = recovered.receive_json()
+        assert frame["type"] == "room_snapshot"
+        assert frame["room"]["bid_count"] == 51
+        assert frame["room"]["current_bid_cents"] == 10050
+        assert [bid["sequence"] for bid in frame["room"]["bids"]] == list(
+            range(51, 1, -1)
+        )
+        recovered.send_json({"type": "ping", "id": 1})
+        assert recovered.receive_json() == {"type": "pong", "id": 1}
+    assert not client.app.state.room_manager.rooms
+
+
+def test_disconnected_cancellation_recovers_only_generic_public_404(setup):
+    client, factory = setup
+    identifier = live_lot(factory)
+    with client.websocket_connect(f"/ws/lots/{identifier}") as before:
+        assert before.receive_json()["type"] == "room_snapshot"
+    assert login(client, HTTPS_ORIGIN, AUCTIONEER_EMAIL).status_code == 200
+    assert (
+        client.post(
+            f"/api/lots/{identifier}/cancel", headers=json_headers(HTTPS_ORIGIN)
+        ).status_code
+        == 200
+    )
+    client.cookies.clear()
+    with pytest.raises(WebSocketDisconnect) as closed:
+        with client.websocket_connect(f"/ws/lots/{identifier}"):
+            pass
+    assert closed.value.code == 1008
+    response = client.get(f"/api/lots/{identifier}/bids")
+    assert response.status_code == 404
+    assert "cancelled_at" not in response.text
+    assert not client.app.state.room_manager.rooms
+
+
+def test_abandon_during_real_sql_releases_session_and_registration(
+    setup, monkeypatch, db_engine
+):
+    from tests.test_lot_room import raw_scope
+
+    client, factory = setup
+    identifier = live_lot(factory)
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+    original = lot_room.read_room
+
+    def block(connection, cursor, statement, parameters, context, executemany):
+        entered.set()
+        assert release.wait(5)
+
+    def read(lot_id):
+        try:
+            return original(lot_id)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(lot_room, "read_room", read)
+    event.listen(db_engine, "before_cursor_execute", block)
+
+    async def scenario():
+        incoming = asyncio.Queue()
+        incoming.put_nowait({"type": "websocket.connect"})
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        task = asyncio.create_task(
+            client.app(raw_scope(f"/ws/lots/{identifier}", []), incoming.get, send)
+        )
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            assert db_engine.pool.checkedout() == 1
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 5)
+            assert not client.app.state.room_manager.rooms
+        finally:
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 5)
+        assert db_engine.pool.checkedout() == 0
+        assert not client.app.state.room_manager.rooms
+        assert sent == []
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        release.set()
+        event.remove(db_engine, "before_cursor_execute", block)

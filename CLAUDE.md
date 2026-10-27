@@ -184,7 +184,7 @@ dispensado: o enunciado já é a especificação (registrar o motivo).
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
 IDs históricos preservados; detalhes e decisões fechadas na arquitetura.
-- **Q1:** intervalos do scheduler/heartbeat e reconexão com espera crescente.
+- **Q1:** scheduler permanece aberto (4.4); heartbeat/reconexão decididos na spec 4.2: ping 20 s, pong 10 s, silêncio 60 s, snapshot 30 s; backoff exponencial 1–30 s/equal jitter, reset só snapshot+pong. Geração substitui sem esperar CLOSED; send/close backend 10 s. Tetos e timeout pós-commit D-A adiados. Ready-for-dev não autoriza código nesta sessão.
 - **Q4:** catch-up antes do seed/tráfego (4.4); demo já definido nas 2.4/3.4/3.6.
 - **Q6:** implementar/validar que só quem fechou publica o evento (4.4).
 - **Q9:** fechar antes de recusar lance vencido (4.4); hoje só recusa.

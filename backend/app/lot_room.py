@@ -5,7 +5,9 @@ its coordination lock. Each socket has one sender and a bounded queue.
 """
 
 import asyncio
+import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -26,6 +28,9 @@ from app.lots import Lot
 
 logger = logging.getLogger("uvicorn.error")
 QUEUE_CAPACITY = 8
+SILENCE_TIMEOUT = 60
+TRANSPORT_TIMEOUT = 10
+MAX_SAFE_INTEGER = 2**53 - 1
 
 
 class RoomEvent(BaseModel):
@@ -53,12 +58,19 @@ def read_cancellation(lot_id: uuid.UUID) -> datetime | None:
         return None if cancelled_at is None else cancelled_at.astimezone(UTC)
 
 
+class Pong(BaseModel):
+    type: Literal["pong"] = "pong"
+    id: int
+
+
 @dataclass(eq=False)
 class Subscriber:
-    queue: asyncio.Queue[RoomEvent | CancellationEvent] = field(
+    queue: asyncio.Queue[RoomEvent | CancellationEvent | Pong] = field(
         default_factory=lambda: asyncio.Queue(QUEUE_CAPACITY)
     )
     stopped: asyncio.Event = field(default_factory=asyncio.Event)
+    last_activity: float = field(default_factory=time.monotonic)
+    activity: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass
@@ -73,6 +85,7 @@ class RoomManager:
         self.rooms: dict[uuid.UUID, Room] = {}
         # Writers waiting at from_thread.run must not consume the readers pool.
         self.read_limiter = CapacityLimiter(4)
+        self.reads: set[asyncio.Task] = set()
 
     @asynccontextmanager
     async def coordinated(self, lot_id: uuid.UUID) -> AsyncIterator[Room]:
@@ -88,9 +101,20 @@ class RoomManager:
 
     async def subscribe(self, lot_id: uuid.UUID) -> Subscriber | None:
         async with self.coordinated(lot_id) as room:
-            snapshot = await to_thread.run_sync(
-                read_room, lot_id, limiter=self.read_limiter
+            # Detach only the wait on abandonment. The worker keeps its limiter
+            # lease until SQL/Session finish, so abandoned clients cannot bypass 4.
+            reading = asyncio.create_task(
+                to_thread.run_sync(read_room, lot_id, limiter=self.read_limiter)
             )
+            self.reads.add(reading)
+
+            def finished(task: asyncio.Task) -> None:
+                self.reads.discard(task)
+                if not task.cancelled():
+                    task.exception()  # Consume a late error after the owner left.
+
+            reading.add_done_callback(finished)
+            snapshot = await asyncio.shield(reading)
             if snapshot is None:
                 return None
             subscriber = Subscriber()
@@ -101,9 +125,13 @@ class RoomManager:
             return subscriber
 
     async def remove(self, lot_id: uuid.UUID, subscriber: Subscriber) -> None:
-        async with self.coordinated(lot_id) as room:
+        # No network/SQL wait: loop-owned sets can be changed without the read lock.
+        subscriber.stopped.set()
+        room = self.rooms.get(lot_id)
+        if room is not None:
             room.subscribers.discard(subscriber)
-            subscriber.stopped.set()
+            if not room.users and not room.subscribers:
+                self.rooms.pop(lot_id, None)
 
     def enqueue(self, room: Room, event: RoomEvent | CancellationEvent) -> None:
         for subscriber in tuple(room.subscribers):
@@ -185,19 +213,74 @@ def signal_committed(app: FastAPI, lot_id: uuid.UUID, cancelled: bool = False) -
             )
 
 
+async def close_transport(websocket: WebSocket, code: int) -> None:
+    try:
+        await asyncio.wait_for(websocket.close(code=code), TRANSPORT_TIMEOUT)
+    except (TimeoutError, RuntimeError, WebSocketDisconnect):
+        pass
+
+
 async def send_events(websocket: WebSocket, subscriber: Subscriber) -> int:
     while True:
         event = await subscriber.queue.get()
-        await websocket.send_json(event.model_dump(mode="json"))
+        await asyncio.wait_for(
+            websocket.send_json(event.model_dump(mode="json")), TRANSPORT_TIMEOUT
+        )
         if isinstance(event, CancellationEvent):
             return 1000
 
 
-async def receive_commands(websocket: WebSocket) -> int | None:
-    message = await websocket.receive()
-    if message["type"] == "websocket.disconnect":
-        return None
-    return 1003 if message.get("bytes") is not None else 1008
+async def receive_commands(websocket: WebSocket, subscriber: Subscriber) -> int | None:
+    previous_id = 0
+    while True:
+        message = await websocket.receive()
+        if message["type"] == "websocket.disconnect":
+            return None
+        if message.get("bytes") is not None:
+            return 1003
+        try:
+            payload = json.loads(message.get("text", ""))
+        except (ValueError, TypeError):
+            return 1008
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"type", "id"}
+            or payload["type"] != "ping"
+            or type(payload["id"]) is not int
+            or not previous_id < payload["id"] <= MAX_SAFE_INTEGER
+            or payload["id"] != previous_id + 1
+        ):
+            return 1008
+        # Expired silence cannot be revived by a callback processed late.
+        now = time.monotonic()
+        if now >= subscriber.last_activity + SILENCE_TIMEOUT:
+            return 1011
+        previous_id = payload["id"]
+        subscriber.last_activity = now
+        subscriber.activity.set()
+        try:
+            subscriber.queue.put_nowait(Pong(id=previous_id))
+        except asyncio.QueueFull:
+            subscriber.stopped.set()
+            return 1011
+
+
+async def watch_silence(subscriber: Subscriber) -> int:
+    while True:
+        subscriber.activity.clear()
+        remaining = subscriber.last_activity + SILENCE_TIMEOUT - time.monotonic()
+        if remaining <= 0:
+            return 1011
+        try:
+            await asyncio.wait_for(subscriber.activity.wait(), remaining)
+        except TimeoutError:
+            return 1011
+
+
+async def wait_disconnect(websocket: WebSocket) -> None:
+    # Before accept the only legitimate input is connect/disconnect.
+    while (await websocket.receive())["type"] != "websocket.disconnect":
+        pass
 
 
 def register_room_routes(app: FastAPI, app_origin: str) -> None:
@@ -209,31 +292,47 @@ def register_room_routes(app: FastAPI, app_origin: str) -> None:
     async def lot_room(websocket: WebSocket, lot_id: str) -> None:
         origins = websocket.headers.getlist("origin")
         if origins and (len(origins) != 1 or parse_origin(origins[0]) != allowed):
-            await websocket.close(code=1008)
+            await close_transport(websocket, 1008)
             return
         try:
             identifier = uuid.UUID(lot_id)
         except ValueError:
-            await websocket.close(code=1008)
+            await close_transport(websocket, 1008)
             return
         subscriber = None
+        subscribing = None
         tasks: list[asyncio.Task] = []
         accepted = False
         close_code = None
         try:
-            subscriber = await manager.subscribe(identifier)
+            subscribing = asyncio.create_task(manager.subscribe(identifier))
+            disconnected = asyncio.create_task(wait_disconnect(websocket))
+            tasks = [subscribing, disconnected]
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            if disconnected in done:
+                # If both completed, retain the subscriber for the common cleanup.
+                if subscribing.done() and not subscribing.cancelled():
+                    subscriber = subscribing.result()
+                return
+            disconnected.cancel()
+            await asyncio.gather(disconnected, return_exceptions=True)
+            subscriber = subscribing.result()
             if subscriber is None:
-                await websocket.close(code=1008)
+                await close_transport(websocket, 1008)
                 return
             await websocket.accept()
             accepted = True
+            subscriber.last_activity = time.monotonic()
             sender = asyncio.create_task(send_events(websocket, subscriber))
-            receiver = asyncio.create_task(receive_commands(websocket))
+            receiver = asyncio.create_task(receive_commands(websocket, subscriber))
             stopped = asyncio.create_task(subscriber.stopped.wait())
-            tasks = [sender, receiver, stopped]
+            watchdog = asyncio.create_task(watch_silence(subscriber))
+            tasks = [sender, receiver, stopped, watchdog]
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             if stopped in done:
                 close_code = 1011
+            elif watchdog in done:
+                close_code = watchdog.result()
             elif sender in done:
                 close_code = sender.result()
             else:
@@ -253,7 +352,15 @@ def register_room_routes(app: FastAPI, app_origin: str) -> None:
                 task.cancel()
             with CancelScope(shield=True):
                 await asyncio.gather(*tasks, return_exceptions=True)
+                # Cancellation may race a completed subscribe before its result was
+                # assigned above. Recover ownership before removing the registration.
+                if subscriber is None and subscribing is not None:
+                    if subscribing.done() and not subscribing.cancelled():
+                        try:
+                            subscriber = subscribing.result()
+                        except Exception:
+                            pass
                 if subscriber is not None:
                     await manager.remove(identifier, subscriber)
                 if close_code is not None:
-                    await websocket.close(code=close_code)
+                    await close_transport(websocket, close_code)

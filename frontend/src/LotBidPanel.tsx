@@ -19,6 +19,7 @@ export type Loadable<T> =
 
 interface LotBidPanelProps {
   connection: ConnectionState
+  networkOffline: boolean
   // Leitura manual bem-sucedida com o socket indisponível: dados atuais, mas sem ao vivo.
   manualFresh: boolean
   lotId: string
@@ -34,6 +35,7 @@ interface LotBidPanelProps {
   syncFailed: boolean
   position: BidPosition
   wallet: Loadable<WalletResponse>
+  walletStale: boolean
   // Participação ausente ou de outra rodada que a sala exibida: a posição não se calcula.
   participationUnavailable: boolean
   ownAlias: string | null
@@ -136,7 +138,7 @@ function LotBidPanel(props: LotBidPanelProps) {
               <strong>{formatCents(props.wallet.data.available_balance_cents)}</strong>
             </p>
           )}
-          {props.wallet.status === 'failed' && (
+          {(props.walletStale || props.wallet.status === 'failed') && (
             <p className="muted">Não foi possível carregar a carteira.</p>
           )}
         </div>
@@ -207,9 +209,14 @@ function LotBidPanel(props: LotBidPanelProps) {
           ? '● Sala conectada — atualizações ao vivo'
           : props.connection === 'connecting'
             ? 'Conectando à sala…'
-            : props.manualFresh
-              ? 'Atualizações ao vivo indisponíveis. Dados atualizados por leitura manual; use Atualizar sala para ver mudanças.'
-              : 'Atualizações ao vivo indisponíveis. Estado desatualizado; use Atualizar sala.'}</p>
+            : props.connection === 'reconnecting'
+              ? 'Reconectando à sala…'
+              : props.networkOffline
+                ? 'Sem conexão com a rede'
+                : 'Sem atualizações ao vivo. Estado desatualizado; use Atualizar sala.'}</p>
+        {props.manualFresh && props.connection !== 'connected' && (
+          <p className="muted">Dados atualizados por leitura manual; atualizações ao vivo ainda indisponíveis.</p>
+        )}
         {props.syncFailed && (
           <p role="alert" className="form-error">
             Não foi possível atualizar a sala. Os dados abaixo são os últimos recebidos e podem

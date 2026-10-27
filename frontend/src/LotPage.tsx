@@ -23,12 +23,12 @@ import { consumeZero, endsAtKey, makeAnchor, type CountdownAnchor } from './coun
 import LotBidPanel, { type Loadable, type Viewer } from './LotBidPanel'
 import LotState from './LotState'
 import {
-  parseRoomMessage,
   roomSocketUrl,
   sameRoomState,
   shouldApplyRoom,
   type ConnectionState,
 } from './lotRoomSocket'
+import { createLotConnection } from './lotConnection'
 import { lotTitleText } from './lotLabels'
 import { formatDateTime } from './lotTime'
 import { formatCents, moneyErrorMessage, parseReaisToCents } from './money'
@@ -107,8 +107,12 @@ function LotPage({
 }: LotPageProps) {
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const connectionRef = useRef<ConnectionState>('connecting')
+  const transportRef = useRef<ReturnType<typeof createLotConnection> | null>(null)
+  const publicEpochRef = useRef(0)
+  const publicReadRef = useRef<ReturnType<typeof fetchBidRoom> | null>(null)
   // Leitura manual bem-sucedida com o socket já indisponível: os dados estão atuais,
   // mas as atualizações ao vivo continuam fora.
+  const [networkOffline, setNetworkOffline] = useState(false)
   const [manualFresh, setManualFresh] = useState(false)
   // Revalidação privada disparada por um evento do socket ainda em andamento: a
   // participação anterior fica oculta, mas isso é atualização, não falha.
@@ -123,10 +127,15 @@ function LotPage({
   const [room, setRoom] = useState<Loadable<BidRoom>>({ status: 'loading' })
   const [mine, setMine] = useState<Loadable<MyBids>>({ status: 'loading' })
   const [wallet, setWallet] = useState<Loadable<WalletResponse>>({ status: 'loading' })
+  // Retained private data is not proof that the latest validation succeeded.
+  const [mineFreshness, setMineFreshness] = useState<'unconfirmed' | 'confirmed' | 'stale'>('unconfirmed')
+  const [walletStale, setWalletStale] = useState(false)
   const [anchor, setAnchor] = useState<CountdownAnchor | null>(null)
   const [zeroKey, setZeroKey] = useState<string | null>(null)
   const [overlay, setOverlay] = useState(false)
   const [sync, setSync] = useState<Sync>('idle')
+  // Public freshness is independent of /mine and wallet failures in the round.
+  const [publicStale, setPublicStale] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // Rodada que produziu a sala e a participação exibidas: só pares da mesma rodada
   // formam um snapshot válido para a posição.
@@ -201,6 +210,24 @@ function LotPage({
     }
   }, [])
 
+  const endTransport = useCallback(() => {
+    cancelledRef.current = true
+    transportRef.current?.stop('terminal')
+    cancelRound()
+    channels.current.detail.controller?.abort()
+    channels.current.detail.generation += 1
+  }, [cancelRound])
+
+  const markNotFound = useCallback(() => {
+    endTransport()
+    setDetail({ status: 'not_found' })
+  }, [endTransport])
+
+  const markCancelled = useCallback(() => {
+    endTransport()
+    setCancelled(true)
+  }, [endTransport])
+
   // As leituras devolvem `false` só numa falha real; uma leitura substituída por outra do
   // mesmo canal devolve `true` (quem a substituiu responde pelo resultado).
   const loadDetail = useCallback(async (): Promise<boolean> => {
@@ -211,6 +238,7 @@ function LotPage({
       setDetail({ status: 'ready', data: result.data })
       return true
     }
+    if (result.failure === 'not_found') { markNotFound(); return false }
     // Uma releitura que falha por rede ou servidor não derruba um lote já exibido.
     setDetail((current) =>
       result.failure === 'not_found'
@@ -220,7 +248,7 @@ function LotPage({
           : { status: 'failed' },
     )
     return false
-  }, [begin, lotId])
+  }, [begin, lotId, markNotFound])
 
   const applyRoom = useCallback((incoming: BidRoom, roundId: number, isOverlay = false): boolean => {
     const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
@@ -237,9 +265,14 @@ function LotPage({
   const loadRoom = useCallback(
     async (roundId: number): Promise<boolean> => {
       const round = begin('room')
-      const result = await fetchBidRoom(lotId, round.signal)
+      const publicEpoch = publicEpochRef.current
+      const reading = fetchBidRoom(lotId, round.signal)
+      publicReadRef.current = reading
+      const result = await reading
+      if (publicReadRef.current === reading) publicReadRef.current = null
       if (!round.isCurrent()) return true
       if (result.ok) {
+        setPublicStale(false)
         if (!applyRoom(result.data, roundId) && !cancelledRef.current) {
           // This round began after the retained newer room; its fresh private
           // read can pair with that authority without replacing public data.
@@ -248,17 +281,24 @@ function LotPage({
         }
         return true
       }
+      if (result.failure === 'not_found') {
+        if (publicEpoch === publicEpochRef.current) markNotFound()
+        return false
+      }
       // Uma leitura que falha não apaga uma sala já carregada.
+      if (publicEpoch === publicEpochRef.current) setPublicStale(true)
       setRoom((current) => (current.status === 'ready' ? current : { status: 'failed' }))
       return false
     },
-    [begin, lotId, applyRoom],
+    [begin, lotId, applyRoom, markNotFound],
   )
 
   const loadPrivate = useCallback(
     async (withWallet: boolean, roundId: number): Promise<PrivateResult> => {
       if (viewerRef.current !== 'bidder') return 'ok'
       const round = begin('priv')
+      // Starting a read hides the previous position without clearing an existing error.
+      setMineFreshness((current) => current === 'stale' ? current : 'unconfirmed')
       const [mineResult, walletResult] = await Promise.all([
         fetchMyBids(lotId, round.signal),
         withWallet ? fetchWallet(round.signal) : Promise.resolve(null),
@@ -273,13 +313,16 @@ function LotPage({
         return 'failed'
       }
       if (mineResult.ok) {
+        setMineFreshness('confirmed')
         setMine({ status: 'ready', data: mineResult.data })
         setMineRound(roundId)
       } else {
+        setMineFreshness('stale')
         // Conserva a participação anterior para apresentação; ela não vale para a rodada.
         setMine((current) => (current.status === 'ready' ? current : { status: 'failed' }))
       }
       if (walletResult !== null) {
+        setWalletStale(!walletResult.ok)
         if (walletResult.ok) setWallet({ status: 'ready', data: walletResult.wallet })
         else setWallet((current) => (current.status === 'ready' ? current : { status: 'failed' }))
       }
@@ -354,6 +397,8 @@ function LotPage({
     later(async () => {
       setMine({ status: 'loading' })
       setWallet({ status: 'loading' })
+      setMineFreshness('unconfirmed')
+      setWalletStale(false)
       if (privateOwner === null) {
         setNotice(null)
         setAcceptedSyncFailed(false)
@@ -371,47 +416,58 @@ function LotPage({
     })
   }, [privateOwner, loadPrivate])
 
-  // One public socket per mounted lot. No heartbeat or automatic reconnection.
+  // The connection owns only transport health; public arbitration stays here.
   useEffect(() => {
     let active = true
-    const socket = new WebSocket(roomSocketUrl(lotId, window.location.origin))
-    const markUnavailable = () => {
-      if (!active || cancelledRef.current) return
-      connectionRef.current = 'unavailable'
-      setConnection('unavailable')
-      setManualFresh(false)
+    let diagnosticEpoch = 0
+    let diagnosticController: AbortController | null = null
+    const invalidateDiagnostic = () => {
+      diagnosticEpoch++
+      diagnosticController?.abort()
+      diagnosticController = null
     }
-    socket.onopen = () => {
-      if (!active) return
-      connectionRef.current = 'connected'
-      setConnection('connected')
-    }
-    socket.onclose = markUnavailable
-    socket.onerror = markUnavailable
-    // The browser can keep a dead socket "open" for a long time; going offline is the
-    // only early signal without a heartbeat (4.2). The current socket is closed too, so
-    // what the panel says matches what is applied. `online` never reconnects.
-    const goOffline = () => {
-      markUnavailable()
-      socket.onmessage = null
-      socket.close()
-    }
-    window.addEventListener('offline', goOffline)
-    socket.onmessage = (message) => {
-      if (!active || !mountedRef.current) return
-      const event = parseRoomMessage(message.data)
-      if (event === null || event.lot_id !== lotId || cancelledRef.current) return
+    const transport = createLotConnection(lotId, {
+      socket: () => new WebSocket(roomSocketUrl(lotId, window.location.origin)),
+      now: () => performance.now(),
+      schedule: (callback, delay) => {
+        const timer = window.setTimeout(callback, delay)
+        return () => window.clearTimeout(timer)
+      },
+      random: Math.random,
+      online: () => navigator.onLine,
+      status: (state, offline = false) => {
+        if (state === 'terminal' || state === 'disposed') invalidateDiagnostic()
+        if (!active || cancelledRef.current) return
+        connectionRef.current = state
+        setConnection(state)
+        setNetworkOffline(offline)
+        if (state !== 'connected') setManualFresh(false)
+      },
+      recovered: invalidateDiagnostic,
+      diagnose: () => {
+        const epoch = ++diagnosticEpoch
+        diagnosticController = new AbortController()
+        const reading = publicReadRef.current ?? fetchBidRoom(lotId, diagnosticController.signal)
+        void reading.then((result) => {
+          if (!active || diagnosticEpoch !== epoch || cancelledRef.current) return
+          if (!result.ok && result.failure === 'not_found') markNotFound()
+        })
+      },
+      message: (event) => {
+      if (!active || !mountedRef.current || cancelledRef.current) return
       if (event.type === 'lot_cancelled') {
-        cancelledRef.current = true
-        cancelRound()
-        channels.current.detail.controller?.abort()
-        channels.current.detail.generation += 1
-        setCancelled(true)
-        socket.close()
+        markCancelled()
         return
+      }
+      // A current connection's snapshot restores public freshness even when
+      // arbitration retains newer data or the public state is unchanged.
+      if (event.type === 'room_snapshot') {
+        publicEpochRef.current++
+        setPublicStale(false)
       }
       const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
       if (!shouldApplyRoom(current, event.room, false, lotId, event.lot_id)) return
+      setPublicStale(false)
       if (current !== null && sameRoomState(current, event.room)) {
         // Same public state, newer reading: only the clock is re-anchored. No round is
         // cancelled and no private read starts.
@@ -454,14 +510,26 @@ function LotPage({
           }
         }
       })
-    }
+      },
+    })
+    transportRef.current = transport
+    if (cancelledRef.current) transport.stop()
+    const goOffline = () => transport.offline()
+    const goOnline = () => transport.online()
+    const visible = () => { if (document.visibilityState === 'visible') transport.visible() }
+    window.addEventListener('offline', goOffline)
+    window.addEventListener('online', goOnline)
+    document.addEventListener('visibilitychange', visible)
     return () => {
       active = false
+      invalidateDiagnostic()
       window.removeEventListener('offline', goOffline)
-      socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null
-      socket.close()
+      window.removeEventListener('online', goOnline)
+      document.removeEventListener('visibilitychange', visible)
+      transport.stop()
+      if (transportRef.current === transport) transportRef.current = null
     }
-  }, [lotId, applyRoom, cancelRound, loadPrivate])
+  }, [lotId, applyRoom, cancelRound, loadPrivate, markNotFound, markCancelled])
 
   // Lote cancelado ao vivo: a tela inteira muda, então o foco vai para o título (que o
   // leitor de tela anuncia) em vez de cair no `body` quando o campo do lance desmonta.
@@ -491,7 +559,7 @@ function LotPage({
     void runRound({ detail: true, wallet: true }, true).then((result) => {
       if (!mountedRef.current) return
       setRefreshing(false)
-      if (result === 'ok') setManualFresh(connectionRef.current === 'unavailable')
+      if (result === 'ok') setManualFresh(connectionRef.current !== 'connected')
       else if (result === 'failed') setManualFresh(false)
       // An ambiguous POST left open by a superseded revalidation is decided here.
       if (ambiguousRef.current && result !== 'superseded') {
@@ -525,7 +593,7 @@ function LotPage({
   const handleOutcome = useCallback(
     async (entry: PendingBid) => {
       const result = await entry.outcome
-      if (!mountedRef.current || ownerRef.current !== entry.owner) return
+      if (!mountedRef.current || cancelledRef.current || ownerRef.current !== entry.owner) return
       setSubmitting(false)
       submittingRef.current = false
 
@@ -576,7 +644,11 @@ function LotPage({
         return
       }
       if (result.failure === 'not_found') {
-        setDetail({ status: 'not_found' })
+        markNotFound()
+        return
+      }
+      if (result.failure === 'lot_cancelled') {
+        markCancelled()
         return
       }
       const refusal = refusalNotice(result.failure)
@@ -588,7 +660,7 @@ function LotPage({
       amountRef.current?.focus()
       await runRound({ detail: false, wallet: true }, false)
     },
-    [cancelRound, runRound, applyRoom],
+    [cancelRound, runRound, applyRoom, markNotFound, markCancelled],
   )
 
   // Remontagem durante um envio pendente: acompanha o mesmo `POST`, sem outro.
@@ -673,7 +745,7 @@ function LotPage({
     return (
       <section className="notice-page" aria-labelledby="lot-title">
         <h1 id="lot-title" ref={headingRef} tabIndex={-1}>
-          Lote não encontrado
+          Lote indisponível ou não encontrado
         </h1>
         <p>O lote pode ter sido removido ou o endereço está incompleto.</p>
         <AppLink to="/" className="button button-secondary">
@@ -709,12 +781,13 @@ function LotPage({
   const roomData = room.status === 'ready' ? room.data : null
   const mineData = mine.status === 'ready' ? mine.data : null
   // Participação só vale com a sala da mesma rodada; o pseudônimo, que não muda, sempre.
-  const paired = roomRound === mineRound
+  const paired = roomRound === mineRound && mineFreshness === 'confirmed'
   const position = bidPosition(roomData, mineData, overlay, paired)
   const lastOwnBidCents = endedLastBid(roomData, mineData, paired)
   const participationUnavailable =
+    mineFreshness === 'stale' ||
     mine.status === 'failed' ||
-    (mine.status === 'ready' && !paired && sync !== 'syncing' && !privatePending)
+    (mine.status === 'ready' && !paired && mineFreshness !== 'unconfirmed' && sync !== 'syncing' && !privatePending)
   const zeroReached =
     roomData !== null &&
     roomData.phase === 'live' &&
@@ -790,6 +863,7 @@ function LotPage({
             <LotBidPanel
               lotId={lotId}
               connection={connection}
+              networkOffline={networkOffline}
               manualFresh={manualFresh}
               viewer={viewer}
               startingBidCents={lot.starting_bid_cents}
@@ -799,9 +873,10 @@ function LotPage({
               zeroConfirming={zeroReached && sync !== 'failed'}
               zeroFailed={zeroReached && sync === 'failed'}
               overlay={overlay}
-              syncFailed={sync === 'failed'}
+              syncFailed={publicStale}
               position={position}
               wallet={wallet}
+              walletStale={walletStale}
               participationUnavailable={participationUnavailable}
               ownAlias={mineData?.bidder_alias ?? null}
               lastOwnBidCents={lastOwnBidCents}
@@ -827,7 +902,7 @@ function LotPage({
           bidCount={roomData.bid_count}
           myAlias={mineData?.bidder_alias ?? null}
           updating={sync === 'syncing' && overlay}
-          outdated={sync === 'failed'}
+          outdated={publicStale}
         />
       )}
 

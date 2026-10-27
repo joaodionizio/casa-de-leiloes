@@ -22,6 +22,15 @@ const ROOM = `GET /api/lots/${LOT}/bids`
 const MINE = `GET /api/lots/${LOT}/bids/mine`
 const PASSWORD = 'Demo123!'
 
+// Esta suíte verifica as rodadas REST independentemente do transporte. A sala
+// começa sem rede para WS, enquanto as rotas HTTP simuladas continuam controladas
+// pelo teste. Heartbeat, diagnóstico e reconexão têm cobertura em lot-room-ws.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', { get: () => false })
+  })
+})
+
 function bidder(options: MockOptions = {}): MockOptions {
   return {
     lots: LOTS,
@@ -135,7 +144,6 @@ test.describe('lance', () => {
     ['already_winning', 'Você já está ganhando este lote.'],
     ['lot_not_started', 'Este lote ainda não começou.'],
     ['lot_ended', 'Este lote já foi encerrado.'],
-    ['lot_cancelled', 'Este lote foi cancelado.'],
   ]
   for (const [mode, text] of refusals) {
     test(`recusa ${mode}: texto pelo code e valor mantido`, async ({ page }) => {
@@ -152,6 +160,20 @@ test.describe('lance', () => {
       await expect.poll(() => api.count(ROOM)).toBe(2)
     })
   }
+
+  test('recusa lot_cancelled confirma terminal conhecido, com foco e sem releitura', async ({ page }) => {
+    const api = await mockApi(page, bidder({ bid: 'lot_cancelled' }))
+    await openRoom(page)
+    const reads = api.count(ROOM)
+    await bidAmount(page, '110,00')
+    const heading = page.getByRole('heading', { name: 'Este lote foi cancelado' })
+    await expect(heading).toBeVisible()
+    await expect(heading).toBeFocused()
+    await expect(page.getByText('MENSAGEM DO SERVIDOR')).toHaveCount(0)
+    await expect(page.getByLabel('Valor do lance')).toHaveCount(0)
+    expect(api.bidPosts).toHaveLength(1)
+    expect(api.count(ROOM)).toBe(reads)
+  })
 
   test('integridade: recusa própria, sem expor a causa', async ({ page }) => {
     await mockApi(page, bidder({ bid: 'integrity' }))

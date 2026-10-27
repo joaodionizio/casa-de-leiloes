@@ -57,9 +57,9 @@ test.describe('pilha real (FastAPI + build + PostgreSQL)', () => {
     expect(() => JSON.parse(text)).not.toThrow()
 
     await page.goto(`${base}/lots/${UNKNOWN}`)
-    await expect(page.locator('#lot-title')).toHaveText('Lote não encontrado')
+    await expect(page.locator('#lot-title')).toHaveText('Lote indisponível ou não encontrado')
     await page.reload()
-    await expect(page.locator('#lot-title')).toHaveText('Lote não encontrado')
+    await expect(page.locator('#lot-title')).toHaveText('Lote indisponível ou não encontrado')
   })
 
   test('a vitrine real abre para visitante, sem erro e sem pedir login', async ({

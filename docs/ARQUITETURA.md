@@ -336,6 +336,14 @@ rejeitada. Se não existir (cliente que não é navegador), aceito. Descartei ex
 validar nada (deixa uso cruzado entre sites sem barreira). Rota do comprovante e
 do link continuam em aberto.
 
+**Consolidação da Q1 para a Story 4.2 (27/10/2026; especificação pronta, código ainda não implementado):** decidi ping/pong JSON de aplicação correlacionado, sem dados privados, estado, SQL ou snapshot. Ping a cada 20 s entre envios, uma pendência, pong em 10 s; servidor encerra após 60 s sem atividade válida do cliente. Conexão tem 30 s totais do construtor ao snapshot inicial; open não significa conectado. Só snapshot permite connected e só primeiro pong válido adicional reseta falhas.
+
+Decidi backoff exponencial com base 1 s, teto 30 s e equal jitter 50–100%, RNG controlável; tentativas indefinidas enquanto elegível/montado. Offline invalida/fecha socket e cancela timers preservando sala; online faz uma tentativa imediata deduplicada. Visible recalcula deadlines com no máximo uma ação imediata, sem ticks acumulados: H devido sem ping pendente envia um; P pendente vencido falha; retry vencido tenta uma vez.
+
+Decidi substituir por geração/token: invalidar autoridade antiga, chamar close e abrir novo sem esperar CLOSED. **Descartei esperar o fechamento físico**, pois pode bloquear recuperação; aceito sobreposição TCP curta, nunca duas autoridades. Callbacks/pongs/timers velhos não atuam. Cancelamento explícito e desmontagem são terminais; REST 404 termina genericamente, sem inferir cancelamento; transporte/timeouts/rede e REST 5xx são recuperáveis. Confirmo indisponibilidade por read model público existente quando necessário, sem polling contínuo. shouldApplyRoom permanece exclusivo para arbitrar sala.
+
+Decidi deadline de 10 s por send/close backend relevante, sem rede sob trava de lote. **Adiei explicitamente tetos de conexões por lote/global (capacidade não medida) e timeout da publicação pós-commit D-A**: o 201 pode continuar esperando lock/limiter/leitura depois do commit; deadline de transporte não limita SQL. Descartei valores arbitrários para essas duas medidas nesta story. Detalhes, estados e testes: `_bmad-output/specs/spec-story-4-2-heartbeat-e-reconexao-automatica/`. AD-10/25, um processo e ausência de outbox permanecem intactos; scheduler/catch-up seguem 4.4.
+
 ### AD-11. Autenticação: JWT em cookie HttpOnly, mesma origem
 **Decidi** usar JWT em cookie HttpOnly, com aplicação em mesma origem. Em
 produção: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. O FastAPI serve a API e
@@ -845,6 +853,7 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
 1. **Intervalos.** Intervalo do scheduler (AD-19), intervalo do heartbeat e tempo
    limite para conexões sem heartbeat (AD-10). O navegador não reconecta
    WebSocket sozinho: o cliente precisa de reconexão com espera crescente.
+   **Heartbeat/reconexão resolvidos na spec 4.2 em 27/10/2026**, conforme consolidação no AD-10 e QH-01–16. Só intervalo do scheduler permanece aberto (4.4); implementação da 4.2 ainda não iniciada.
 2. **Origin no WebSocket.** O stream é público, mas o handshake valida `Origin`?
    **Resolvida na Story 4.1 (27/10/2026):** decidi que o handshake de `/ws/lots/{lot_id}`
    valida `Origin` contra a `APP_ORIGIN` quando o cabeçalho existe (esquema, host e porta

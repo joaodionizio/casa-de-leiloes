@@ -298,3 +298,200 @@ def test_sender_failure_closes_generic_1011_and_cleans_manager(monkeypatch):
             assert closed.value.code == 1011
             assert closed.value.reason == ""
         assert not client.app.state.room_manager.rooms
+
+
+def test_ping_pong_snapshot_first_without_database_work(monkeypatch):
+    reads = []
+    monkeypatch.setattr(
+        lot_room,
+        "read_room",
+        lambda identifier: (reads.append(identifier), snapshot())[1],
+    )
+    with TestClient(create_app(app_origin="https://testserver")) as client:
+        with client.websocket_connect(f"/ws/lots/{LOT}") as ws:
+            ws.send_json({"type": "ping", "id": 1})
+            assert ws.receive_json()["type"] == "room_snapshot"
+            assert ws.receive_json() == {"type": "pong", "id": 1}
+            for identifier in range(2, 6):
+                ws.send_json({"type": "ping", "id": identifier})
+                assert ws.receive_json() == {"type": "pong", "id": identifier}
+            assert reads == [LOT]
+        assert not client.app.state.room_manager.rooms
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "ping", "id": True},
+        {"type": "ping", "id": 1.0},
+        {"type": "ping", "id": -1},
+        {"type": "ping", "id": 0},
+        {"type": "ping", "id": 2**53},
+        {"type": "ping", "id": 2},
+        {"type": "ping", "id": 1, "extra": "x"},
+        {"type": "ping"},
+        {"type": "pong", "id": 1},
+        [],
+        "invalid",
+    ],
+)
+def test_only_exact_sequential_safe_positive_ping_is_accepted(monkeypatch, payload):
+    monkeypatch.setattr(lot_room, "read_room", lambda identifier: snapshot())
+    with TestClient(create_app(app_origin="https://testserver")) as client:
+        with client.websocket_connect(f"/ws/lots/{LOT}") as ws:
+            ws.receive_json()
+            ws.send_json(payload)
+            with pytest.raises(WebSocketDisconnect) as closed:
+                ws.receive_json()
+            assert closed.value.code == 1008
+        assert not client.app.state.room_manager.rooms
+
+
+def test_silence_and_late_ping_expire_at_exact_deadline(monkeypatch):
+    async def scenario():
+        subscriber = lot_room.Subscriber()
+        subscriber.last_activity = 100
+        monkeypatch.setattr(lot_room.time, "monotonic", lambda: 160)
+        assert await lot_room.watch_silence(subscriber) == 1011
+
+        class Socket:
+            async def receive(self):
+                return {"type": "websocket.receive", "text": '{"type":"ping","id":1}'}
+
+        assert await lot_room.receive_commands(Socket(), subscriber) == 1011
+        assert subscriber.queue.empty()
+        assert subscriber.last_activity == 100
+
+    asyncio.run(scenario())
+
+
+def test_pong_queue_full_stops_only_its_subscriber():
+    async def scenario():
+        subscriber = lot_room.Subscriber()
+        healthy = lot_room.Subscriber()
+        for identifier in range(QUEUE_CAPACITY):
+            subscriber.queue.put_nowait(lot_room.Pong(id=identifier + 1))
+
+        class Socket:
+            async def receive(self):
+                return {"type": "websocket.receive", "text": '{"type":"ping","id":1}'}
+
+        assert await lot_room.receive_commands(Socket(), subscriber) == 1011
+        assert subscriber.stopped.is_set()
+        assert subscriber.queue.qsize() == QUEUE_CAPACITY
+        assert not healthy.stopped.is_set()
+
+    asyncio.run(scenario())
+
+
+def test_send_and_close_are_individually_bounded(monkeypatch):
+    async def scenario():
+        entered = asyncio.Event()
+        released = asyncio.Event()
+        monkeypatch.setattr(lot_room, "TRANSPORT_TIMEOUT", 0.01)
+
+        class Socket:
+            async def send_json(self, payload):
+                entered.set()
+                await released.wait()
+
+            async def close(self, code):
+                entered.set()
+                await released.wait()
+
+        subscriber = lot_room.Subscriber()
+        subscriber.queue.put_nowait(lot_room.Pong(id=1))
+        sender = asyncio.create_task(lot_room.send_events(Socket(), subscriber))
+        await asyncio.wait_for(entered.wait(), 5)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(sender, 5)
+        entered.clear()
+        closing = asyncio.create_task(lot_room.close_transport(Socket(), 1008))
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(closing, 5)
+        assert sender.done() and closing.done()
+
+    asyncio.run(scenario())
+
+
+def test_abandoned_subscribe_discards_late_worker_result(monkeypatch):
+    entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+
+    def read(identifier):
+        entered.set()
+        try:
+            assert release.wait(5)
+            return snapshot()
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(lot_room, "read_room", read)
+
+    async def scenario():
+        app = create_app(app_origin="https://testserver")
+        task, _, _ = await start_raw(app, [])
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 5)
+            assert not app.state.room_manager.rooms
+        finally:
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 5)
+        assert not app.state.room_manager.rooms
+
+    asyncio.run(scenario())
+
+
+def test_completed_subscribe_cancelled_before_handler_claims_result(monkeypatch):
+    monkeypatch.setattr(lot_room, "read_room", lambda identifier: snapshot())
+    original = RoomManager.subscribe
+
+    async def scenario():
+        handler = None
+
+        async def subscribe(manager, identifier):
+            subscriber = await original(manager, identifier)
+            handler.cancel()
+            return subscriber
+
+        monkeypatch.setattr(RoomManager, "subscribe", subscribe)
+        app = create_app(app_origin="https://testserver")
+        handler, _, _ = await start_raw(app, [])
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(handler, 5)
+        assert not app.state.room_manager.rooms
+
+    asyncio.run(scenario())
+
+
+def test_abandoned_read_retains_limiter_lease_until_worker_finishes(monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+
+    def read(identifier):
+        entered.set()
+        assert release.wait(5)
+        return snapshot()
+
+    monkeypatch.setattr(lot_room, "read_room", read)
+
+    async def scenario():
+        manager = RoomManager()
+        subscribing = asyncio.create_task(manager.subscribe(LOT))
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            subscribing.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await subscribing
+            assert not manager.rooms
+            assert manager.read_limiter.borrowed_tokens == 1
+            assert len(manager.reads) == 1
+        finally:
+            release.set()
+            await asyncio.gather(*manager.reads)
+        assert manager.read_limiter.borrowed_tokens == 0
+        assert not manager.reads
+        assert not manager.rooms
+
+    asyncio.run(scenario())

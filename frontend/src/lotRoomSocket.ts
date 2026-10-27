@@ -1,6 +1,6 @@
 import { isBidRoom, isTimestamp, type BidRoom } from './api/bids.ts'
 
-export type ConnectionState = 'connecting' | 'connected' | 'unavailable'
+export type ConnectionState = 'connecting' | 'connected' | 'unavailable' | 'reconnecting' | 'terminal' | 'disposed'
 export type RoomMessage =
   | { type: 'room_snapshot' | 'bid_accepted'; lot_id: string; room: BidRoom }
   | { type: 'lot_cancelled'; lot_id: string; cancelled_at: string }

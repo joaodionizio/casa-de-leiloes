@@ -69,7 +69,7 @@ test.describe('nome e títulos', () => {
     expect(await titleOf(page)).toBe('Meus lotes — ÁTRIO')
 
     await page.goto('/lots/00000000-0000-4000-8000-00000000dead')
-    await expect(page.locator('#lot-title')).toHaveText('Lote não encontrado')
+    await expect(page.locator('#lot-title')).toHaveText('Lote indisponível ou não encontrado')
     expect(await titleOf(page)).toBe('Lote — ÁTRIO')
   })
 

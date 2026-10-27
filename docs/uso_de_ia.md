@@ -1061,3 +1061,241 @@ ela e o que a IA fez.
 - O primeiro `./verify.sh` falhou no Ruff por linhas longas nos testes novos da própria IA; corrigido só o
   formato. Números finais (2057 backend, 163 front, Playwright 200 passed e 5 skipped) estão na seção 15 da story.
 - Sem Git; não iniciei a 4.2; nenhum `.env*` lido. Aguardo re-review independente e meu teste manual.
+
+
+## Spec da Story 4.2 — heartbeat e reconexão automática (27/10/2026)
+
+Pedi ao Codex somente criar e validar a especificação com `bmad-spec`, sem código.
+Confirmei no pedido que a 4.1 está concluída/aprovada; a IA registrou que os arquivos
+históricos ainda dizem review, sem inventar evidência nova nem alterar a 4.1.
+
+A IA criou a story 4.2 e o pacote `spec-story-4-2-heartbeat-e-reconexao-automatica`,
+com memória append-only, kernel, contrato de conexão, questões humanas, critérios/testes
+e autovalidação em duas passagens. Formalizou estados/transições, corridas REST/WS/201,
+cleanup, snapshot de recuperação e preservação de shouldApplyRoom. Consultou WHATWG
+WebSockets e AnyIO para as limitações de ping/pong no browser e cancelamento de threads.
+
+Não decidi os parâmetros ou as políticas propostas: QH-01–16 seguem abertas, inclusive
+tetos de conexões e D-A; recomendar adiamento não significa que eu o aprovei. A story
+ficou draft e o sprint permaneceu backlog com comentário equivalente, sem ready-for-dev.
+
+Os resolvers BMAD falharam inicialmente por escrita no cache padrão do uv; rodaram com
+cache em /tmp. Foram feitas conferências documentais de referências, IDs e tracking;
+não houve review independente, pytest, Playwright, verify, consulta ao banco, smoke ou
+deploy. Não houve Git, leitura de .env*, alteração de código ou início da 4.3.
+
+
+## Consolidação humana da spec 4.2 — 27/10/2026
+
+Decidi QH-01–16 e pedi somente consolidação documental. Mudei duas recomendações do
+draft: descartei esperar CLOSED em favor de geração/token com sobreposição física
+curta; no retorno visible, heartbeat devido sem pendência envia um ping, sem rajada.
+Fixei ping a cada 20 s entre envios, pong 10 s, silêncio 60 s, snapshot 30 s,
+backoff exponencial 1–30 s com equal jitter, reset só snapshot+pong e send/close 10 s.
+Adiei explicitamente tetos de conexões e timeout pós-commit D-A.
+
+A IA rederivou SPEC/companions/story da memória append-only, reavaliou T01–25,
+atualizou CA01–18 e testes de gerações antigas, suspensão, reset, recuperação,
+cleanup, zero SQL e cliente lento. Sincronizou a parte de Q1 em CLAUDE/arquitetura,
+sem mudar AD-10/25 ou antecipar scheduler. Por meu pedido, a chave do sprint ficou
+ASCII `4-2-heartbeat-e-reconexao-automatica: ready-for-dev`, sem duplicar a story;
+o arquivo de story existente conserva seu nome acentuado.
+
+Nenhuma questão humana ficou aberta; ready-for-dev significa especificação pronta,
+não build iniciado. Autovalidação de coerência/preservação e conferências documentais
+não são review independente ou testes de aplicação. Sem Git, .env*, código, banco,
+verify, Playwright, deploy ou início da 4.3.
+
+## Build da Story 4.2 — heartbeat e reconexão automática (27/10/2026)
+
+Autorizei o Codex a implementar somente a 4.2 com `bmad-build`, a partir da spec
+aprovada e de QH-01–16 fechadas. A skill despachou um subagente de implementação;
+o coordenador conferiu os critérios de aceite e executou os gates finais. Não pedi
+code review nesta sessão. Mantive o Git sob minha responsabilidade e a 4.3 fora.
+
+A IA implementou ping/pong de aplicação sem SQL, watchdog de silêncio e deadlines
+de transporte no backend; no frontend, os seis estados, gerações e timers
+invalidados, backoff/jitter, snapshot obrigatório, reset só após pong, offline/online
+e retorno visible sem rajada. Preservou `shouldApplyRoom`, regras financeiras,
+manager de um processo, publicação pós-commit e os adiamentos de tetos/D-A.
+Descartei esperar CLOSED e redefinir arbitragem pública, conforme decisões já aprovadas.
+
+Os testes focados exercitaram relógio/RNG controlados, callbacks e timers aposentados,
+70 casos backend em PostgreSQL real, 175 frontend e a suíte WS simulada. A conferência
+final de aceite identificou dois caminhos REST que precisavam do terminal aprovado:
+POST com `lot_cancelled` e POST 404. A IA unificou o cleanup com WS e acrescentou testes.
+Corrigiu a fixture nova para usar o envelope real e HTTP 422 para `lot_cancelled`,
+sem alterar o classificador HTTP. A suíte antiga de rodadas REST passou a iniciar com
+WS offline simulado para controlar somente essas rodadas; a suíte WS cobre saúde e
+recuperação separadamente. A repetição focada de ambas passou: 66 testes Chromium,
+mais ESLint e TypeScript. Isso não é prova de rede offline real.
+
+O primeiro `./verify.sh` terminou exit0: 2079 backend, 175 frontend, Ruff/format,
+ESLint, TypeScript, Vite e imagem Docker passaram. O segundo verify com E2E e o smoke
+real ficam registrados no relatório de implementação após sua execução. Primeiras
+chamadas sem acesso ao loopback foram bloqueadas pelo sandbox; os testes autorizados
+rodaram com acesso elevado e banco dedicado `_test`, sem remover guardas.
+
+Não houve Git, leitura de `.env*`/credenciais, alteração de decisões humanas, deploy
+ou code review. Evidências e matriz de testes em
+`_bmad-output/specs/spec-story-4-2-heartbeat-e-reconexao-automatica/implementation-evidence.md`.
+
+
+Fechei os gates da 4.2: `VERIFY_E2E=1 ./verify.sh` final exit0, 2079 backend (um
+warning preexistente), 175 frontend e 213 E2E; Ruff/format, ESLint, tsc, Vite e Docker
+passaram. Os 5 testes de pilha real, skipped no verify por opt-in, passaram em chamada
+separada contra a instância de smoke via Vite. A primeira execução E2E completa
+apontou duas expectativas antigas de título 404; sincronizei brand/vitrine e a de
+real-stack com o texto genérico aprovado, sem retirar asserções, e repeti o gate.
+
+O smoke usou duas abas Chromium, Vite 15173, backend 18000 e banco novo descartável
+*_test: snapshot/ping/pong; offline preserva sala e falha REST local; lance de outra
+aba recuperado por snapshot; online repetido cria uma só tentativa; callbacks antigos
+ignorados; processo backend derrubado/reiniciado; ambas as abas recebem novos lances;
+cliente silencioso expulso após 60 s enquanto saudáveis recebem pong; 320 px sem overflow.
+A primeira tentativa do observador confundiu WS HMR do Vite com a sala; a IA corrigiu
+o filtro do harness, não o produto. Banco e processos próprios foram removidos.
+Suspensão física do SO e wss/Render não foram testados. Story 4.2 ficou review para
+meu teste manual e review posterior; Epic 4 in-progress, 4.3 backlog. Nenhuma divergência
+funcional conhecida ou nova decisão humana. Relatório completo no companion acima.
+
+## Correção do finding manual da Story 4.2 (27/10/2026)
+
+Observei no teste manual que uma recuperação WebSocket podia mostrar sala
+conectada e conservar os avisos de refresh falho/histórico desatualizado.
+Autorizei corrigir somente esse problema e preparar a story para re-review focal.
+
+A IA separou a marcação pública de stale do resultado agregado das leituras,
+que inclui participação e carteira. Snapshot válido da conexão atual limpa os
+avisos públicos mesmo com dados iguais, preservando erros privados legítimos.
+Descartei apagar todas as mensagens ao reconectar, pois ocultaria falhas reais
+de `/mine` e carteira. Mantive arbitragem, heartbeat, backoff, geração e reconexão.
+
+Os testes novos reproduziram o finding antes da alteração: dois casos com
+snapshot igual falharam por aviso persistente; dois com snapshot mais novo
+passaram. A matriz inclui visitante e licitante com leituras privadas falhando.
+A checagem interna também apontou a ordem REST retido → snapshot igual → falha
+REST tardia: estendi a época pública a cada snapshot, sem cancelar leituras
+privadas, e acrescentei regressão dessa ordem. O teste existente de falha privada
+passou a exigir mensagem privada sem aviso público indevido; não retirei as
+garantias sobre resultado ambíguo do POST.
+
+Mantive o Git sob minha responsabilidade, a story em review e a 4.3 fora do
+escopo. Não li `.env*`, não fiz deploy nem declarei aceite humano final.
+
+Concluí a validação: direcionados de sala/WS `71 passed (16.8s)`; `./verify.sh`
+exit 0 com `2079 passed, 1 warning in 105.05s` e frontend 175/175;
+`VERIFY_E2E=1 ./verify.sh` exit 0 com `2079 passed, 1 warning in 98.36s`,
+frontend 175/175 e `218 passed (25.7s)`, `5 skipped`. Ruff/format, ESLint, tsc,
+Vite e Docker passaram em ambos os gates. O warning Starlette/httpx é
+preexistente; os 5 opt-in de pilha real não foram reexecutados nesta correção.
+
+A execução usou proteções temporárias fora do produto para impedir dotenv em
+Python/uv/Compose e leitura de `.env*` no Node. O sandbox recusou a primeira
+abertura do Vite no loopback; os testes autorizados rodaram com acesso elevado.
+Não alterei verify nem configuração da aplicação. A checagem interna final não
+encontrou defeito concreto restante na correção. Registrei os detalhes e logs na
+story e na nota focal `spec-4-2-correcao-stale-publico.md`; o Playwright regenerou
+`frontend/test-results/.last-run.json`. Parei pronta para re-review focal.
+
+
+## Correção focal MEDIUM da Story 4.2 (27/10/2026)
+
+Recebi no re-review focal o finding de que saldo e participação previamente
+carregados podiam ficar silenciosamente antigos depois da recuperação pública.
+Autorizei somente essa correção. A IA explicitou confirmação de `/mine` e erro
+de carteira separados de `publicStale`, preservando dados conhecidos e avisos
+privados até sucesso privado vigente. Descartei inferir atualização privada de
+`ready`, pareamento isolado ou snapshot público. A posição anterior fica oculta
+enquanto aguarda ou falha a revalidação (M1).
+
+Acrescentei regressões para `/mine`, carteira e ambos falhando depois de sucesso
+inicial, snapshot idêntico, recuperação privada individual e resposta antiga
+substituída. A checagem interna focal não apontou outro defeito concreto. Uma
+expectativa inicial da fixture foi ajustada para respeitar o pareamento M1;
+não alterei comportamento de transporte ou backend. O teste de mutação que
+limpava erros privados no snapshot falhou no cenário principal, como exigido;
+o fonte foi restaurado automaticamente. Os gates finais passaram, conforme resultados abaixo.
+Mantenho a story em review e a 4.3 fora do escopo, sem Git, leitura de `.env*`
+ou deploy.
+
+
+Validação já concluída desta correção privada: direcionados finais
+`75 passed (18.8s)`; `./verify.sh` exit 0 com
+`2079 passed, 1 warning in 100.57s`, frontend `tests 175`, `pass 175`, `fail 0`.
+Ruff/format, ESLint, TypeScript, Vite e Docker passaram. A mutação teve exit 1
+com `1 failed` no cenário principal após snapshot; fonte original restaurado.
+A checagem interna focal final não encontrou defeito concreto aberto.
+`VERIFY_E2E=1 ./verify.sh` exit 0: `2079 passed, 1 warning in 99.41s`,
+frontend `tests 175`, `pass 175`, `fail 0`, Playwright `222 passed (26.9s)` e
+`5 skipped` (opt-in de pilha real). Ruff/format, ESLint, TypeScript, Vite e Docker
+passaram; ambos os gates terminaram com `verify.sh: todas as etapas passaram.`
+O warning backend Starlette/httpx continua preexistente. Não reexecutei pilha
+real nem smoke Render nesta correção.
+
+Usei as proteções temporárias externas já existentes contra dotenv em
+uv/Python/Compose e leitura de `.env*` no Node; o sandbox bloqueou loopback na
+primeira tentativa dos direcionados, que rodei com acesso elevado. Não alterei
+verify nem configuração da aplicação. O Playwright regenerou somente
+`frontend/test-results/.last-run.json` fora dos seis arquivos previstos;
+nenhum arquivo de segredo alterado foi detectado pela checagem de nomes.
+Não executei Git, não li `.env*`, não fiz deploy e não iniciei a 4.3.
+Parei com a correção pronta para novo re-review focal, sem declarar aceite final.
+
+
+## Cobertura focal — sucesso privado superseded realmente entregue (27/10/2026)
+
+Corrigi somente a lacuna de cobertura apontada no re-review: o teste anterior
+abortava os GETs antigos, portanto sua liberação não provava descarte de sucesso
+privado pela lógica de aplicação. Descartei usar aborto de fetch como evidência
+de sucesso superseded entregue. Não alterei produção: comparei `LotPage.tsx`
+e `LotBidPanel.tsx` byte a byte com a partida após restaurar a mutação.
+
+Substituí o caso no spec WS por uma sequência determinística A/B/C. Um adaptador
+de fetch instalado só neste teste remove o signal unicamente das duas chamadas
+HTTP de A, preservando os sinais e gerações originais usados por `loadPrivate`.
+A requisição continua sendo HTTP real interceptado pelo Playwright; não simulei
+`fetchMyBids`, `fetchWallet`, os validadores nem o resultado de `isCurrent`.
+Espero os dois handlers de A entrarem na barreira antes de iniciar B. B responde
+503 e o teste espera os dois avisos privados e o fim da rodada. Só então libero
+A com HTTP 200 e corpos válidos de participação/carteira. Registro dentro de
+`Response.json` os corpos consumidos, status 200 e sinais originais já abortados,
+provando que o transporte de A entregou sucesso mesmo após a substituição lógica.
+Depois de ambos os JSONs resolvidos, espero dois frames para as continuações da
+aplicação e o commit do React. Exijo avisos presentes, posição antiga oculta,
+saldo conhecido de R$ 4.890,00 preservado contra R$ 890,00 de A, preço/histórico
+públicos mantidos. C vigente tem sucesso, mostra posição/saldo atuais de
+R$ 6.000,00 e remove ambos os avisos.
+
+Mutação executada: permiti que resultados privados bem-sucedidos ignorassem a
+guarda `round.isCurrent()`. O teste passou pelas comprovações de entrega dos dois
+HTTP 200 e falhou depois porque o aviso de carteira havia sido removido:
+Playwright exit 1, `1 failed`. Restaurei automaticamente o fonte em `finally` e
+conferi igualdade byte a byte. A checagem interna independente do teste não
+encontrou defeito concreto de cobertura. Nenhum defeito funcional foi revelado.
+Somente o spec de testes e os três documentos desta correção foram editados;
+validação final concluída. Mantenho a Story 4.2 em review para novo re-review,
+sem aceite final, Git, leitura de `.env*`, backend ou início da 4.3.
+
+
+Validação final da cobertura superseded:
+
+| Gate | Resultado real |
+| --- | --- |
+| `npx playwright test e2e/lot-room-ws.spec.ts --workers=2` | exit 0; `33 passed (8.0s)` |
+| `./verify.sh` | exit 0; `2079 passed, 1 warning in 102.63s`; frontend `tests 175`, `pass 175`, `fail 0` |
+| `VERIFY_E2E=1 ./verify.sh` | exit 0; `2079 passed, 1 warning in 100.04s`; frontend 175/175; `222 passed (23.9s)`, `5 skipped` |
+
+Ruff/format, ESLint, TypeScript, Vite e Docker passaram em ambos os gates,
+encerrados com `verify.sh: todas as etapas passaram.` Os cinco skips são opt-in
+de pilha real, não reexecutados nesta tarefa; o warning backend Starlette/httpx
+é preexistente. Mantive as proteções externas já existentes contra leitura de
+`.env*` em uv/Python/Compose/Node, sem mudar verify ou configuração da aplicação.
+A mutação terminou com exit 1 e `1 failed`, como esperado; o fonte foi restaurado.
+
+Entrega: somente `frontend/e2e/lot-room-ws.spec.ts`, story 4.2,
+`docs/uso_de_ia.md` e nota focal; o Playwright regenerou
+`frontend/test-results/.last-run.json` fora da lista prevista. A comparação
+final de `LotPage.tsx` e `LotBidPanel.tsx` com a partida confirmou conteúdo
+idêntico. Não detectei arquivo de segredo alterado pela checagem de nomes.
+Nenhum finding interno aberto. Parei pronta para novo re-review focal.
