@@ -17,7 +17,7 @@ import {
   type BidNotice,
 } from './bidFeedback'
 import { bidPosition, endedLastBid } from './bidPosition'
-import { pendingBidOf, startBid, type PendingBid } from './bidSubmission'
+import { bidToFollow, pendingBidOf, startBid, type PendingBid } from './bidSubmission'
 import { documentTitle } from './brand'
 import { consumeZero, endsAtKey, makeAnchor, type CountdownAnchor } from './countdown'
 import LotBidPanel, { type Loadable, type Viewer } from './LotBidPanel'
@@ -110,9 +110,12 @@ function LotPage({
     () => (owner === null ? null : pendingBidOf(owner, lotId)?.amountText) ?? '',
   )
   const [fieldError, setFieldError] = useState<string | undefined>(undefined)
-  const [submitting, setSubmitting] = useState(
-    () => owner !== null && pendingBidOf(owner, lotId) !== null,
+  // Envio pendente desta conta e lote na primeira renderização: o efeito acompanha esta
+  // entrada, não uma segunda consulta ao registro (ela pode já ter saído dele).
+  const [capturedBid] = useState<PendingBid | null>(() =>
+    owner === null ? null : pendingBidOf(owner, lotId),
   )
+  const [submitting, setSubmitting] = useState(() => capturedBid !== null)
   const headingRef = useRef<HTMLHeadingElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
   const wasNavigatedRef = useRef(navigated)
@@ -445,10 +448,10 @@ function LotPage({
   // Remontagem durante um envio pendente: acompanha o mesmo `POST`, sem outro.
   useEffect(() => {
     if (privateOwner === null) return
-    const entry = pendingBidOf(privateOwner, lotId)
+    const entry = bidToFollow(capturedBid, privateOwner, lotId)
     if (entry === null) return
     later(() => handleOutcome(entry))
-  }, [privateOwner, lotId, handleOutcome])
+  }, [capturedBid, privateOwner, lotId, handleOutcome])
 
   function handleAmountChange(value: string) {
     setAmountText(value)

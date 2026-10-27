@@ -47,3 +47,15 @@ export function startBid(
   pending.set(key, entry)
   return entry
 }
+
+// Lance a acompanhar numa montagem: a entrada capturada na primeira renderização, se
+// ainda for desta conta e deste lote, mesmo que o registro já a tenha liberado (o
+// `POST` pode terminar entre a renderização e o efeito). Senão, consulta o registro.
+export function bidToFollow(
+  captured: PendingBid | null,
+  owner: string,
+  lotId: string,
+): PendingBid | null {
+  if (captured !== null && captured.owner === owner && captured.lotId === lotId) return captured
+  return pendingBidOf(owner, lotId)
+}

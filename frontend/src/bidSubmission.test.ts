@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { BidResult } from './api/bids.ts'
-import { pendingBidOf, startBid } from './bidSubmission.ts'
+import { bidToFollow, pendingBidOf, startBid } from './bidSubmission.ts'
 import { parseReaisToCents } from './money.ts'
 
 const LOT = '2d484387-2509-5e8e-2c43-22f9981972eb'
@@ -69,4 +69,33 @@ test('uma falha inesperada do envio vira ambígua e libera a barreira', async ()
   assert.ok(entry)
   assert.deepEqual(await entry.outcome, { ok: false, failure: 'ambiguous' })
   assert.equal(pendingBidOf('d@x', LOT), null)
+})
+
+test('a montagem acompanha a entrada capturada mesmo depois de o registro liberá-la', async () => {
+  const gate = deferred()
+  let sends = 0
+  const entry = startBid('r@x', LOT, 5000, '50,00', () => {
+    sends += 1
+    return gate.promise
+  })
+  assert.ok(entry)
+  // Renderização: captura. O POST termina antes do efeito e o registro libera a entrada.
+  const captured = pendingBidOf('r@x', LOT)
+  gate.resolve({ ok: false, failure: 'below_minimum' })
+  await entry.outcome
+  assert.equal(pendingBidOf('r@x', LOT), null)
+  // Efeito: a consulta ao registro sozinha abandonaria o resultado.
+  const followed = bidToFollow(captured, 'r@x', LOT)
+  assert.equal(followed, entry)
+  assert.deepEqual(await followed.outcome, { ok: false, failure: 'below_minimum' })
+  assert.equal(sends, 1)
+})
+
+test('a entrada capturada nunca vale para outra conta ou outro lote', () => {
+  const entry = startBid('s@x', LOT, 1, '0,01', () => new Promise<BidResult>(() => {}))
+  assert.ok(entry)
+  assert.equal(bidToFollow(entry, 's@x', LOT), entry)
+  assert.equal(bidToFollow(entry, 't@x', LOT), null)
+  assert.equal(bidToFollow(entry, 's@x', OTHER_LOT), null)
+  assert.equal(bidToFollow(null, 's@x', LOT), entry)
 })
