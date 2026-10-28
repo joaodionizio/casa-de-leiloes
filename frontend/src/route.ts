@@ -7,6 +7,7 @@ import type { UserRole } from './api/auth.ts'
 export type AppRoute =
   | { kind: 'vitrine' }
   | { kind: 'lot'; lotId: string }
+  | { kind: 'audit'; lotId: string }
   | { kind: 'login' }
   | { kind: 'create-lot' }
   | { kind: 'my-lots' }
@@ -35,13 +36,19 @@ export function parseRoute(pathname: string): Route {
   if (path === '/auctioneer/lots') return { kind: 'my-lots' }
   if (path === '/bidder/wallet') return { kind: 'wallet' }
   if (path.startsWith(LOT_PREFIX)) {
-    const lotId = path.slice(LOT_PREFIX.length)
+    const suffix = path.slice(LOT_PREFIX.length)
+    if (suffix.endsWith('/audit')) {
+      const lotId = suffix.slice(0, -6)
+      if (UUID_PATTERN.test(lotId)) return { kind: 'audit', lotId }
+    }
+    const lotId = suffix
     if (UUID_PATTERN.test(lotId)) return { kind: 'lot', lotId }
   }
   return { kind: 'not-found' }
 }
 
 export function routePath(route: AppRoute): string {
+  if (route.kind === 'audit') return `${LOT_PREFIX}${route.lotId}/audit`
   if (route.kind === 'lot') return `${LOT_PREFIX}${route.lotId}`
   if (route.kind === 'login') return '/login'
   if (route.kind === 'create-lot') return '/auctioneer/lots/new'

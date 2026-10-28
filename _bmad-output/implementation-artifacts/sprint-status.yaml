@@ -91,8 +91,9 @@ development_status:
   4-5-resultado-dos-lotes-no-painel-do-leiloeiro: done
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-verificação-pública-da-integridade-do-lote: backlog
+  epic-5: in-progress
+  # Review independente final aprovado em 28/10/2026; fechamento documental autorizado.
+  5-1-verificação-pública-da-integridade-do-lote: done
   5-2-comprovante-de-arremate-compartilhável-por-link: backlog
   5-3-meus-arremates: backlog
   epic-5-retrospective: optional

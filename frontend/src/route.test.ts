@@ -229,3 +229,12 @@ test('readNavState aceita qualquer coisa que não seja objeto', () => {
     assert.deepEqual(readNavState(value), {})
   }
 })
+
+test('auditoria pública tem rota e retorno seguro próprios', () => {
+  const route: AppRoute = { kind: 'audit', lotId: LOT_ID }
+  assert.deepEqual(parseRoute(`/lots/${LOT_ID}/audit?x=1#top`), route)
+  assert.equal(routePath(route), `/lots/${LOT_ID}/audit`)
+  assert.equal(isRestrictedRoute(route), false)
+  assert.equal(safeReturnPath(`/lots/${LOT_ID}/audit`, 'BIDDER'), `/lots/${LOT_ID}/audit`)
+  for (const path of [`/lots/${LOT_ID}/audit/`, '/lots/abc/audit']) assert.deepEqual(parseRoute(path), { kind: 'not-found' })
+})

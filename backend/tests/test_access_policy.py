@@ -42,6 +42,7 @@ EXPECTED_POLICIES = {
     # `POST /api/lots` dividem o caminho: o mapa precisa guardar os dois (D20).
     ("/api/lots", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/lots/{lot_id}", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/lots/{lot_id}/audit", "GET", "http"): AccessPolicy.PUBLIC,
     # Story 3.1: a carteira é só do licitante (leitura e depósito).
     ("/api/wallet", "GET", "http"): AccessPolicy.BIDDER,
     ("/api/wallet/deposit", "POST", "http"): AccessPolicy.BIDDER,

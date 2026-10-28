@@ -738,6 +738,7 @@ function LotPage({
   if (cancelled) {
     return <section className="notice-page" aria-labelledby="lot-title">
       <h1 id="lot-title" ref={headingRef} tabIndex={-1}>Este lote foi cancelado</h1>
+      <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
       <AppLink to="/" className="button button-secondary">Ir para a vitrine</AppLink>
     </section>
   }
@@ -763,6 +764,7 @@ function LotPage({
           Lote indisponível ou não encontrado
         </h1>
         <p>O lote pode ter sido removido ou o endereço está incompleto.</p>
+        <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
         <AppLink to="/" className="button button-secondary">
           Ir para a vitrine
         </AppLink>
@@ -838,6 +840,7 @@ function LotPage({
           <span aria-hidden="true">← </span>Vitrine
         </a>
       </p>
+      <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
       <div className="lot-page-grid">
         {roomStatus}
         <div className="lot-page-art">

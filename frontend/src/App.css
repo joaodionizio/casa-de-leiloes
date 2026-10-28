@@ -2160,3 +2160,18 @@ h2[tabindex='-1']:focus-visible {
 .lot-row-actions .button {
   min-height: 2.75rem;
 }
+
+.audit-page { max-width: 52rem; margin: 0 auto; padding-block: 2rem 4rem; min-width: 0; }
+.audit-page h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2rem, 6vw, 3rem); }
+.audit-page h2 { margin-top: 2rem; }
+.audit-lot-id, .audit-page dd, .audit-page code { overflow-wrap: anywhere; }
+.audit-state { font-weight: 600; }
+.audit-events { list-style: none; padding: 0; }
+.audit-events > li { border-top: 1px solid var(--color-border); padding-block: 1.25rem; }
+.audit-event-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.5rem; overflow-wrap: anywhere; }
+.audit-events time { display: block; color: var(--color-muted); margin-block: .5rem; }
+.audit-page summary { cursor: pointer; padding-block: .65rem; }
+.audit-page details { min-width: 0; }
+.audit-page dd { margin: .25rem 0 1rem; }
+.audit-page code { font-size: .8rem; }
+.audit-method { border-top: 1px solid var(--color-border); margin-top: 1.5rem; }

@@ -25,6 +25,7 @@ from app.config import (
 from app.csrf import ApiWriteGuardMiddleware
 from app.db import create_session_factory, get_engine
 from app.errors import register_error_handlers
+from app.lot_audit import register_audit_routes
 from app.lot_cancellation import register_lot_cancellation_routes
 from app.lot_room import register_room_routes
 from app.lots import register_lot_routes
@@ -116,6 +117,7 @@ def create_app(
     register_lot_routes(app)
     register_wallet_routes(app)
     register_bid_routes(app)
+    register_audit_routes(app)
     register_lot_cancellation_routes(app)
     register_room_routes(app, app_origin)
 

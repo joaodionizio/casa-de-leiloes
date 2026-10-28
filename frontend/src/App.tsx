@@ -8,6 +8,7 @@ import {
 } from './api/auth'
 import { fetchHealth } from './api/health'
 import AppLink from './AppLink'
+import AuditPage from './AuditPage'
 import { documentTitle } from './brand'
 import LoginPage from './LoginPage'
 import LotCreation from './LotCreation'
@@ -56,6 +57,7 @@ function readWhere(previous: Where | null): Where {
 
 function pageTitle(kind: string): string | null {
   if (kind === 'vitrine') return documentTitle('Vitrine')
+  if (kind === 'audit') return documentTitle('Auditoria pública')
   if (kind === 'login') return documentTitle('Entrar')
   if (kind === 'create-lot') return documentTitle('Criar lote')
   if (kind === 'my-lots') return documentTitle('Meus lotes')
@@ -254,6 +256,7 @@ function App() {
         />
       )
     }
+    if (route.kind === 'audit') return <AuditPage key={route.lotId} lotId={route.lotId} navigated={navigated} />
     if (route.kind === 'not-found') return <NotFoundPage focusHeading={navigated} />
     if (session.status === 'checking') {
       return (

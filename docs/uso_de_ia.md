@@ -1748,3 +1748,52 @@ segredo alterado na checagem por nomes; conteúdo não lido nem comparado.
 ### Fechamento documental da Story 4.5 e do Epic 4 — 28/10/2026
 
 Autorizei o fechamento com review final da Story 4.5 aprovado, 0 HIGH / 0 MEDIUM / 0 LOW, e Epic 4 aprovado para fechamento. A IA registrou Story, sprint e SPEC 4.5 como `done` e Epic 4 como `done`, preservando o histórico. Nesta etapa não alterou código ou testes, não executou testes nem Git, não leu .env* e não iniciou Epic 5.
+
+
+## Story 5.1 — Auditoria pública — 28/10/2026
+
+Autorizei SPEC, implementação e testes nesta mesma sessão pelo fluxo enxuto,
+sem Git, leitura de `.env*`, code review ou checkpoints de aprovação intermediários.
+A skill bmad-build foi aplicada com as restrições humanas; a implementação foi
+delegada a Sol (`gpt-6.1-sol`, raciocínio medium). A coordenação consolidou a SPEC,
+conferiu aceite e executou o gate. Descartei nova fonte de verdade e consulta à AIC.
+
+Entreguei endpoint e página públicos com histórico completo, aliases persistidos,
+canonical v1/SHA-256, HMAC interno e validação do settlement/comprovante. Em conflito,
+retive todo conteúdo não confiável antes de serializar, inclusive alias privado
+injetado. Mantive cancelado distinto de unsold e expirado sem settlement como pending.
+Leitura em statement único, sem N+1, escrita, reparo ou liquidação.
+
+Resultados focais reais: PostgreSQL 22 passed (4.29s), contrato/rotas Node 23,
+Playwright 13 (3.6s). O gate revelou quatro expectativas de rotas/políticas antigas;
+acrescentei audit e a checagem exata do contrato público e confirmei 58 testes
+focais (1.56s). Repeti o gate somente por essa falha. A primeira tentativa no
+sandbox parou antes dos checks por acesso ao cache uv; a execução autorizada local
+resolveu. Uma chamada focal sem banco configurado foi recusada pela guarda.
+
+Gate final `VERIFY_E2E=1 ./verify.sh`, exit 0: 2260 backend (135.04s), 187 Node,
+254 Playwright (30.2s), cinco real-stack opt-in ignorados; Ruff/formato, ESLint,
+TypeScript, Vite e Docker passaram. Não rodei verify sem E2E nem mutation testing.
+O warning Starlette/httpx é preexistente. O Playwright regenerou
+frontend/test-results/.last-run.json fora da lista prevista.
+
+Não validei Render, stack real no navegador, dispositivos físicos ou outros
+browsers. HMAC continua dependendo da confiança no servidor; histórico completo
+não foi paginado. Não alterei ADs, canonical v1, migrations ou regras financeiras.
+Não executei Git, deploy ou code review; não li arquivos de segredos. Story/SPEC/
+sprint 5.1 ficaram review e Epic 5 in-progress. Não iniciei 5.2/5.3 nem marquei done.
+Evidência: `_bmad-output/specs/spec-story-5-1-auditoria-publica/implementation-evidence.md`.
+
+### Review independente final e fechamento da Story 5.1 — 28/10/2026
+
+Autorizei review com Sol (`gpt-6.1-sol`, raciocínio medium) restrito aos 14 riscos
+críticos e fechamento imediato sem HIGH/MEDIUM. A IA usou a skill bmad-code-review
+com as restrições deste pedido e revisores independentes de backend e frontend/
+guards. Resultado: 0 HIGH / 0 MEDIUM / 0 LOW funcional. As quatro expectativas
+antigas só incorporaram a rota pública, sem enfraquecer asserções.
+
+Decidi encerrar Story/SPEC/sprint 5.1 como done e manter Epic 5 in-progress;
+descartei repetir gates sem suspeita concreta. Nesta etapa não executei testes,
+verify, mutation testing ou Git, não li `.env*` nem alterei código/testes.
+Não iniciei 5.2/5.3. Registro em
+`_bmad-output/implementation-artifacts/code-review-final-story-5-1.md`.

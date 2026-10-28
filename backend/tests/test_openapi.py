@@ -39,6 +39,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/wallet/deposit",
         "/api/lots/{lot_id}/bids",
         "/api/lots/{lot_id}/bids/mine",
+        "/api/lots/{lot_id}/audit",
         "/api/lots/{lot_id}/cancel",
     ]
 
@@ -182,6 +183,7 @@ WALLET_PATH = "/api/wallet"
 DEPOSIT_PATH = "/api/wallet/deposit"
 BIDS_PATH = "/api/lots/{lot_id}/bids"
 MY_BIDS_PATH = "/api/lots/{lot_id}/bids/mine"
+AUDIT_PATH = "/api/lots/{lot_id}/audit"
 CANCEL_PATH = "/api/lots/{lot_id}/cancel"
 LOT_FIELDS = sorted(
     [
@@ -211,13 +213,57 @@ def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     paths = list(api_only.get("/api/openapi.json").json()["paths"])
 
     # Story 3.1: a carteira vem depois dos lotes, imediatamente. Story 3.4: o lance
-    # (`register_bid_routes`) vem depois da carteira. Story 3.6: o cancelamento vem por
-    # último.
-    assert paths[-8:-5] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
-    assert paths[-5:-3] == [WALLET_PATH, DEPOSIT_PATH]
-    assert paths[-3:-1] == [BIDS_PATH, MY_BIDS_PATH]
+    # (`register_bid_routes`) vem depois da carteira. Story 5.1: a auditoria vem
+    # depois dos lances e antes do cancelamento.
+    assert paths[-9:-6] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-6:-4] == [WALLET_PATH, DEPOSIT_PATH]
+    assert paths[-4:-2] == [BIDS_PATH, MY_BIDS_PATH]
+    assert paths[-2] == AUDIT_PATH
     assert paths[-1] == CANCEL_PATH
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
+
+
+def test_audit_schema_exposes_only_the_public_contract(api_only: TestClient) -> None:
+    schema = api_only.get("/api/openapi.json").json()
+    operation = schema["paths"][AUDIT_PATH]
+    assert set(operation) == {"get"}
+    for status in ("404", "422", "500"):
+        assert response_ref(operation["get"], status) == ERROR_REF
+    assert "401" not in operation["get"]["responses"]
+    assert "403" not in operation["get"]["responses"]
+    schemas = schema["components"]["schemas"]
+    expected = {
+        "PublicAudit": {
+            "lot_id",
+            "as_of",
+            "integrity",
+            "phase",
+            "settlement_status",
+            "settlement",
+            "bid_count",
+            "final_hash",
+            "bids",
+        },
+        "PublicAuditBid": {
+            "sequence",
+            "bidder_alias",
+            "amount_cents",
+            "placed_at",
+            "canonical_version",
+            "previous_hash",
+            "current_hash",
+        },
+        "PublicSettlement": {
+            "outcome",
+            "winner_alias",
+            "final_amount_cents",
+            "bid_count",
+            "final_hash",
+            "settled_at",
+        },
+    }
+    for name, fields in expected.items():
+        assert set(schemas[name]["properties"]) == fields
 
 
 def test_create_lot_documents_201_and_the_real_error_envelope(
