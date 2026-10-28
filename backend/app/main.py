@@ -27,8 +27,10 @@ from app.db import create_session_factory, get_engine
 from app.errors import register_error_handlers
 from app.lot_audit import register_audit_routes
 from app.lot_cancellation import register_lot_cancellation_routes
+from app.lot_receipt import register_receipt_routes
 from app.lot_room import register_room_routes
 from app.lots import register_lot_routes
+from app.my_wins import register_my_wins_routes
 from app.settlement_scheduler import SettlementScheduler
 from app.spa import register_spa_routes, validate_spa_dist_dir
 from app.wallet import register_wallet_routes
@@ -116,8 +118,10 @@ def create_app(
     register_catalog_routes(app)
     register_lot_routes(app)
     register_wallet_routes(app)
+    register_my_wins_routes(app)
     register_bid_routes(app)
     register_audit_routes(app)
+    register_receipt_routes(app)
     register_lot_cancellation_routes(app)
     register_room_routes(app, app_origin)
 

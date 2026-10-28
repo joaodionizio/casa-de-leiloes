@@ -9,12 +9,14 @@ import {
 import { fetchHealth } from './api/health'
 import AppLink from './AppLink'
 import AuditPage from './AuditPage'
+import ReceiptPage from './ReceiptPage'
 import { documentTitle } from './brand'
 import LoginPage from './LoginPage'
 import LotCreation from './LotCreation'
 import LotPage from './LotPage'
 import type { Viewer } from './LotBidPanel'
 import MyLots from './MyLots'
+import MyWinsPage from './MyWinsPage'
 import { NAVIGATION_EVENT, navigate, replaceRoute } from './navigation'
 import NotFoundPage from './NotFoundPage'
 import {
@@ -57,10 +59,12 @@ function readWhere(previous: Where | null): Where {
 
 function pageTitle(kind: string): string | null {
   if (kind === 'vitrine') return documentTitle('Vitrine')
+  if (kind === 'receipt') return documentTitle('Comprovante de arremate')
   if (kind === 'audit') return documentTitle('Auditoria pública')
   if (kind === 'login') return documentTitle('Entrar')
   if (kind === 'create-lot') return documentTitle('Criar lote')
   if (kind === 'my-lots') return documentTitle('Meus lotes')
+  if (kind === 'my-wins') return documentTitle('Meus arremates')
   if (kind === 'wallet') return documentTitle('Carteira')
   if (kind === 'not-found') return documentTitle('Página não encontrada')
   return null // a página do lote usa o título da obra
@@ -256,6 +260,7 @@ function App() {
         />
       )
     }
+    if (route.kind === 'receipt') return <ReceiptPage key={route.lotId} lotId={route.lotId} navigated={navigated} />
     if (route.kind === 'audit') return <AuditPage key={route.lotId} lotId={route.lotId} navigated={navigated} />
     if (route.kind === 'not-found') return <NotFoundPage focusHeading={navigated} />
     if (session.status === 'checking') {
@@ -281,6 +286,11 @@ function App() {
     }
     // Carteira do licitante (Story 3.1). O leiloeiro vê só a vista de papel errado:
     // a página da carteira nem monta, então não há `GET /api/wallet`.
+    if (route.kind === 'my-wins') {
+      if (session.status === 'anonymous') return null
+      if (session.user.role !== 'BIDDER') return <BidderOnly focusHeading={navigated} />
+      return <MyWinsPage key={where.id} focusHeading={navigated} onSessionExpired={handleSessionExpired} />
+    }
     if (route.kind === 'wallet') {
       if (session.status === 'anonymous') return null // redirecionando para /login
       if (session.user.role !== 'BIDDER') return <BidderOnly focusHeading={navigated} />

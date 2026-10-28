@@ -19,8 +19,8 @@ function current(active: boolean): 'page' | undefined {
 }
 
 // Cabeçalho por papel (CAP-8): só há link para destino que existe. Anônimo: Vitrine e
-// Entrar. `BIDDER`: Vitrine e Carteira (Story 3.1). `AUCTIONEER`: Vitrine, Criar lote,
-// Meus lotes. Nada de lances, arremates ou sala (stories futuras).
+// Entrar. `BIDDER`: Vitrine, Carteira e Meus arremates. `AUCTIONEER`: Vitrine,
+// Criar lote e Meus lotes.
 function SiteHeader({
   user,
   checking,
@@ -55,13 +55,22 @@ function SiteHeader({
             Vitrine
           </AppLink>
           {user !== null && user.role === 'BIDDER' && (
-            <AppLink
-              to="/bidder/wallet"
-              className="site-nav-item"
-              aria-current={current(route.kind === 'wallet')}
-            >
-              Carteira
-            </AppLink>
+            <>
+              <AppLink
+                to="/bidder/wallet"
+                className="site-nav-item"
+                aria-current={current(route.kind === 'wallet')}
+              >
+                Carteira
+              </AppLink>
+              <AppLink
+                to="/bidder/wins"
+                className="site-nav-item"
+                aria-current={current(route.kind === 'my-wins')}
+              >
+                Meus arremates
+              </AppLink>
+            </>
           )}
           {user !== null && user.role === 'AUCTIONEER' && (
             <>

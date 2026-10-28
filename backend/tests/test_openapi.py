@@ -37,9 +37,11 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
         "/api/lots/{lot_id}",
         "/api/wallet",
         "/api/wallet/deposit",
+        "/api/me/wins",
         "/api/lots/{lot_id}/bids",
         "/api/lots/{lot_id}/bids/mine",
         "/api/lots/{lot_id}/audit",
+        "/api/lots/{lot_id}/receipt",
         "/api/lots/{lot_id}/cancel",
     ]
 
@@ -215,10 +217,12 @@ def test_lot_routes_come_after_the_catalog_routes(api_only: TestClient) -> None:
     # Story 3.1: a carteira vem depois dos lotes, imediatamente. Story 3.4: o lance
     # (`register_bid_routes`) vem depois da carteira. Story 5.1: a auditoria vem
     # depois dos lances e antes do cancelamento.
-    assert paths[-9:-6] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
-    assert paths[-6:-4] == [WALLET_PATH, DEPOSIT_PATH]
-    assert paths[-4:-2] == [BIDS_PATH, MY_BIDS_PATH]
-    assert paths[-2] == AUDIT_PATH
+    assert paths[-11:-8] == [LOTS_PATH, MINE_PATH, LOT_DETAIL_PATH]
+    assert paths[-8:-6] == [WALLET_PATH, DEPOSIT_PATH]
+    assert paths[-6] == "/api/me/wins"
+    assert paths[-5:-3] == [BIDS_PATH, MY_BIDS_PATH]
+    assert paths[-3] == AUDIT_PATH
+    assert paths[-2] == "/api/lots/{lot_id}/receipt"
     assert paths[-1] == CANCEL_PATH
     assert paths.index("/api/catalog/images/{image_id}") < paths.index(LOTS_PATH)
 
@@ -651,3 +655,48 @@ def test_cancel_documents_200_without_a_body_and_the_real_error_envelope(
     schemas = api_only.get("/api/openapi.json").json()["components"]["schemas"]
     assert sorted(schemas["CancelLotResponse"]["properties"]) == ["cancelled_at", "id"]
     assert sorted(schemas["CancelLotResponse"]["required"]) == ["cancelled_at", "id"]
+
+
+def test_receipt_schema_exposes_only_public_fields(api_only: TestClient) -> None:
+    schema = api_only.get("/api/openapi.json").json()
+    operation = schema["paths"]["/api/lots/{lot_id}/receipt"]
+    assert set(operation) == {"get"}
+    for status in ("404", "409", "422", "500"):
+        assert response_ref(operation["get"], status) == ERROR_REF
+    assert set(schema["components"]["schemas"]["PublicReceipt"]["properties"]) == {
+        "lot_id",
+        "title",
+        "artist_display",
+        "image_url",
+        "winner_alias",
+        "winning_bid_sequence",
+        "final_amount_cents",
+        "settled_at",
+        "bid_count",
+        "final_hash",
+    }
+
+
+def test_my_wins_has_private_whitelisted_dto_and_bidder_errors(api_only):
+    schema = api_only.get("/api/openapi.json").json()
+    operation = schema["paths"]["/api/me/wins"]
+    assert set(operation) == {"get"}
+    for status in ("401", "403", "409", "500"):
+        assert response_ref(operation["get"], status) == ERROR_REF
+    assert set(schema["components"]["schemas"]["MyWin"]["properties"]) == {
+        "lot_id",
+        "title",
+        "artist_display",
+        "image_url",
+        "phase",
+        "settlement_status",
+        "result",
+        "winner_alias",
+        "final_amount_cents",
+        "settled_at",
+        "bid_count",
+    }
+    assert set(schema["components"]["schemas"]["MyWinsResponse"]["properties"]) == {
+        "as_of",
+        "items",
+    }

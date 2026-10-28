@@ -27,6 +27,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
 
 EXPECTED_POLICIES = {
+    ("/api/me/wins", "GET", "http"): AccessPolicy.BIDDER,
     ("/health", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/auth/login", "POST", "http"): AccessPolicy.PUBLIC,
     ("/api/auth/logout", "POST", "http"): AccessPolicy.PUBLIC,
@@ -43,6 +44,7 @@ EXPECTED_POLICIES = {
     ("/api/lots", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/lots/{lot_id}", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/lots/{lot_id}/audit", "GET", "http"): AccessPolicy.PUBLIC,
+    ("/api/lots/{lot_id}/receipt", "GET", "http"): AccessPolicy.PUBLIC,
     # Story 3.1: a carteira é só do licitante (leitura e depósito).
     ("/api/wallet", "GET", "http"): AccessPolicy.BIDDER,
     ("/api/wallet/deposit", "POST", "http"): AccessPolicy.BIDDER,

@@ -1797,3 +1797,31 @@ descartei repetir gates sem suspeita concreta. Nesta etapa não executei testes,
 verify, mutation testing ou Git, não li `.env*` nem alterei código/testes.
 Não iniciei 5.2/5.3. Registro em
 `_bmad-output/implementation-artifacts/code-review-final-story-5-1.md`.
+
+## Story 5.2 — Comprovante compartilhável — 28/10/2026
+
+Autorizei SPEC, implementação e testes pelo fluxo enxuto, sem revisão na sessão, Git ou leitura de segredos. A skill bmad-build foi aplicada respeitando essas restrições; deleguei a implementação a um agente e consolidei a evidência. Decidi reutilizar receipt, settlement e verificação existente; descartei token, PDF e ação de copiar da 5.3.
+
+Testes focais: 67 backend, 20 rotas e 5 Playwright; lint e typecheck passaram. O gate `VERIFY_E2E=1 ./verify.sh` passou com 2269 backend, 188 Node e 259 Playwright, cinco real-stack ignorados; Ruff, formatação, ESLint, TypeScript, build e Docker passaram. Tentativa inicial bloqueada no cache uv; segunda detectou ordem de imports, corrigida e verificada antes da execução aprovada. Smoke de navegador usou API simulada; não validei stack real ou deploy. Story e sprint 5.2 ficaram review, Epic 5 in-progress; não iniciei 5.3 nem executei code review. Detalhes em `_bmad-output/specs/spec-story-5-2-comprovante/implementation-evidence.md`.
+
+### Review curto da 5.2 e definição do escopo da 5.3 — 28/10/2026
+
+Autorizei um fluxo contínuo com review funcional curto da 5.2 e implementação da 5.3, sem Git ou leitura de `.env*`. A IA aplicou bmad-review e iniciou bmad-build. Review estático com leitura independente por agente: sem achados funcionais HIGH/MEDIUM nos 12 riscos solicitados. Decidi concluir Story/SPEC/sprint 5.2 como done e manter Epic 5 in-progress; descartei executar testes sem suspeita concreta. Registro em `_bmad-output/implementation-artifacts/code-review-final-story-5-2.md`. Não houve nova execução de testes ou verify.
+
+A leitura da definição real da 5.3 revelou conflito material: os critérios existentes pedem participações e lotes em apuração, enquanto o fluxo anexado restringe aos sold vencidos pelo usuário. A IA pediu decisão de escopo antes de implementar. Escolhi seguir a story existente: participações e vitórias, comprovante/cópia somente nas vitórias liquidadas. O registro acima corresponde à primeira etapa, antes dessa decisão.
+
+### Implementação da Story 5.3 — 28/10/2026
+
+Autorizei continuar com a story existente após resolver o conflito material. A IA aplicou bmad-build e delegou a implementação a Sol (`gpt-6.1-sol`, raciocínio medium), com SPEC curta e sem nova aprovação para decisões já autorizadas. Decidi reutilizar auth, settlement/receipt, auditoria e snapshot local; descartei reconstruir vitória por bids, backend de compartilhamento, token e PDF.
+
+Entreguei `GET /api/me/wins` BIDDER e `/bidder/wins` com participações/estados e vitórias persistidas, comprovante e cópia do link público com fallback. Focais reais: 68 backend (PostgreSQL/políticas/OpenAPI), 24 Node e 6 Playwright; Ruff, ESLint focal e TypeScript aprovados. O PostgreSQL local exigiu execução autorizada fora do sandbox.
+
+Executei uma vez `VERIFY_E2E=1 ./verify.sh`, exit 0: 2278 backend (139.79s), testes Node aprovados, 265 Playwright (28.6s), cinco real-stack opt-in ignorados; Ruff/formato, ESLint, TypeScript, Vite e Docker passaram. Não executei verify separado, mutações, Git, review da 5.3 ou leitura de segredos. Conferi tarefas/aceites por diff sem Git; Playwright regenerou `frontend/test-results/.last-run.json` fora da lista prevista.
+
+Story/sprint 5.3 em review, SPEC in-review, Epic 5 in-progress. E2E com API simulada, sem UI contra stack real ou deploy; lista sem paginação e validação estrutural como 4.5. Evidência: `_bmad-output/specs/spec-story-5-3-meus-arremates/implementation-evidence.md`.
+
+### Review independente 5.3, agregado e fechamento documental Epic 5 — 28/10/2026
+
+Autorizei uma única sessão de revisão curta 5.3, seguida do agregado se não houvesse HIGH/MEDIUM e fechamento somente documental se ambos fossem aprovados. Modelo/raciocínio solicitados: Sol/Medium; a sessão não aferiu identificador efetivo do runtime. A IA aplicou bmad-review com foco nos riscos funcionais listados e segunda leitura independente por agente em cada etapa. Ambos os reviews: 0 HIGH / 0 MEDIUM / 0 LOW funcional, sem achados reais de integração. Descartei ampliar cobertura ou repetir gates sem suspeita concreta.
+
+Decidi concluir Story/sprint 5.3 done, SPEC final e Epic 5 done, conforme meu pedido explícito. O done do épico registra exceção documental ao processo canônico; não prova merge, deploy ou smoke público. Aprovação técnica de commits 5.2/5.3 e merge limitada aos arquivos vivos inspecionados, sem Git ou diff histórico. Nenhum código/teste foi alterado; não houve execução de testes, verify ou mutações, nem leitura de `.env*`. Preservei a evidência anterior e seus limites. Não iniciei Epic 6. Registros: `_bmad-output/implementation-artifacts/code-review-final-story-5-3.md` e `code-review-epic-5.md`.

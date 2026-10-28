@@ -238,3 +238,20 @@ test('auditoria pública tem rota e retorno seguro próprios', () => {
   assert.equal(safeReturnPath(`/lots/${LOT_ID}/audit`, 'BIDDER'), `/lots/${LOT_ID}/audit`)
   for (const path of [`/lots/${LOT_ID}/audit/`, '/lots/abc/audit']) assert.deepEqual(parseRoute(path), { kind: 'not-found' })
 })
+
+test('comprovante tem rota pública por lote', () => {
+  const route = { kind: 'receipt', lotId: LOT_ID } as const
+  assert.deepEqual(parseRoute(`/lots/${LOT_ID}/receipt`), route)
+  assert.equal(routePath(route), `/lots/${LOT_ID}/receipt`)
+  assert.equal(isRestrictedRoute(route), false)
+})
+
+test('Meus arremates uses bidder guard and safe login return', () => {
+  const route = parseRoute('/bidder/wins?user_id=other')
+  assert.deepEqual(route, { kind: 'my-wins' })
+  assert.equal(routePath({ kind: 'my-wins' }), '/bidder/wins')
+  assert.equal(isBidderRoute(route), true)
+  assert.equal(isRestrictedRoute(route), true)
+  assert.equal(safeReturnPath('/bidder/wins', 'BIDDER'), '/bidder/wins')
+  assert.equal(safeReturnPath('/bidder/wins', 'AUCTIONEER'), '/')
+})

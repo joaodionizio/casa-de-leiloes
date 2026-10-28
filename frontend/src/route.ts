@@ -8,10 +8,12 @@ export type AppRoute =
   | { kind: 'vitrine' }
   | { kind: 'lot'; lotId: string }
   | { kind: 'audit'; lotId: string }
+  | { kind: 'receipt'; lotId: string }
   | { kind: 'login' }
   | { kind: 'create-lot' }
   | { kind: 'my-lots' }
   | { kind: 'wallet' }
+  | { kind: 'my-wins' }
 
 export type Route = AppRoute | { kind: 'not-found' }
 
@@ -34,9 +36,14 @@ export function parseRoute(pathname: string): Route {
   if (path === '/login') return { kind: 'login' }
   if (path === '/auctioneer/lots/new') return { kind: 'create-lot' }
   if (path === '/auctioneer/lots') return { kind: 'my-lots' }
+  if (path === '/bidder/wins') return { kind: 'my-wins' }
   if (path === '/bidder/wallet') return { kind: 'wallet' }
   if (path.startsWith(LOT_PREFIX)) {
     const suffix = path.slice(LOT_PREFIX.length)
+    if (suffix.endsWith('/receipt')) {
+      const lotId = suffix.slice(0, -8)
+      if (UUID_PATTERN.test(lotId)) return { kind: 'receipt', lotId }
+    }
     if (suffix.endsWith('/audit')) {
       const lotId = suffix.slice(0, -6)
       if (UUID_PATTERN.test(lotId)) return { kind: 'audit', lotId }
@@ -48,11 +55,13 @@ export function parseRoute(pathname: string): Route {
 }
 
 export function routePath(route: AppRoute): string {
+  if (route.kind === 'receipt') return `${LOT_PREFIX}${route.lotId}/receipt`
   if (route.kind === 'audit') return `${LOT_PREFIX}${route.lotId}/audit`
   if (route.kind === 'lot') return `${LOT_PREFIX}${route.lotId}`
   if (route.kind === 'login') return '/login'
   if (route.kind === 'create-lot') return '/auctioneer/lots/new'
   if (route.kind === 'my-lots') return '/auctioneer/lots'
+  if (route.kind === 'my-wins') return '/bidder/wins'
   if (route.kind === 'wallet') return '/bidder/wallet'
   return '/'
 }
@@ -63,14 +72,20 @@ export function isAuctioneerRoute(
   return route.kind === 'create-lot' || route.kind === 'my-lots'
 }
 
-export function isBidderRoute(route: Route): route is { kind: 'wallet' } {
-  return route.kind === 'wallet'
+export function isBidderRoute(
+  route: Route,
+): route is { kind: 'wallet' } | { kind: 'my-wins' } {
+  return route.kind === 'wallet' || route.kind === 'my-wins'
 }
 
 // Área restrita a um papel (Story 3.1): o anônimo vai ao login e guarda o retorno.
 export function isRestrictedRoute(
   route: Route,
-): route is { kind: 'create-lot' } | { kind: 'my-lots' } | { kind: 'wallet' } {
+): route is
+  | { kind: 'create-lot' }
+  | { kind: 'my-lots' }
+  | { kind: 'wallet' }
+  | { kind: 'my-wins' } {
   return isAuctioneerRoute(route) || isBidderRoute(route)
 }
 

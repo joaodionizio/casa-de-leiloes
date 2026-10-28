@@ -2175,3 +2175,20 @@ h2[tabindex='-1']:focus-visible {
 .audit-page dd { margin: .25rem 0 1rem; }
 .audit-page code { font-size: .8rem; }
 .audit-method { border-top: 1px solid var(--color-border); margin-top: 1.5rem; }
+
+.receipt-page { max-width: 52rem; margin: 2rem auto; padding: 0 1rem 4rem; }
+.receipt-art { max-width: 32rem; margin: 2rem 0; }
+.receipt-status { font-weight: 700; }
+.receipt-details { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr); gap: 1rem; border-top: 1px solid var(--color-border); padding-top: 1rem; }
+.receipt-details dd { margin: 0; overflow-wrap: anywhere; }
+.receipt-details dt { color: var(--color-muted); }
+
+/* Participações do licitante: lista compacta, obra e resultado lado a lado. */
+.my-wins-list { list-style: none; padding: 0; margin: 2rem 0; }
+.my-win { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--color-border); }
+.my-win-details { min-width: 0; overflow-wrap: anywhere; }
+.my-win h2 { margin: 0; font-family: var(--font-display); font-size: 1.35rem; }
+.my-win p { margin: .4rem 0; }
+.my-win-actions { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; }
+.my-win input { max-width: 100%; width: 100%; box-sizing: border-box; }
+@media (max-width: 400px) { .my-win { grid-template-columns: 56px minmax(0, 1fr); gap: .65rem; } .my-win .artwork-image-thumb, .my-win img { width: 56px; height: 56px; } }
