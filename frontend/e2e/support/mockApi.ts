@@ -580,6 +580,7 @@ export async function mockApi(
                 : current + lot.min_increment_cents,
           bid_count: state.bids.length,
           bids: state.bids.slice(-50).reverse(),
+          settlement_status: 'pending', settlement: null,
         })
       }
       if (bidsPath[2] === undefined && method === 'POST') {

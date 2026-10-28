@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
-import { fetchBidRoom, fetchMyBids, type BidRoom, type MyBids } from './api/bids'
+import { fetchBidRoom, fetchMyBids, publicSettlement, type BidRoom, type MyBids } from './api/bids'
 import {
   fetchPublicLot,
   type PublicLotDetailResponse,
@@ -24,6 +24,7 @@ import LotBidPanel, { type Loadable, type Viewer } from './LotBidPanel'
 import LotState from './LotState'
 import {
   roomSocketUrl,
+  roomWithSettlement,
   sameRoomState,
   shouldApplyRoom,
   type ConnectionState,
@@ -253,6 +254,7 @@ function LotPage({
   const applyRoom = useCallback((incoming: BidRoom, roundId: number, isOverlay = false): boolean => {
     const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
     if (!shouldApplyRoom(current, incoming, cancelledRef.current, lotId, lotId)) return false
+    if (incoming.settlement_status === 'settled') transportRef.current?.stop('terminal')
     roomRef.current = { status: 'ready', data: incoming }
     roomRoundRef.current = roundId
     setRoom(roomRef.current)
@@ -459,6 +461,18 @@ function LotPage({
         markCancelled()
         return
       }
+      if (event.type === 'lot_closed') {
+        const current = roomRef.current.status === 'ready' ? roomRef.current.data : null
+        if (current === null) return
+        const settlement = publicSettlement(event)
+        const terminal = roomWithSettlement(current, settlement)
+        if (!shouldApplyRoom(current, terminal, false, lotId, event.lot_id)) return
+        publicEpochRef.current++
+        applyRoom(terminal, roomRoundRef.current)
+        // Reconcile only public history. Private freshness/errors are independent.
+        void loadRoom(roomRoundRef.current)
+        return
+      }
       // A current connection's snapshot restores public freshness even when
       // arbitration retains newer data or the public state is unchanged.
       if (event.type === 'room_snapshot') {
@@ -529,7 +543,7 @@ function LotPage({
       transport.stop()
       if (transportRef.current === transport) transportRef.current = null
     }
-  }, [lotId, applyRoom, cancelRound, loadPrivate, markNotFound, markCancelled])
+  }, [lotId, applyRoom, cancelRound, loadRoom, loadPrivate, markNotFound, markCancelled])
 
   // Lote cancelado ao vivo: a tela inteira muda, então o foco vai para o título (que o
   // leitor de tela anuncia) em vez de cair no `body` quando o campo do lance desmonta.
@@ -611,6 +625,7 @@ function LotPage({
             current_bid_cents: placed.lot.current_bid_cents,
             minimum_next_bid_cents: null,
             bid_count: placed.bid.sequence,
+            settlement_status: 'pending', settlement: null,
             bids: [placed.bid, ...(current?.bids ?? [])].slice(0, 50),
           }, roundSeq.current, true)
         }

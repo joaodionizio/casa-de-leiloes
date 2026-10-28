@@ -48,6 +48,8 @@ ROOM_KEYS = [
     "ends_at",
     "minimum_next_bid_cents",
     "phase",
+    "settlement",
+    "settlement_status",
 ]
 BID_KEYS = ["amount_cents", "bidder_alias", "placed_at", "sequence"]
 MINE_KEYS = ["bidder_alias", "last_bid_cents", "my_bid_count"]

@@ -21,15 +21,17 @@ Este módulo não importa `app.main`.
 """
 
 import logging
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Response
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -427,6 +429,41 @@ class PlaceBidResponse(BaseModel):
 ROOM_BID_LIMIT = 50
 
 
+class PublicSettlement(BaseModel):
+    outcome: Literal["sold", "unsold"]
+    winner_alias: str | None
+    final_amount_cents: int | None
+    bid_count: int
+    final_hash: str
+    settled_at: datetime
+
+    @model_validator(mode="after")
+    def validate_outcome(self):
+        if (
+            self.settled_at.utcoffset() is None
+            or re.fullmatch(r"[0-9a-f]{64}", self.final_hash) is None
+        ):
+            raise ValueError("Resultado inválido.")
+        if self.outcome == "sold":
+            valid = (
+                self.bid_count > 0
+                and self.winner_alias is not None
+                and re.fullmatch(r"Licitante-[0-9A-F]{16}", self.winner_alias)
+                and self.final_amount_cents is not None
+                and 1 <= self.final_amount_cents <= MAX_CENTS
+            )
+        else:
+            valid = (
+                self.bid_count == 0
+                and self.winner_alias is None
+                and self.final_amount_cents is None
+                and self.final_hash == GENESIS_HASH
+            )
+        if not valid:
+            raise ValueError("Resultado inválido.")
+        return self
+
+
 class PublicBidRoomResponse(BaseModel):
     as_of: datetime
     phase: LotPhase
@@ -435,6 +472,8 @@ class PublicBidRoomResponse(BaseModel):
     minimum_next_bid_cents: int | None
     bid_count: int
     bids: list[AcceptedBidResponse]
+    settlement_status: Literal["pending", "settled"]
+    settlement: PublicSettlement | None
 
 
 class MyLotBidsResponse(BaseModel):
@@ -448,6 +487,8 @@ def public_room_statement(lot_id: uuid.UUID) -> Select[Any]:
     recentes no mesmo snapshot. O `LEFT OUTER JOIN` parte do CTE (uma linha), então há
     `as_of` mesmo sem lote; o LATERAL sem linhas deixa a lista vazia. Projeta só
     colunas públicas: nunca `bidder_id`, hashes nem HMAC."""
+    from app.lot_settlement import LotSettlement, Receipt
+
     clock = _clock_cte()
     recent = (
         select(Bid.sequence, Bid.bidder_alias, Bid.amount_cents, Bid.placed_at)
@@ -467,6 +508,36 @@ def public_room_statement(lot_id: uuid.UUID) -> Select[Any]:
             Lot.current_bid_cents,
             Lot.current_leader_id,
             Lot.bid_count,
+            Lot.final_hash,
+            *[
+                getattr(LotSettlement, name).label("s_" + name)
+                for name in (
+                    "id",
+                    "lot_id",
+                    "outcome",
+                    "winner_user_id",
+                    "winner_alias",
+                    "winning_bid_sequence",
+                    "final_amount_cents",
+                    "bid_count",
+                    "final_hash",
+                    "settled_at",
+                )
+            ],
+            *[
+                getattr(Receipt, name).label("r_" + name)
+                for name in (
+                    "id",
+                    "lot_id",
+                    "settlement_id",
+                    "winner_alias",
+                    "winning_bid_sequence",
+                    "final_amount_cents",
+                    "bid_count",
+                    "final_hash",
+                    "settled_at",
+                )
+            ],
             recent.c.sequence,
             recent.c.bidder_alias,
             recent.c.amount_cents,
@@ -476,6 +547,8 @@ def public_room_statement(lot_id: uuid.UUID) -> Select[Any]:
         # O cancelado (Story 3.6, D3) fica fora na condição do JOIN, nunca num WHERE:
         # o `as_of` e o caso vazio sobrevivem.
         .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
+        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
+        .outerjoin(Receipt, Receipt.lot_id == Lot.id)
         .outerjoin(recent, true())
         .order_by(recent.c.sequence.desc().nulls_last())
     )
@@ -488,6 +561,33 @@ def read_public_room(
     first = rows[0]  # o CTE garante ao menos uma linha
     if first.lot_id is None:
         return None
+    from app.lot_settlement import _structural_conflict
+
+    def projected(prefix):
+        values = {
+            name[2:]: value
+            for name, value in first._mapping.items()
+            if name.startswith(prefix)
+        }
+        return SimpleNamespace(**values) if values["id"] is not None else None
+
+    settlement, receipt = projected("s_"), projected("r_")
+    conflict = _structural_conflict(settlement, receipt)
+    if conflict or (
+        settlement is not None
+        and (
+            settlement.lot_id != lot_id
+            or settlement.settled_at < first.ends_at
+            or settlement.bid_count != first.bid_count
+            or settlement.final_hash != first.final_hash
+            or settlement.final_amount_cents != first.current_bid_cents
+            or settlement.winner_user_id != first.current_leader_id
+        )
+    ):
+        logger.error(
+            "public room failed lot_id=%s category=settlement_structure", lot_id
+        )
+        raise RuntimeError("Não foi possível consultar o resultado do lote.")
     as_of = first.as_of.astimezone(UTC)
     current = (
         None
@@ -512,6 +612,17 @@ def read_public_room(
         current_bid_cents=first.current_bid_cents,
         minimum_next_bid_cents=minimum,
         bid_count=first.bid_count,
+        settlement_status="settled" if settlement else "pending",
+        settlement=PublicSettlement(
+            outcome=settlement.outcome,
+            winner_alias=settlement.winner_alias,
+            final_amount_cents=settlement.final_amount_cents,
+            bid_count=settlement.bid_count,
+            final_hash=settlement.final_hash,
+            settled_at=settlement.settled_at.astimezone(UTC),
+        )
+        if settlement
+        else None,
         bids=[
             AcceptedBidResponse(
                 sequence=row.sequence,

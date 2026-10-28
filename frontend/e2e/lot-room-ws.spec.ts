@@ -6,6 +6,7 @@ interface BidRoom {
   as_of: string; phase: 'live' | 'scheduled' | 'ended'; ends_at: string
   current_bid_cents: number | null; minimum_next_bid_cents: number | null
   bid_count: number; bids: MockBid[]
+  settlement_status: 'pending' | 'settled'; settlement: { outcome: 'sold' | 'unsold'; winner_alias: string | null; final_amount_cents: number | null; bid_count: number; final_hash: string; settled_at: string } | null
 }
 
 const LOT = lotId(1)
@@ -17,7 +18,8 @@ function state(count = 0, extra: Partial<BidRoom> = {}): BidRoom {
     as_of: '2026-10-25T14:31:00.123456Z', phase: 'live',
     ends_at: '2026-10-25T17:00:00Z', current_bid_cents: count ? 10000 + count * 1000 : null,
     minimum_next_bid_cents: count ? 11000 + count * 1000 : 11000,
-    bid_count: count, bids: makeBids(count, 11000).reverse(), ...extra,
+    bid_count: count, bids: makeBids(count, 11000).reverse(),
+    settlement_status: 'pending', settlement: null, ...extra,
   }
 }
 function send(socket: WebSocketRoute, room: BidRoom, type = 'bid_accepted', id = LOT) {
@@ -31,6 +33,155 @@ function initialize(socket: WebSocketRoute, id = LOT) {
   })
   send(socket, state(), 'room_snapshot', id)
 }
+
+for (const sold of [false, true]) {
+  test(`T22/T23/T40 settled ${sold ? 'sold' : 'unsold'} snapshot stops heartbeat/reconnect before first ping`, async ({ page }) => {
+    await page.clock.install()
+    await page.clock.pauseAt(new Date())
+    const sockets: WebSocketRoute[] = []
+    const pings: unknown[] = []
+    const terminal = state(sold ? 1 : 0, { phase: 'ended', settlement_status: 'settled', settlement: {
+      outcome: sold ? 'sold' : 'unsold', winner_alias: sold ? OWN_ALIAS : null,
+      final_amount_cents: sold ? 11000 : null, bid_count: sold ? 1 : 0,
+      final_hash: (sold ? 'a' : '0').repeat(64), settled_at: '2026-10-25T17:00:00.123456Z',
+    } })
+    await page.routeWebSocket('**/ws/lots/*', (socket) => {
+      sockets.push(socket)
+      socket.onMessage((data) => pings.push(data))
+      send(socket, terminal, 'room_snapshot')
+    })
+    const api = await mockApi(page, { lots: LOTS })
+    // A delayed pending REST snapshot with a later clock cannot reopen terminal.
+    const held = api.hold(ROOM)
+    await page.goto(`/lots/${LOT}`)
+    await expect(page.getByRole('heading', { name: 'Sala do lote' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Dar lance', exact: true })).toHaveCount(0)
+    held.release()
+    await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('offline'))
+      window.dispatchEvent(new Event('online'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await page.clock.runFor(90_000)
+    expect(pings).toHaveLength(0)
+    expect(sockets).toHaveLength(1)
+    expect(api.bidPosts).toHaveLength(0)
+    await expect(page.getByText('Reconectando à sala…', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Este lote foi cancelado', { exact: true })).toHaveCount(0)
+  })
+}
+
+test('T21/T38 lot_closed keeps terminal despite later pending REST and failed final history read', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  const pings: unknown[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => {
+    sockets.push(socket)
+    socket.onMessage((data) => {
+      const payload = JSON.parse(String(data))
+      pings.push(payload)
+      if (payload.type === 'ping') socket.send(JSON.stringify({ type: 'pong', id: payload.id }))
+    })
+    send(socket, state(), 'room_snapshot')
+  })
+  const api = await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  const atTerminal = pings.length
+  let finalReads = 0
+  await page.route(`**/api/lots/${LOT}/bids`, (route) => { finalReads++; return route.fulfill({ status: 503, json: { code: 'internal_error' } }) })
+  const instant = '2026-10-25T17:00:00.123456Z'
+  sockets[0].send(JSON.stringify({ type: 'lot_closed', lot_id: LOT, outcome: 'unsold',
+    winner_alias: null, final_amount_cents: null, bid_count: 0, final_hash: '0'.repeat(64),
+    settled_at: instant, as_of: instant }))
+  await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+  await expect(page.getByText('Histórico possivelmente desatualizado.')).toBeVisible()
+  expect(finalReads).toBe(1)
+  await page.clock.runFor(90_000)
+  expect(pings).toHaveLength(atTerminal)
+  expect(sockets).toHaveLength(1)
+  expect(api.bidPosts).toHaveLength(0)
+  await expect(page.getByRole('heading', { name: 'Este lote foi cancelado' })).toHaveCount(0)
+})
+
+test('F44-01 sold terminal reconciles missed bids with final public GET', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const sockets: WebSocketRoute[] = []
+  const messages: unknown[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => {
+    sockets.push(socket)
+    socket.onMessage((data) => messages.push(data))
+    send(socket, state(1), 'room_snapshot')
+  })
+  await mockApi(page, { lots: LOTS, rooms: { [LOT]: { bids: makeBids(1, 11000) } } })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  const before = messages.length
+  const instant = '2026-10-25T17:00:00.123456Z'
+  const settlement = { outcome: 'sold' as const, winner_alias: OTHER_ALIAS, final_amount_cents: 13000,
+    bid_count: 3, final_hash: 'a'.repeat(64), settled_at: instant }
+  const final = state(3, { as_of: '2026-10-25T17:00:01Z', phase: 'ended', settlement_status: 'settled', settlement })
+  let finalReads = 0
+  await page.route(`**/api/lots/${LOT}/bids`, (route) => { finalReads++; return route.fulfill({ json: final }) })
+  sockets[0].send(JSON.stringify({ type: 'lot_closed', lot_id: LOT, ...settlement, as_of: instant }))
+  await expect(page.locator('.bid-history-count')).toHaveText('3 lances')
+  await expect(page.locator('.bid-history li')).toHaveCount(3)
+  for (const [index, bid] of final.bids.entries()) {
+    const row = page.locator('.bid-history li').nth(index)
+    await expect(row.locator('.bid-seq')).toHaveText(`#${bid.sequence}`)
+    await expect(row.locator('.bid-alias')).toHaveText(bid.bidder_alias)
+    await expect(row.locator('.bid-amount')).toHaveText(`R$\u00a0${bid.amount_cents / 100},00`)
+  }
+  await expect(page.locator('.bid-current')).toHaveText('R$\u00a0130,00')
+  expect(finalReads).toBe(1)
+  await page.clock.runFor(90_000)
+  expect(messages).toHaveLength(before)
+  expect(sockets).toHaveLength(1)
+  await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Dar lance', exact: true })).toHaveCount(0)
+  await expect(page.getByText('Reconectando à sala…', { exact: true })).toHaveCount(0)
+})
+
+test('T22 offline during settlement reconnects once to a complete terminal snapshot without ping', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  let settled = false
+  const sockets: WebSocketRoute[] = []
+  const pings: number[] = []
+  await page.routeWebSocket('**/ws/lots/*', (socket) => {
+    const index = sockets.length
+    sockets.push(socket)
+    pings.push(0)
+    socket.onMessage((data) => {
+      const message = JSON.parse(String(data))
+      if (message.type === 'ping') {
+        pings[index]++
+        socket.send(JSON.stringify({ type: 'pong', id: message.id }))
+      }
+    })
+    send(socket, settled ? state(0, { phase: 'ended', settlement_status: 'settled', settlement: {
+      outcome: 'unsold', winner_alias: null, final_amount_cents: null, bid_count: 0,
+      final_hash: '0'.repeat(64), settled_at: '2026-10-25T17:00:00Z',
+    } }) : state(), 'room_snapshot')
+  })
+  await mockApi(page, { lots: LOTS })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByText('Sala conectada', { exact: false })).toBeVisible()
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')))
+  await expect(page.getByText('Sem conexão com a rede', { exact: true })).toBeVisible()
+  settled = true
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('online'))
+    window.dispatchEvent(new Event('online'))
+  })
+  await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+  await page.clock.runFor(90_000)
+  expect(sockets).toHaveLength(2)
+  expect(pings[1]).toBe(0)
+})
 
 test('snapshots replace state, preserve input/focus, coalesce duplicates and recover disconnect', async ({ page }) => {
   await page.clock.install()

@@ -48,6 +48,28 @@ BLOCKED_HOSTS: list[str] = []
 _real_getaddrinfo = socket.getaddrinfo
 
 
+@pytest.fixture(autouse=True)
+def control_background_settlement(request, monkeypatch):
+    """Legacy HTTP/transport tests control their writers explicitly.
+
+    Only the app's lifecycle adapter is replaced. Direct scheduler tests use the
+    real class; marked lifecycle tests also exercise the real startup and loop.
+    No product switch can disable catch-up in production.
+    """
+    if request.node.get_closest_marker("settlement_lifecycle"):
+        return
+    from app import main
+
+    class ControlledScheduler(main.SettlementScheduler):
+        async def catch_up(self):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(main, "SettlementScheduler", ControlledScheduler)
+
+
 def alembic_config(database_url: str) -> Config:
     config = Config(str(ALEMBIC_INI))
     config.attributes["database_url"] = database_url

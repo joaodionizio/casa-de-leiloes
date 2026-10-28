@@ -119,7 +119,7 @@ NFR6: Uso de IA descrito (onde, como, o que foi revisado).
 - AR3 (AD-4): React + Vite + TypeScript simples; contratos HTTP e eventos WebSocket tipados.
 - AR4 (AD-6, AD-26): hora do PostgreSQL (`clock_timestamp()`) lida depois da trava do lote, um instante por operação; o domínio recebe `now`.
 - AR5 (AD-7, AD-8): lance em uma única transação (18 passos desde o refinamento da Story 3.4, com autenticação do estado anterior antes das regras), incluindo o registro de auditoria; travas: lote, depois carteiras em `user_id` crescente.
-- AR6 (AD-9, AD-19): fechamento sob a mesma trava, idempotente, `UNIQUE(lot_id)` em `receipts`; scheduler + catch-up na inicialização e na tentativa de lance; leituras nunca liquidam; evento só depois do commit.
+- AR6 (AD-9, AD-19, revisão humana da spec 4.4): fechamento sob a mesma trava, idempotente, `UNIQUE(lot_id)` em `receipts`; scheduler + catch-up após migrations/seed e antes de tráfego; POST vencido só recusa, leituras nunca liquidam; evento só depois do commit.
 - AR7 (AD-10, AD-25): WebSocket só para a sala; lances por REST; heartbeat do cliente; snapshot completo ao (re)conectar; um processo; Session curta em threadpool.
 - AR8 (AD-11, AD-29): JWT de 8 h em cookie HttpOnly, mesma origem; Argon2; CSRF por JSON + `Origin`/`Referer`; sem CORS permissivo; toda rota declara política de acesso.
 - AR9 (AD-12, AD-22, AD-23): Art Institute of Chicago; só domínio público; snapshot mínimo copiado no lote; imagem da obra vinda do IIIF, servida ao navegador por rota same-origin controlada (AD-22 revisado), sem armazenar bytes, com placeholder local.
@@ -676,7 +676,7 @@ Como licitante,
 Quero dar um lance que reserve meu saldo, devolva o do líder anterior, aplique o anti-sniping e grave a cadeia de integridade na mesma operação,
 Para que o leilão nunca fique inconsistente, mesmo com lances simultâneos, e todo lance seja auditável.
 
-**ADs:** AD-3, AD-5, AD-6, AD-7, AD-8, AD-10, AD-13, AD-17, AD-20, AD-21, AD-26, AD-30. **Depende de:** Q3 (decidida na 3.3), Q5 (margens no caminho real), Q9 (só depois, na 4.4: aqui o lance em lote vencido apenas recusa).
+**ADs:** AD-3, AD-5, AD-6, AD-7, AD-8, AD-10, AD-13, AD-17, AD-20, AD-21, AD-26, AD-30. **Depende de:** Q3 (decidida na 3.3), Q5 (margens no caminho real), Q9 (revisada na spec 4.4: lance vencido continua apenas recusado, sem gatilho de settlement).
 
 **Critérios de aceite:**
 
@@ -891,7 +891,7 @@ Como avaliador,
 Quero que lotes vencidos fechem sozinhos, inclusive depois de um cold start,
 Para que o resultado apareça sem ninguém precisar agir.
 
-**ADs:** AD-9, AD-10, AD-14, AD-19, AD-25. **Depende de:** Q1 (intervalo do scheduler), Q4 (ordem na inicialização), Q6 (quem publica o encerramento), Q9 (lance em lote vencido).
+**ADs:** AD-9, AD-10, AD-14, AD-19, AD-25. **Decisões consolidadas na spec 4.4:** Q1 (2 s após ciclo), Q4 (catch-up depois de migrations/seed e antes de tráfego), Q6 (só transição confirmada publica), Q9 (POST vencido só recusa, sem settlement). A revisão humana substitui a ordem e o gatilho anteriormente previstos; histórico na AD-19 e memória da spec.
 
 **Critérios de aceite:**
 
@@ -901,11 +901,11 @@ Para que o resultado apareça sem ninguém precisar agir.
 
 **Dado** a aplicação iniciando com lotes vencidos e não liquidados
 **Quando** sobe
-**Então** executa o catch-up desses lotes antes do funcionamento normal.
+**Então** executa o catch-up desses lotes no lifespan depois de migrations/seed existentes e antes do funcionamento normal, sem mover o seed.
 
 **Dado** uma tentativa de lance num lote vencido e não liquidado
 **Quando** chega
-**Então** o lote é fechado pelo serviço idempotente e a resposta é "lote encerrado".
+**Então** mantém a recusa de domínio existente, sem chamar settlement ou publicar encerramento por essa requisição; catch-up/scheduler fazem o fechamento operacional.
 
 **Dado** um fechamento que de fato liquidou o lote
 **Quando** o commit confirma

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { BidRoom } from './api/bids.ts'
-import { parseRoomMessage, roomSocketUrl, sameRoomState, shouldApplyRoom } from './lotRoomSocket.ts'
+import { parseRoomMessage, roomSocketUrl, roomWithSettlement, sameRoomState, shouldApplyRoom } from './lotRoomSocket.ts'
 
 const lot = '00000000-0000-4000-8000-000000000001'
 const room: BidRoom = {
   as_of: '2026-10-27T12:00:00.123456Z', phase: 'live', ends_at: '2026-10-27T13:00:00Z',
-  current_bid_cents: null, minimum_next_bid_cents: 10000, bid_count: 0, bids: [],
+  current_bid_cents: null, minimum_next_bid_cents: 10000, bid_count: 0, bids: [], settlement_status: 'pending', settlement: null,
 }
 test('count orders bids, timestamp only breaks ties, terminal and lot identity prevail', () => {
   assert.ok(shouldApplyRoom(null, room))
@@ -43,4 +43,32 @@ test('same public state ignores only as_of, which the server renews on every rer
   assert.equal(sameRoomState(base, { ...base, minimum_next_bid_cents: null }), false)
   assert.equal(sameRoomState(base, { ...base, bids: [{ ...bid, amount_cents: 12000 }] }), false)
   assert.equal(sameRoomState(base, { ...base, bids: [] }), false)
+})
+
+test('T18/T19/T20 lot_closed validates its exact whitelist, persistent time and outcome', () => {
+  const unsold = { outcome: 'unsold' as const, winner_alias: null, final_amount_cents: null,
+    bid_count: 0, final_hash: '0'.repeat(64), settled_at: '2026-10-27T13:00:00.123456Z' }
+  const frame = { type: 'lot_closed', lot_id: lot, ...unsold, as_of: unsold.settled_at }
+  assert.deepEqual(parseRoomMessage(JSON.stringify(frame)), frame)
+  const sold = { ...frame, outcome: 'sold', winner_alias: 'Licitante-0123456789ABCDEF',
+    final_amount_cents: Number.MAX_SAFE_INTEGER, bid_count: 1, final_hash: 'f'.repeat(64) }
+  assert.deepEqual(parseRoomMessage(JSON.stringify(sold)), sold)
+  for (const invalid of [{ ...frame, winner_user_id: lot }, { ...frame, anchor_hmac: 'a'.repeat(64) },
+    { ...frame, as_of: '2026-10-27T13:00:00.123457Z' }, { ...frame, final_amount_cents: 0 },
+    { ...sold, winner_alias: 'private@example.com' }, { ...sold, bid_count: 0 },
+    { ...sold, final_amount_cents: Number.MAX_SAFE_INTEGER + 1 }, { ...frame, final_hash: 'f'.repeat(64) }]) {
+    assert.equal(parseRoomMessage(JSON.stringify(invalid)), null)
+  }
+})
+
+test('T38/T40 equal-count settlement wins and pending or divergent terminal never replaces it', () => {
+  const settlement = { outcome: 'unsold' as const, winner_alias: null, final_amount_cents: null,
+    bid_count: 0, final_hash: '0'.repeat(64), settled_at: '2026-10-27T13:00:00.123456Z' }
+  const terminal = roomWithSettlement(room, settlement)
+  assert.equal(sameRoomState(room, terminal), false)
+  assert.ok(shouldApplyRoom(room, terminal))
+  assert.equal(shouldApplyRoom(terminal, { ...room, as_of: '2026-10-29T13:00:00Z' }), false)
+  assert.equal(shouldApplyRoom(terminal, { ...terminal, settlement: { ...settlement, settled_at: '2026-10-27T13:00:00.123457Z' } }), false)
+  assert.ok(sameRoomState(terminal, { ...terminal, as_of: '2026-10-29T13:00:00Z' }))
+  assert.equal(terminal.bids, room.bids)
 })

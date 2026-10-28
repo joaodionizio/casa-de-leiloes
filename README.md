@@ -300,8 +300,12 @@ Fonte dos nomes/regras: `backend/app/config.py`, `main.py`, `seed.py`,
 O `start.sh` usa `set -eu`: executa **`alembic upgrade head` →
 `python -m app.seed` → uvicorn**. Erro em migration ou seed impede o servidor;
 configuração inválida também pode falhar no import de `app.main` depois do seed.
-Não há scheduler/catch-up no startup. A Story 4.3 entrega liquidação somente por
-serviço interno; os gatilhos automáticos pertencem à 4.4.
+Na Story 4.4 acrescentei catch-up no lifespan: depois do seed existente, tento
+toda a população inicial vencida e pendente antes de liberar tráfego. Em seguida
+inicio um scheduler por processo, com espera interrompível de 2 s após cada ciclo.
+Não movi nem repeti o seed; uvicorn direto mantém migrations/seed como pré-requisitos
+externos. Indisponibilidade sistêmica do banco impede startup; falha individual
+fica em cooldown e permite o progresso dos demais lotes.
 
 Migrations atuais: `0001` baseline, `0002` users, `0003` lots, `0004` wallets,
 `0005` bids, `0006` lot_cancellation e `0007` lot_settlements/receipts
@@ -685,12 +689,48 @@ reserva inválidos revertem toda a operação. `lot_settlements` registra sold/u
 aprovados, sem usuário privado ou HMAC. Os readers internos `read_settlement` e
 `read_receipt` consultam por lote sem escrever.
 
-Não criei rota HTTP ou integração de UI/WS. Scheduler, catch-up, fechamento em
-tentativa de lance e publicação são da 4.4. Em confirmação perdida de commit, o
+Não criei rota HTTP de settlement. Na Story 4.4 integrei scheduler, catch-up e
+publicação terminal; POST vencido mantém só a recusa e não dispara settlement.
+Em confirmação perdida de commit, o
 chamador recebe falha; uma nova chamada explícita em outra Session descobre o
 resultado persistido e não repete a transferência. Descartei reparo automático
 de histórico ou comprovante inconsistente. Reverter a migration `0007` apaga
 settlements/receipts e não desfaz transferências já confirmadas; não é estorno.
+
+## Fechamento automático e recuperação (Story 4.4)
+
+Decidi reutilizar exclusivamente o comando confirmado da 4.3. A descoberta usa
+hora PostgreSQL e cursor `(ends_at,id)`, com páginas de até 50 linhas, no máximo
+200 linhas consultadas e 50 tentativas por ciclo. O comando relê prazo/estado
+sob lot lock; a seleção não autoriza fechar um lote prorrogado ou cancelado.
+Falhas financeiras ou de integridade recebem cooldown local de 300 s, sem reparo;
+falhas transitórias recuam de 2 até 30 s, sempre em outro ciclo. Restart apaga
+esse estado operacional em memória e pode tentar novamente os pendentes.
+
+Somente uma nova transição confirmada agenda `lot_closed`, com nove campos
+públicos: `type`, `lot_id`, `outcome`, `winner_alias`, `final_amount_cents`,
+`bid_count`, `final_hash`, `settled_at` e `as_of`. O último copia `settled_at`
+persistido. Não publico identidade privada, carteiras, HMAC ou comprovante interno.
+REST e snapshots WS compartilham `settlement_status` (`pending`/`settled`) e
+`settlement` público; `room.as_of` continua sendo o instante da leitura completa.
+Mantive `phase` temporal e cancelamento separado.
+
+O servidor drena o terminal e fecha com código 1000. Uma conexão nova em lote
+liquidado recebe primeiro snapshot completo e depois 1000; o cliente encerra
+heartbeat/reconnect antes do primeiro ping. `already_settled` não republica.
+Se o processo cair entre commit e publicação, snapshot/reconnect recupera o
+resultado. Falha viva de publicação tenta invalidar a sala e fechar de forma
+recuperável; descartei outbox, replay e desfazer/refazer a liquidação.
+
+No shutdown acompanho workers, leituras, publicações e transporte iniciados.
+A janela global de drenagem é 30 s; excesso gera erro e os recursos continuam
+supervisionados até cleanup seguro, sem presumir rollback ou abandonar Session.
+Preservei send/close de 10 s e os limites DB existentes: não prometo ciclo ou
+shutdown total em 2/30 s quando SQL ainda está em curso.
+
+Backend e SPA devem ser publicados juntos. Abas abertas com o parser anterior
+podem precisar de refresh para reconhecer o terminal. Não acrescentei tela,
+painel, botão, link ou comprovante público de resultado nesta story.
 
 ## Carteira
 
@@ -844,8 +884,9 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   em "Atualizar sala" e depois do próprio lance. A Story 4.1 acrescenta snapshots
   WebSocket depois dos commits; o servidor sempre decide fase e aceitação do lance.
 - A interface continua mostrando "Encerrado, apurando resultado" para lotes encerrados.
-  A Story 4.3 persiste resultado e comprovante por serviço interno, ainda sem
-  integração pública; nenhuma leitura liquida lote.
+  A Story 4.4 apura automaticamente e expõe o resultado persistido no contrato
+  público REST/WS, com cleanup terminal do transporte; mantive a apresentação
+  existente até a story de UX do resultado. Nenhuma leitura liquida lote.
 - A vitrine traz todos os lotes, sem paginação, e os lotes demo encerrados se acumulam a
   cada 72 horas de inicialização. "Mostrar mais encerrados" revela mais 6 por clique, só
   no navegador, sem nova chamada à API.

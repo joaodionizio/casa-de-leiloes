@@ -63,7 +63,7 @@ const POSITION_TEXT: Record<Exclude<BidPosition, 'hidden' | 'neutral'>, string> 
 // formulário. Tudo vem do read model e do 201; o painel não decide nada.
 function LotBidPanel(props: LotBidPanelProps) {
   const { room, viewer, overlay } = props
-  const live = room.phase === 'live'
+  const live = room.phase === 'live' && room.settlement_status === 'pending'
   const minimumText = overlay
     ? props.syncFailed
       ? 'Mínimo indisponível'
@@ -205,7 +205,7 @@ function LotBidPanel(props: LotBidPanelProps) {
 
       <div className="room-refresh">
         <p className="as-of muted">Situação atualizada às {formatClock(room.as_of)}</p>
-        <p role="status" className="muted">{props.connection === 'connected'
+        {props.connection !== 'terminal' && <p role="status" className="muted">{props.connection === 'connected'
           ? '● Sala conectada — atualizações ao vivo'
           : props.connection === 'connecting'
             ? 'Conectando à sala…'
@@ -213,8 +213,8 @@ function LotBidPanel(props: LotBidPanelProps) {
               ? 'Reconectando à sala…'
               : props.networkOffline
                 ? 'Sem conexão com a rede'
-                : 'Sem atualizações ao vivo. Estado desatualizado; use Atualizar sala.'}</p>
-        {props.manualFresh && props.connection !== 'connected' && (
+                : 'Sem atualizações ao vivo. Estado desatualizado; use Atualizar sala.'}</p>}
+        {props.manualFresh && props.connection !== 'connected' && props.connection !== 'terminal' && (
           <p className="muted">Dados atualizados por leitura manual; atualizações ao vivo ainda indisponíveis.</p>
         )}
         {props.syncFailed && (

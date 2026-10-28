@@ -31,7 +31,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-23-2026 22:51
-last_updated: 10-27-2026
+last_updated: 10-28-2026
 project: casa-de-leiloes
 project_key: NOKEY
 tracking_system: file-system
@@ -80,7 +80,10 @@ development_status:
   # Build 4.3 concluído: PG01–35, mutações, dois verifies e smoke reais passaram.
   # Review/aceite humanos pendentes; 4.4 permanece backlog.
   4-3-fechamento-liquidação-idempotente-e-comprovante-base: done
-  4-4-gatilhos-do-fechamento-e-evento-de-encerramento: backlog
+  # 4.4: QH-01–16 decididas; spec consolidada/revalidada em 28/10/2026.
+  # Promoção após gate documental; sem autorização de código nesta sessão.
+  # Fechamento 4.4 aprovado; 4.5 permanece pendente.
+  4-4-gatilhos-do-fechamento-e-evento-de-encerramento: done
   4-5-resultado-dos-lotes-no-painel-do-leiloeiro: backlog
   epic-4-retrospective: optional
 

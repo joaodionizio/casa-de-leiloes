@@ -496,6 +496,8 @@ def test_room_reads_document_their_schemas_and_errors(api_only: TestClient) -> N
         "ends_at",
         "minimum_next_bid_cents",
         "phase",
+        "settlement",
+        "settlement_status",
     ]
     assert sorted(schemas["PublicBidRoomResponse"]["properties"]) == room_fields
     assert sorted(schemas["PublicBidRoomResponse"]["required"]) == room_fields

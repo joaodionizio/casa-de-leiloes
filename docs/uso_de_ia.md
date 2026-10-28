@@ -1494,3 +1494,164 @@ Autorizei o fechamento documental após o review aprovado e a cobertura dos dois
 LOWs. Story, entrada do sprint e SPEC passam a **done**; Epic 4 permanece
 **in-progress**. Não solicitei novas execuções de testes ou mudanças de produção;
 a Story 4.4 não foi iniciada.
+
+## Especificação da Story 4.4 — 27/10/2026
+
+Pedi ao Codex usar `bmad-spec` somente para criar e validar a especificação dos
+gatilhos do fechamento e evento terminal. Sol/High eram recomendações do pedido;
+não atribuo uma troca de modelo não confirmada. Não autorizei implementação,
+Git, leitura de `.env*` nem início da 4.5.
+
+A IA confrontou os contratos/evidências da 4.3 com o código atual de settlement,
+lotes, sala/manager, publicação pós-commit, startup/seed, cliente e testes. Criou
+story draft e pacote `spec-story-4-4-gatilhos-do-fechamento-e-evento-de-encerramento`,
+com memória append-only via script oficial, CAP-1–6 e companions de lifecycle,
+evento, recuperação, falhas/retry, concorrência, critérios/testes, questões e
+validação. Os resolvers BMAD passaram com cache uv em `/private/tmp` após o cache
+padrão ser bloqueado; nenhuma alteração no produto/configuração foi necessária.
+
+Preservei as decisões já vinculantes: catch-up antes de seed/tráfego, somente
+quem transicionou publica e snapshot/reconnect recupera crash entre commit e
+publicação, sem outbox. A IA não escolheu republicar em already_settled nem
+esconder a incompatibilidade dessa alternativa com Q6. Incluiu o gatilho em POST
+vencido do épico/Q9, após rollback e em transação própria, sem nova regra de lance.
+
+QH-01–16 seguem pendentes: as doze solicitadas e quatro lacunas concretas de
+integração (posição do seed/falha no boot, resposta do POST, snapshot/cliente e
+limites DB/shutdown). Recomendações de cadência, batch, cooldown, evento/close e
+compatibilidade não são decisões minhas. Descartei implicitamente autorizar
+build por existir especificação: story continua draft e sprint backlog; Epic 4
+in-progress, demais stories preservadas.
+
+Planejei CA01–12, T01–40 (trinta mínimos com IDs próprios) e M01–08, sem executar
+testes de aplicação. Autovalidação de coerência/preservação e conferências
+estáticas não são review independente nem execução PostgreSQL/WS/E2E. Não
+rodei pytest, verify, SQL, migrations, navegador, smoke ou deploy; não executei
+Git, não li `.env*` e não alterei código de aplicação/testes.
+
+Conferência documental final: exit 0, sem links/companions quebrados; IDs de 6
+capacidades, 16 questões, 12 critérios, 40 cenários e 8 mutações planejadas
+conferidos. Comparei hashes de 204 arquivos da baseline: 203 idênticos e somente
+o sprint alterado por dois comentários, sem mudar status. Registrei os vereditos
+de coerência/preservação na memória pelo script oficial. A spec continua draft
+para minhas decisões; isso não é teste de aplicação ou review independente.
+
+
+## Consolidação humana da spec 4.4 — 28/10/2026
+
+Decidi QH-01–16 e pedi somente consolidar/revalidar documentos, promovendo
+story/sprint a ready-for-dev depois do gate. Mantive a proibição de código,
+testes de aplicação, Git, .env* e início da 4.5. A retomada final ocorreu por
+meu pedido para terminar; ready-for-dev não é autorização de build.
+
+Revisei duas direções anteriores: migrations/seed existentes continuam antes
+do lifespan/catch-up, e POST vencido só recusa sem settlement/segunda transação/
+publicação. A IA atualizou primeiro AD-19/Q4/Q9 e os resumos CLAUDE/épico/README,
+depois rederivou os contratos da memória append-only. CAP-6 foi aposentada sem
+reutilizar o ID; CAP-1–5 permanecem. Os registros do draft acima são históricos.
+
+Fixei evento lot_closed com nove campos públicos, incluindo as_of copiado de
+settled_at persistido; snapshot mantém room.as_of da leitura e settlement
+separado de phase. Conectado drena terminal e fecha 1000; novo settled recebe
+snapshot terminal antes de fechar. Cliente não inicia heartbeat/reconnect após
+terminal. Publicação perdida converge por snapshot, sem outbox, replay de
+already_settled ou desfazer/refazer liquidação.
+
+Preservei ciclo seguido de espera 2 s, SKIP local, 200 linhas/50 tentativas por
+ciclo, cursor justo/wrap, cooldown 300 s e backoff transitório 2–30 s. Descartei os
+novos timeouts de 2 s/DB do draft; send/close 10 s e limites DB existentes continuam.
+Shutdown acompanha recursos numa janela global 30 s e loga excesso sem abandonar
+worker/Session ou afirmar rollback pelo timeout. Nenhuma nova tela/UX de resultado.
+
+A revalidação de coerência e preservação passou; CA01–12, T01–40 e M01–08
+continuam planejados com oráculos atualizados, especialmente ausência de efeito
+no POST. Conferência estática pré-promoção exit 0/errors[]: 201 arquivos de
+código/testes intactos, memória append-only, 16 decisões fechadas, IDs e links/
+companions válidos. Só então promovi SPEC/story/sprint para ready-for-dev,
+preservando Epic 4 in-progress, 4.3 done, 4.5 backlog e estados das demais stories.
+
+Não executei pytest, Playwright, verify, SQL, migrations, navegador, smoke,
+deploy ou review independente. Não executei Git nem li .env*. Somente
+resolução BMAD, escrita documental e conferências estáticas; modelo recomendado
+no pedido não é evidência de troca de modelo efetivo.
+
+## Build autorizado da Story 4.4 — 28/10/2026
+
+Autorizei somente a Story 4.4 pelo `bmad-build`, com QH-01–16 fechadas. Mantive
+scheduler/catch-up como únicos gatilhos operacionais, `settle_lot` como dono da
+liquidação e confirmação, evento público pós-commit e recuperação por snapshot.
+Descartei nova lógica financeira/bidding, settlement no POST/handshake, outbox,
+replay de already_settled, UI da 4.5 e code review nesta sessão.
+
+A IA registrou baseline local sem Git e iniciou story/SPEC/sprint em in-progress.
+O workflow determinou a delegação da implementação a um agente sem histórico;
+a coordenação principal prepara e executa gates, mutações, smoke e evidência.
+Sol/High são recomendações do pedido, sem alegar troca de modelo efetivo.
+Preparei PostgreSQL dedicado e guardas externas contra dotenv implícito para
+Python/Node/uv/Compose, sem alterar produto ou verify. O primeiro acesso Docker
+foi bloqueado pelo sandbox; a execução autorizada confirmou o contêiner saudável.
+Os testes legados controlam a admissão pelo adaptador de lifecycle apenas no
+harness; testes marcados settlement_lifecycle exercitam startup real, sem um
+switch de produção para ocultar catch-up. Resultados serão registrados após
+execução; não confundo implementação planejada com prova executada.
+
+Concluí o build 4.4 e deixei Story/sprint em **review**, SPEC **in-review** e
+Epic 4 **in-progress**. Não marquei done nem iniciei4.5. O comando 4.3, finanças,
+bidding, integridade, lotes/seed/start.sh e verify.sh ficaram byte a byte iguais
+à baseline; a extensão pública está só no read model/transportes. O ajuste de
+LotBidPanel limita-se à ausência de ação/aviso recuperável no terminal, sem
+nova UI de resultado. README precisou corrigir afirmações antigas de ausência
+de scheduler/resultado público e declarar contrato/limites operacionais.
+
+Executei 40 casos backend novos (**40 passed, 1 warning in 7.47s**) e a matriz
+T01–40 com regressões. Suíte consolidada anterior:551 passed/35.29s; prova
+adicional commit sem publish/restart:2 passed/0.53s. Provas PG usam conexões
+independentes e observador de pg_blocking_pids; justiça usa 225 candidatos.
+As 8 mutações da spec e uma adicional de settlement no POST vencido foram
+detectadas; cada arquivo foi restaurado byte a byte em finally. O leitor de
+saída Node de M08 foi corrigido e a mutação reexecutada, sem alegar erro de
+coleta/sintaxe como detecção.
+
+Smoke ASGI/WS+PG: sold settlement=1/receipt=1/lot_closed/close 1000; unsold
+settlement=1/receipt=0/terminal 1000; restart catch-up antes do tráfego; reconnect
+via snapshot terminal sem replay; owners drenados/pool devolvido. Quatro E2E
+novos cobrem snapshot terminal, cleanup, REST tardio e offline durante settlement.
+
+Os verifies finais passaram, exit0: backend **2206 passed, 1 warning in126.82s**
+e **2206 passed, 1 warning in125.59s**, frontend **179/179** em ambos;
+Playwright **226 passed (24.8s),5 skipped**. Lint/formatação (103 arquivos),
+tipos, Vite e imagem Docker aprovados. Ambos encerraram com
+`verify.sh: todas as etapas passaram.`. Repeti os gates após reforçar T32, sem
+alterar produção. Os 5 skips de pilha real continuam opt-in; warning Starlette
+conhecido. Primeiro harness teve whitelist/factory/observador a corrigir e uma
+execução WS interrompida; os resultados finais não usam essa rodada.
+
+Evidência completa em
+`_bmad-output/specs/spec-story-4-4-gatilhos-do-fechamento-e-evento-de-encerramento/implementation-evidence.md`.
+Sem outbox/replay; SQL pode prolongar ciclo/startup/cleanup além da janela
+operacional. Checagem separada somente por nomes:zero .env* alterados; conteúdo
+não lido nem comparado. Não houve Git, deploy ou code review nesta sessão.
+
+### Correções LOW da Story 4.4 — F44-01 e F44-02
+
+A IA acrescentou cobertura E2E para a reconciliação pública final após `lot_closed`, inclusive GET bem-sucedido com histórico defasado e falha 503 com aviso existente. No scheduler, limitou a limpeza a 50 IDs de retry por ciclo, removendo somente IDs com settlement persistido e preservando o backoff dos demais. Uma regressão com COMMIT real e confirmação perdida verifica persistência financeira e ausência de duplicações.
+
+As duas mutações focais falharam como esperado e foram revertidas. A suíte 4.4 passou com 41 testes; regressões direcionadas 4.1–4.3, com 153; `./verify.sh` passou com 2207 testes backend e 179 frontend. A primeira tentativa protegida do verify revelou um erro de lint no teste, corrigido antes da rodada final. A Story 4.4 permanece em review; a 4.5 não foi iniciada.
+
+O verify completo com E2E também passou: 2207 backend, 179 frontend, 227 Playwright e 5 skips existentes. Os dois verifies finais usaram as guardas locais contra dotenv.
+
+### Correções de cobertura após re-review da Story 4.4
+
+A IA reforçou o E2E para conferir o preço em `.bid-current` e a permanência do estado terminal. O teste de ACK perdido passou a verificar a identidade do retry pending e a preservação exata do prazo; outro teste cobre a rotação de 60 IDs. As mutações de preço, identidade e prazo foram detectadas nas asserções respectivas, e os arquivos de produção temporariamente modificados foram restaurados byte a byte.
+
+Os três testes focais passaram isoladamente; a suíte 4.4 passou com 42 testes e as regressões 4.1–4.3 com 153. O verify padrão passou com 2208 backend e 179 frontend; o verify com E2E passou com 2208 backend, 179 frontend, 227 Playwright e 5 skips. Repeti o verify padrão para registrar os totais após truncamento da coleta inicial. Usei as guardas contra dotenv; a Story 4.4 permanece em review e não iniciei a 4.5.
+
+
+### Fechamento final da Story 4.4 — 28/10/2026
+
+Autorizei o fechamento documental: review inicial aprovado com LOWs, sem HIGH
+ou MEDIUM; F44-01, F44-02, F44-R01 e F44-R02 resolvidos e rotação acima de 50
+retries comprovada. Os gates finais passaram: 42 testes 4.4, 153 regressões,
+2208 backend, 179 frontend, 227 Playwright e 5 skips preexistentes. Story,
+sprint e SPEC `done`; Epic 4 permanece `in-progress` e 4.5 `backlog`. Nenhuma
+suíte foi executada nem código ou teste alterado no fechamento documental.

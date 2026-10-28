@@ -117,11 +117,17 @@ export function createLotConnection(lotId: string, adapter: Adapter) {
         attempt.initialized = true
         diagnosed = false
         adapter.recovered()
+        if (event.room.settlement_status === 'settled') {
+          stop('terminal')
+          adapter.message(event)
+          return
+        }
         adapter.status('connected')
         adapter.message(event)
         if (valid(attempt)) ping(attempt)
       } else {
-        if (event.type === 'lot_cancelled') stop('terminal')
+        if (event.type === 'lot_cancelled' || event.type === 'lot_closed' ||
+            event.room.settlement_status === 'settled') stop('terminal')
         adapter.message(event)
       }
     }

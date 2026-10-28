@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.access import AccessPolicy, websocket_route
-from app.bids import PublicBidRoomResponse, read_public_room
+from app.bids import PublicBidRoomResponse, PublicSettlement, read_public_room
 from app.csrf import parse_origin
 from app.db import create_session_factory, get_engine
 from app.lots import Lot
@@ -45,6 +45,27 @@ class CancellationEvent(BaseModel):
     cancelled_at: datetime
 
 
+class ClosedEvent(PublicSettlement):
+    type: Literal["lot_closed"] = "lot_closed"
+    lot_id: uuid.UUID
+    as_of: datetime
+
+
+def closed_event(record) -> ClosedEvent:
+    # Explicit public whitelist. Both times copy the persisted instant, no clock.
+    instant = record.settled_at.astimezone(UTC)
+    return ClosedEvent(
+        lot_id=record.lot_id,
+        outcome=record.outcome,
+        winner_alias=record.winner_alias,
+        final_amount_cents=record.final_amount_cents,
+        bid_count=record.bid_count,
+        final_hash=record.final_hash,
+        settled_at=instant,
+        as_of=instant,
+    )
+
+
 def read_room(lot_id: uuid.UUID) -> PublicBidRoomResponse | None:
     # Created, used and closed in this worker, never retained by a socket.
     with create_session_factory(get_engine())() as session:
@@ -65,7 +86,7 @@ class Pong(BaseModel):
 
 @dataclass(eq=False)
 class Subscriber:
-    queue: asyncio.Queue[RoomEvent | CancellationEvent | Pong] = field(
+    queue: asyncio.Queue[RoomEvent | CancellationEvent | ClosedEvent | Pong] = field(
         default_factory=lambda: asyncio.Queue(QUEUE_CAPACITY)
     )
     stopped: asyncio.Event = field(default_factory=asyncio.Event)
@@ -78,6 +99,8 @@ class Room:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     subscribers: set[Subscriber] = field(default_factory=set)
     users: int = 0
+    terminal: bool = False
+    invalidated: bool = False
 
 
 class RoomManager:
@@ -86,42 +109,65 @@ class RoomManager:
         # Writers waiting at from_thread.run must not consume the readers pool.
         self.read_limiter = CapacityLimiter(4)
         self.reads: set[asyncio.Task] = set()
+        self.connections: set[asyncio.Task] = set()
+        self.operations: set[asyncio.Task] = set()
+        self.stopping = False
+
+    def begin_shutdown(self) -> None:
+        self.stopping = True
+        for room in self.rooms.values():
+            for subscriber in room.subscribers:
+                subscriber.stopped.set()
+
+    def pending_tasks(self) -> set[asyncio.Task]:
+        return self.reads | self.connections | self.operations
 
     @asynccontextmanager
     async def coordinated(self, lot_id: uuid.UUID) -> AsyncIterator[Room]:
+        operation = asyncio.current_task()
+        self.operations.add(operation)
         room = self.rooms.setdefault(lot_id, Room())
         room.users += 1
         try:
             async with room.lock:
                 yield room
         finally:
+            self.operations.discard(operation)
             room.users -= 1
             if not room.users and not room.subscribers:
                 self.rooms.pop(lot_id, None)
 
+    async def read(self, operation, lot_id):
+        reading = asyncio.create_task(
+            to_thread.run_sync(operation, lot_id, limiter=self.read_limiter)
+        )
+        self.reads.add(reading)
+
+        def finished(task):
+            self.reads.discard(task)
+            if not task.cancelled():
+                task.exception()
+
+        reading.add_done_callback(finished)
+        return await asyncio.shield(reading)
+
     async def subscribe(self, lot_id: uuid.UUID) -> Subscriber | None:
         async with self.coordinated(lot_id) as room:
+            if self.stopping:
+                return None
             # Detach only the wait on abandonment. The worker keeps its limiter
             # lease until SQL/Session finish, so abandoned clients cannot bypass 4.
-            reading = asyncio.create_task(
-                to_thread.run_sync(read_room, lot_id, limiter=self.read_limiter)
-            )
-            self.reads.add(reading)
-
-            def finished(task: asyncio.Task) -> None:
-                self.reads.discard(task)
-                if not task.cancelled():
-                    task.exception()  # Consume a late error after the owner left.
-
-            reading.add_done_callback(finished)
-            snapshot = await asyncio.shield(reading)
+            snapshot = await self.read(read_room, lot_id)
             if snapshot is None:
                 return None
             subscriber = Subscriber()
             subscriber.queue.put_nowait(
                 RoomEvent(type="room_snapshot", lot_id=lot_id, room=snapshot)
             )
-            room.subscribers.add(subscriber)
+            if room.invalidated or self.stopping:
+                subscriber.stopped.set()
+            elif snapshot.settlement_status != "settled":
+                room.subscribers.add(subscriber)
             return subscriber
 
     async def remove(self, lot_id: uuid.UUID, subscriber: Subscriber) -> None:
@@ -133,7 +179,9 @@ class RoomManager:
             if not room.users and not room.subscribers:
                 self.rooms.pop(lot_id, None)
 
-    def enqueue(self, room: Room, event: RoomEvent | CancellationEvent) -> None:
+    def enqueue(
+        self, room: Room, event: RoomEvent | CancellationEvent | ClosedEvent
+    ) -> None:
         for subscriber in tuple(room.subscribers):
             try:
                 subscriber.queue.put_nowait(event)
@@ -147,30 +195,60 @@ class RoomManager:
 
     async def publish_bid(self, lot_id: uuid.UUID) -> None:
         async with self.coordinated(lot_id) as room:
-            if not room.subscribers:
+            if (
+                self.stopping
+                or room.terminal
+                or room.invalidated
+                or not room.subscribers
+            ):
                 return
-            snapshot = await to_thread.run_sync(
-                read_room, lot_id, limiter=self.read_limiter
-            )
+            snapshot = await self.read(read_room, lot_id)
             # A cancellation may have committed before this signal was handled.
             # Its own terminal signal is serialized here and cannot be undone.
             if snapshot is not None:
                 self.enqueue(
                     room, RoomEvent(type="bid_accepted", lot_id=lot_id, room=snapshot)
                 )
+                if snapshot.settlement_status == "settled":
+                    room.terminal = True
+                    room.subscribers.clear()
+
+    async def publish_closed(self, event: ClosedEvent) -> None:
+        async with self.coordinated(event.lot_id) as room:
+            if room.terminal or room.invalidated:
+                return
+            room.terminal = True
+            self.enqueue(room, event)
+            room.subscribers.clear()
+
+    async def invalidate(self, lot_id: uuid.UUID) -> None:
+        # Mark before coordination: an in-flight old snapshot observes this flag
+        # before registration even if invalidation must await its read lock.
+        existing = self.rooms.get(lot_id)
+        if existing is not None:
+            existing.invalidated = True
+        async with self.coordinated(lot_id) as room:
+            room.invalidated = True
+            for subscriber in room.subscribers:
+                subscriber.stopped.set()
+            room.subscribers.clear()
 
     async def publish_cancellation(self, lot_id: uuid.UUID) -> None:
         async with self.coordinated(lot_id) as room:
-            if not room.subscribers:
+            if (
+                self.stopping
+                or room.terminal
+                or room.invalidated
+                or not room.subscribers
+            ):
                 return
-            cancelled_at = await to_thread.run_sync(
-                read_cancellation, lot_id, limiter=self.read_limiter
-            )
+            cancelled_at = await self.read(read_cancellation, lot_id)
             if cancelled_at is None:
                 return
             self.enqueue(
                 room, CancellationEvent(lot_id=lot_id, cancelled_at=cancelled_at)
             )
+            room.terminal = True
             # Terminal subscribers can drain their queue but never receive again.
             room.subscribers.clear()
 
@@ -226,7 +304,9 @@ async def send_events(websocket: WebSocket, subscriber: Subscriber) -> int:
         await asyncio.wait_for(
             websocket.send_json(event.model_dump(mode="json")), TRANSPORT_TIMEOUT
         )
-        if isinstance(event, CancellationEvent):
+        if isinstance(event, (CancellationEvent, ClosedEvent)) or (
+            isinstance(event, RoomEvent) and event.room.settlement_status == "settled"
+        ):
             return 1000
 
 
@@ -304,6 +384,8 @@ def register_room_routes(app: FastAPI, app_origin: str) -> None:
         tasks: list[asyncio.Task] = []
         accepted = False
         close_code = None
+        handler = asyncio.current_task()
+        manager.connections.add(handler)
         try:
             subscribing = asyncio.create_task(manager.subscribe(identifier))
             disconnected = asyncio.create_task(wait_disconnect(websocket))
@@ -364,3 +446,4 @@ def register_room_routes(app: FastAPI, app_origin: str) -> None:
                     await manager.remove(identifier, subscriber)
                 if close_code is not None:
                     await close_transport(websocket, close_code)
+                manager.connections.discard(handler)

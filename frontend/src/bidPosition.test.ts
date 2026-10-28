@@ -14,6 +14,7 @@ function room(leader: string | null, phase: BidRoom['phase'] = 'live'): BidRoom 
     current_bid_cents: leader === null ? null : 5000,
     minimum_next_bid_cents: 6000,
     bid_count: leader === null ? 0 : 60,
+    settlement_status: 'pending', settlement: null,
     bids:
       leader === null
         ? []

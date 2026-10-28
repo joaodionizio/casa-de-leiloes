@@ -567,6 +567,8 @@ def test_websocket_policy_is_not_changed_by_the_guard(
             minimum_next_bid_cents=10000,
             bid_count=0,
             bids=[],
+            settlement_status="pending",
+            settlement=None,
         )
 
     # The lot exists for the read, so the refusal below can only come from Origin; the

@@ -23,6 +23,23 @@ export interface BidRoom {
   minimum_next_bid_cents: number | null
   bid_count: number
   bids: BidItem[]
+  settlement_status: 'pending' | 'settled'
+  settlement: PublicSettlement | null
+}
+
+export interface PublicSettlement {
+  outcome: 'sold' | 'unsold'
+  winner_alias: string | null
+  final_amount_cents: number | null
+  bid_count: number
+  final_hash: string
+  settled_at: string
+}
+
+export function publicSettlement(value: PublicSettlement): PublicSettlement {
+  return { outcome: value.outcome, winner_alias: value.winner_alias,
+    final_amount_cents: value.final_amount_cents, bid_count: value.bid_count,
+    final_hash: value.final_hash, settled_at: value.settled_at }
 }
 
 export interface MyBids {
@@ -119,8 +136,24 @@ export function isBidRoom(value: unknown): value is BidRoom {
     isCount(value.bid_count) &&
     Array.isArray(value.bids) &&
     value.bids.length <= MAX_WINDOW &&
-    value.bids.every(isBidItem)
+    value.bids.every(isBidItem) &&
+    ((value.settlement_status === 'pending' && value.settlement === null) ||
+     (value.settlement_status === 'settled' && isPublicSettlement(value.settlement)))
   )
+}
+
+export function isPublicSettlement(value: unknown): value is PublicSettlement {
+  if (!isRecord(value)) return false
+  const keys = ['outcome', 'winner_alias', 'final_amount_cents', 'bid_count', 'final_hash', 'settled_at']
+  if (Object.keys(value).length !== keys.length || !keys.every((key) => key in value) ||
+      !isTimestamp(value.settled_at) || !value.settled_at.endsWith('Z') ||
+      typeof value.final_hash !== 'string' || !/^[0-9a-f]{64}$/.test(value.final_hash) ||
+      !isCount(value.bid_count)) return false
+  return value.outcome === 'sold'
+    ? value.bid_count > 0 && typeof value.winner_alias === 'string' &&
+      ALIAS_PATTERN.test(value.winner_alias) && isCents(value.final_amount_cents)
+    : value.outcome === 'unsold' && value.bid_count === 0 && value.winner_alias === null &&
+      value.final_amount_cents === null && value.final_hash === '0'.repeat(64)
 }
 
 export function isMyBids(value: unknown): value is MyBids {

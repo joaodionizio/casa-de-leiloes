@@ -35,3 +35,6 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "settlement_lifecycle: exercise real settlement catch-up and scheduler in app lifespan",
+]

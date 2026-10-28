@@ -5,7 +5,7 @@ import type { RoomMessage, ConnectionState } from './lotRoomSocket.ts'
 const LOT = '00000000-0000-4000-8000-000000000001'
 const snapshot: RoomMessage = { type: 'room_snapshot', lot_id: LOT, room: {
   as_of: '2026-10-27T12:00:00Z', phase: 'live', ends_at: '2026-10-27T13:00:00Z',
-  current_bid_cents: null, minimum_next_bid_cents: 10000, bid_count: 0, bids: [],
+  current_bid_cents: null, minimum_next_bid_cents: 10000, bid_count: 0, bids: [], settlement_status: 'pending', settlement: null,
 } }
 function harness(initialOnline = true, constructorFails = false) {
   let now = 0
@@ -51,6 +51,47 @@ function harness(initialOnline = true, constructorFails = false) {
     network: (online: boolean) => { network = online; if (online) machine.online(); else machine.offline() },
     diagnoses: () => diagnoses, recoveries: () => recoveries }
 }
+
+test('T22/T23/T40 terminal initial snapshot reaches the consumer before any ping or retry', () => {
+  for (const sold of [false, true]) {
+    const h = harness(false)
+    h.network(true)
+    h.network(true)
+    const final: RoomMessage = { ...snapshot, room: { ...snapshot.room,
+      phase: 'ended', settlement_status: 'settled', settlement: {
+        outcome: sold ? 'sold' : 'unsold', winner_alias: sold ? 'Licitante-AAAAAAAAAAAAAAAA' : null,
+        final_amount_cents: sold ? 10000 : null, bid_count: sold ? 1 : 0,
+        final_hash: (sold ? 'a' : '0').repeat(64), settled_at: '2026-10-27T13:00:00Z',
+      } } }
+    h.frame(final)
+    assert.equal(h.statuses.at(-1), 'terminal')
+    assert.deepEqual(h.messages, [final])
+    assert.equal(h.sockets[0].sent.length, 0)
+    h.network(false); h.network(true)
+    h.advance(90_000)
+    for (const timer of h.timers) timer.callback()
+    assert.equal(h.sockets.length, 1)
+    assert.equal(h.sockets[0].closes, 1)
+  }
+})
+
+test('T21/T38 current lot_closed drains client activity; delayed callbacks stay retired', () => {
+  const h = harness()
+  h.frame(snapshot)
+  h.frame({ type: 'pong', id: 1 })
+  const oldMessage = h.sockets[0].onmessage!
+  const frame = { type: 'lot_closed', lot_id: LOT, outcome: 'unsold', winner_alias: null,
+    final_amount_cents: null, bid_count: 0, final_hash: '0'.repeat(64),
+    settled_at: '2026-10-27T13:00:00Z', as_of: '2026-10-27T13:00:00Z' }
+  h.frame(frame)
+  assert.equal(h.statuses.at(-1), 'terminal')
+  oldMessage.call(h.sockets[0] as unknown as WebSocket, { data: JSON.stringify(snapshot) } as MessageEvent)
+  h.advance(120_000)
+  h.network(true)
+  assert.deepEqual(h.messages, [snapshot, frame])
+  assert.equal(h.sockets.length, 1)
+  assert.equal(h.sockets[0].sent.length, 1)
+})
 
 test('opening requires its own valid snapshot and one total 30s deadline', () => {
   const h = harness()

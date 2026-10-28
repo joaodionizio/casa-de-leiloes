@@ -29,6 +29,7 @@ function room(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     minimum_next_bid_cents: 130000,
     bid_count: 1,
     bids: [bidItem()],
+    settlement_status: 'pending', settlement: null,
     ...overrides,
   }
 }

@@ -39,7 +39,7 @@ As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + 
 | AD-16 | Fluxo vertical completo primeiro | Desenvolver todas as camadas em paralelo antes de fechar um fluxo ponta a ponta | Cortar opcionais sem comprometer o obrigatório |
 | AD-17 | Testes críticos em PostgreSQL real | Não informada | Cobrem concorrência e adulteração |
 | AD-18 | Git manual; `docs/uso_de_ia.md` contínuo | Não informada | Histórico reflete o meu processo |
-| AD-19 | Fechamento em estratégia dupla: scheduler interno simples + catch-up na inicialização e em operações que já alteram estado (tentativa de lance), sempre pelo serviço do AD-9; leituras nunca liquidam; evento só após commit | Depender só de timer em memória; depender só de uma requisição específica; liquidar em GET por ser derivada do tempo | Depois de um cold start, a inicialização liquida os atrasados; leituras mostram "Encerrado, apurando resultado" |
+| AD-19 | Fechamento por scheduler interno + catch-up no lifespan depois de migrations/seed e antes do tráfego; exclusivamente pelo serviço AD-9; POST vencido só recusa; leituras nunca liquidam; evento só pós-commit. Revisada na spec 4.4 em 27/10/2026 | Depender só de timer ou requisição; liquidar em GET; acoplar fechamento à recusa de lance; mover seed após catch-up | Preservo startup existente; recuperação operacional e snapshot terminal após cold start |
 | AD-20 | Pseudônimo por lote: `HMAC(PSEUDONYM_SECRET, "{lot_id}:{user_id}")`, exibindo parte do resultado | Pseudônimo global | Mesmo alias no mesmo lote, alias diferente entre lotes |
 | AD-21 | Representação canônica v1 do lance e da âncora (JSON canônico, UTC, 6 casas, sufixo Z, genesis de 64 zeros) | Não registrei | Mesmos bytes e mesmo hash para a mesma entrada, com teste |
 | AD-22 | Imagem: não armazenar bytes; guardar `image_id` e referência IIIF; placeholder local se falhar. **Transporte revisado em 24/10/2026:** proxy same-origin controlado (`GET /api/catalog/images/{image_id}`) em vez do hotlink direto do navegador | Baixar e armazenar os bytes; hotlink direto (refutado: 403 do Cloudflare) | Só a imagem depende do museu; o resto não |
@@ -596,10 +596,14 @@ mencionado vem de comando realmente executado.
 
 **Descartei:** não registrei alternativa para esta decisão.
 
-### AD-19. Gatilho do fechamento: estratégia dupla, sem liquidar em leituras
+### AD-19. Gatilho do fechamento: scheduler e catch-up próprios (revisada em 27/10/2026)
 Esta decisão incorpora a resolução do antigo B2.
 
-**Decidi** usar estratégia dupla. GET, HEAD e OPTIONS nunca alteram estado.
+**Decisão humana vigente — QH-02/13/14 da Story 4.4.** Decidi preservar
+`migrations → seed existente → lifespan/catch-up → scheduler → tráfego`.
+O seed continua no mecanismo atual, antes da aplicação; não o movo para o lifespan.
+GET, HEAD e OPTIONS nunca alteram estado. Settlement só é disparado pelos
+mecanismos operacionais próprios abaixo, sem alterar as regras da 4.3.
 
 **Enquanto o processo estiver acordado:** um scheduler interno simples procura
 lotes vencidos periodicamente e chama o mesmo serviço de fechamento idempotente
@@ -608,14 +612,15 @@ resolver.
 
 **Catch-up:** o fechamento atrasado pode ser disparado apenas por:
 1. a inicialização da aplicação, que executa o catch-up dos lotes vencidos antes
-   do funcionamento normal. Depois de um cold start do Render, isso liquida os
-   atrasados;
-2. o scheduler interno, enquanto o processo estiver acordado;
-3. operações que já alteram estado, especialmente a tentativa de lance.
+   do funcionamento normal e depois de migrations/seed. Falha individual é
+   isolada; indisponibilidade sistêmica do banco pode impedir startup;
+2. o scheduler interno, enquanto o processo estiver acordado, com espera de
+   2 s depois de cada ciclo e guard local SKIP, sem timer sobreposto.
 
-**Tentativa de lance:** se chegar `POST /api/lots/{lot_id}/bids` e o lote já
-estiver vencido, o fluxo pode primeiro executar o serviço idempotente de
-fechamento/liquidação e, depois, devolver a resposta de lote encerrado.
+**Tentativa de lance:** `POST /api/lots/{lot_id}/bids` mantém a recusa de domínio
+existente para lote vencido. Não abre segunda transação de settlement e não
+publica encerramento por esse caminho. Descartei acoplar a rejeição do comando
+ao fechamento; catch-up/scheduler fazem a recuperação operacional.
 
 **Leituras:** nenhuma leitura liquida. Isso vale para abrir sala, consultar
 resultado, consultar meus arremates, o handshake do WebSocket e qualquer outra
@@ -635,6 +640,12 @@ e a ausência de efeitos colaterais em GET.
   requisição específica;
 - permitir que requisições GET executem liquidação apenas por ela ser derivada
   do tempo.
+
+**Histórico substituído, sem vigência:** antes das decisões humanas da spec 4.4,
+esta AD permitia catch-up em tentativa de lance e Q4 previa catch-up antes do
+seed. QH-02/13/14 revogam ambas as direções, preservando o serviço transacional,
+a regra de leituras puras e a publicação exclusivamente pós-commit. Não alterei
+código nesta consolidação documental.
 
 ### AD-20. Pseudônimo determinístico por lote
 **Decidi** usar pseudônimo determinístico por lote, não global, gerado com HMAC e
@@ -865,8 +876,8 @@ comportamento transacional do PostgreSQL.
 - **B1 (resolvido):** TypeScript. O AD-4 permanece vinculante, o AD-28 e o AD-27
   foram corrigidos e JavaScript puro permanece como alternativa descartada.
 - **B2 (resolvido):** GET, HEAD e OPTIONS nunca alteram estado. O catch-up do
-  AD-19 saiu das leituras e ficou na inicialização, no scheduler e em operações
-  que já alteram estado. Alternativa descartada: liquidar em GET.
+  AD-19 saiu das leituras e ficou na inicialização e no scheduler. A revisão
+  humana da 4.4 também retirou o gatilho em POST vencido. Alternativa descartada: liquidar em GET.
 - **B3 (resolvido):** papéis técnicos `AUCTIONEER` e `BIDDER`.
 
 Cruzamentos conferidos depois do fechamento: AD-19 com AD-29 (coerentes: nenhuma
@@ -880,7 +891,7 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
 1. **Intervalos.** Intervalo do scheduler (AD-19), intervalo do heartbeat e tempo
    limite para conexões sem heartbeat (AD-10). O navegador não reconecta
    WebSocket sozinho: o cliente precisa de reconexão com espera crescente.
-   **Heartbeat/reconexão resolvidos na spec 4.2 em 27/10/2026**, conforme consolidação no AD-10 e QH-01–16. Só intervalo do scheduler permanece aberto (4.4); implementação da 4.2 ainda não iniciada.
+   **Heartbeat/reconexão resolvidos na spec 4.2 em 27/10/2026**, conforme consolidação no AD-10. **Scheduler decidido na spec 4.4:** ciclo → espera interrompível de 2 s → próximo ciclo; SKIP local e backoff operacional de 2–30 s em falhas. Spec consolidada sem autorizar código.
 2. **Origin no WebSocket.** O stream é público, mas o handshake valida `Origin`?
    **Resolvida na Story 4.1 (27/10/2026):** decidi que o handshake de `/ws/lots/{lot_id}`
    valida `Origin` contra a `APP_ORIGIN` quando o cabeçalho existe (esquema, host e porta
@@ -893,8 +904,10 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    **Resolvida na Story 3.3 (26/10/2026):** persisto o alias em cada lance; a
    auditoria nunca o recalcula; sem tabela de mapeamento; rotação transparente não
    suportada (refinamento no AD-20).
-4. **Ordem na inicialização.** O catch-up de fechamento (AD-19) roda antes do
-   seed (AD-24) e antes de atender tráfego normal, e "lote demo realmente aberto"
+4. **Ordem na inicialização — revisada por QH-02/13 da 4.4.** O catch-up de
+   fechamento (AD-19) roda depois de migrations/seed existentes e antes de
+   atender tráfego normal. Descartei mover seed para depois do catch-up.
+   "Lote demo realmente aberto"
    significa estado aberto e `ends_at` maior que o `clock_timestamp()`. Se o seed
    criar lances, eles passam pelo serviço de domínio, para a cadeia e a âncora
    saírem válidas. Verificar no primeiro deploy se o catch-up não atrapalha a
@@ -902,15 +915,16 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    **Resolvida em parte na Story 2.4 (24/10/2026):** decidi que o lote demo
    realmente aberto é `is_demo` e `ends_at > clock_timestamp()`, lido depois de
    `pg_advisory_xact_lock`, que serializa dois seeds simultâneos; a ordem continua
-   migrations → seed → servidor (`start.sh`). O catch-up de fechamento da 4.4 entra
-   **antes** do seed, e a 3.6 acrescenta "e não cancelado" ao predicado. Um demo
+   migrations → seed → servidor (`start.sh`). Pela revisão humana da 4.4,
+   catch-up entra no lifespan **depois** do seed e antes do tráfego; a 3.6
+   acrescenta "e não cancelado" ao predicado. Um demo
    vencido e ainda não liquidado conta como encerrado (o seed cria outro).
    **Story 3.4 (26/10/2026):** o predicado ganha "e autenticado" (`anchor_hmac IS
    NOT NULL`): um demo anterior à 3.4, sem âncora, não conta como aberto, e o seed
    cria um demo novo já assinado, sem tornar o antigo confiável.
    Descartei `SELECT ... FOR UPDATE` (não há linha para travar), a trava de sessão e
-   `pg_try_advisory_lock` com desistência. Continua aberto: o catch-up em si (4.4) e
-   a verificação no primeiro deploy com ele.
+   `pg_try_advisory_lock` com desistência. O contrato do catch-up está decidido
+   na spec 4.4; implementação e verificação no primeiro deploy com ele são futuras.
 5. **Limite exato dos 2 minutos.** O AD-26 pede esse limite nos testes de
    integração com o relógio real, mas o instante exato só é reproduzível com
    `now` injetado. Defino: limite exato em teste com `now` fixo; caminho real com
@@ -939,8 +953,10 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
    campo único com `closing`/`closed` e duas consultas independentes em `READ COMMITTED`
    (snapshots diferentes). Detalhes em
    `_bmad-output/implementation-artifacts/2-5-vitrine-pública-e-página-do-lote.md`.
-9. **Tentativa de lance em lote vencido.** Ordem dentro da requisição: executar o
-   fechamento (transação própria) e só então devolver "lote encerrado".
+9. **Tentativa de lance em lote vencido — revisada por QH-14 da 4.4.** Decidi
+   manter somente a recusa de domínio existente. Sem settlement, segunda
+   transação ou publicação terminal como efeito da requisição. Descartei o
+   gatilho anteriormente previsto; fechamento exclusivo de catch-up/scheduler.
 10. **Nomes ainda não definidos.** Rota do WebSocket da sala; rotas do comprovante
     e do link compartilhável; nome do segredo do JWT; ferramenta de teste do
     front-end.
@@ -996,7 +1012,7 @@ trava do lote); AD-6 com AD-26 (hora do banco entra como parâmetro).
   heartbeat mantendo o serviço acordado, um único serviço 24 horas por dia usa
   cerca de 744 horas. Outro serviço gratuito no mesmo workspace soma horas.
 - **Liquidação tardia:** com o serviço dormindo, o fechamento só acontece na
-  inicialização seguinte (cold start), pelo scheduler ou numa tentativa de lance.
+  inicialização seguinte (cold start), depois de migrations/seed, ou pelo scheduler.
   Até lá, as leituras mostram "Encerrado, apurando resultado". Declarar no
   README.
 - **Limitação commit/publicação (AD-25):** declarar no README.

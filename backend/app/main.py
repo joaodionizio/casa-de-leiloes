@@ -1,6 +1,8 @@
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+from anyio import CancelScope, to_thread
 from fastapi import FastAPI
 
 from app.access import AccessPolicy, api_route
@@ -21,10 +23,12 @@ from app.config import (
     session_cookie_for_origin,
 )
 from app.csrf import ApiWriteGuardMiddleware
+from app.db import create_session_factory, get_engine
 from app.errors import register_error_handlers
 from app.lot_cancellation import register_lot_cancellation_routes
 from app.lot_room import register_room_routes
 from app.lots import register_lot_routes
+from app.settlement_scheduler import SettlementScheduler
 from app.spa import register_spa_routes, validate_spa_dist_dir
 from app.wallet import register_wallet_routes
 
@@ -67,12 +71,26 @@ def create_app(
         )  # type: ignore[arg-type]  # str do chamador; o Pydantic converte
     integrity = integrity_config(integrity_settings, auth_settings.jwt_secret)
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        factory = await to_thread.run_sync(lambda: create_session_factory(get_engine()))
+        scheduler = SettlementScheduler(factory, integrity, app.state.room_manager)
+        app.state.settlement_scheduler = scheduler
+        try:
+            await scheduler.catch_up()
+            scheduler.start()
+            yield
+        finally:
+            with CancelScope(shield=True):
+                await scheduler.stop()
+
     app = FastAPI(
         title="ÁTRIO",
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
         swagger_ui_oauth2_redirect_url=None,
+        lifespan=lifespan,
     )
     # Segredo, nome e `Secure` do cookie ficam na app, para que apps de teste com
     # origens diferentes convivam no mesmo processo.

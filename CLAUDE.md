@@ -111,8 +111,8 @@ que não mudam a arquitetura.
   obrigatórios; estados nunca só por cor.
 - AD-16 Fluxo vertical completo primeiro (lote criado até auditoria).
 - AD-17 Testes críticos em PostgreSQL real. AD-18 Git e IA como acima.
-- AD-19 Fechamento: scheduler simples + catch-up na inicialização e em
-  operações que já alteram estado (tentativa de lance). **GET, HEAD e OPTIONS
+- AD-19 Fechamento: scheduler simples + catch-up no lifespan após migrations/seed
+  e antes do tráfego (revisão humana 4.4); POST vencido só recusa. **GET, HEAD e OPTIONS
   nunca alteram estado: nenhuma leitura liquida lote.** Leitura de lote vencido
   e não liquidado mostra "Encerrado, apurando resultado". Evento só depois do
   commit.
@@ -184,10 +184,10 @@ dispensado: o enunciado já é a especificação (registrar o motivo).
 
 ## Questões para a implementação (perguntar antes; não mudam a arquitetura)
 IDs históricos preservados; detalhes e decisões fechadas na arquitetura.
-- **Q1:** scheduler permanece aberto (4.4); heartbeat/reconexão decididos na spec 4.2: ping 20 s, pong 10 s, silêncio 60 s, snapshot 30 s; backoff exponencial 1–30 s/equal jitter, reset só snapshot+pong. Geração substitui sem esperar CLOSED; send/close backend 10 s. Tetos e timeout pós-commit D-A adiados. Ready-for-dev não autoriza código nesta sessão.
-- **Q4:** catch-up antes do seed/tráfego (4.4); demo já definido nas 2.4/3.4/3.6.
+- **Q1:** scheduler decidido na spec 4.4: ciclo → espera interrompível 2 s; SKIP local. Heartbeat/reconexão 4.2: ping 20 s, pong 10 s, silêncio 60 s, snapshot 30 s; backoff 1–30 s/equal jitter, reset snapshot+pong; geração substitui sem esperar CLOSED; send/close 10 s preservados. Tetos e timeout pós-commit D-A adiados; ready-for-dev não autoriza código.
+- **Q4:** revisão humana 4.4: migrations → seed existente → lifespan/catch-up → scheduler → tráfego; não mover seed. Demo preservado das 2.4/3.4/3.6.
 - **Q6:** implementar/validar que só quem fechou publica o evento (4.4).
-- **Q9:** fechar antes de recusar lance vencido (4.4); hoje só recusa.
+- **Q9:** revisão humana QH-14/4.4: POST vencido só recusa; sem settlement/segunda transação/publicação. Fechamento exclusivo de catch-up/scheduler.
 - **Q10:** rotas do comprovante e do link (a do WebSocket da sala fechou na 4.1).
 
 Fechadas: Q2 na 4.1 (`Origin` presente = `APP_ORIGIN`; ausente aceita) e Q10 parcial na 4.1

@@ -28,6 +28,8 @@ def snapshot(count=0):
         minimum_next_bid_cents=10000,
         bid_count=count,
         bids=[],
+        settlement_status="pending",
+        settlement=None,
     )
 
 
@@ -59,6 +61,8 @@ def test_public_snapshot_origin_and_commands(monkeypatch, origin, cookie):
                 "ends_at",
                 "current_bid_cents",
                 "minimum_next_bid_cents",
+                "settlement_status",
+                "settlement",
                 "bid_count",
                 "bids",
             }

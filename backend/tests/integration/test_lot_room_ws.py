@@ -49,6 +49,8 @@ ROOM_KEYS = {
     "ends_at",
     "current_bid_cents",
     "minimum_next_bid_cents",
+    "settlement_status",
+    "settlement",
     "bid_count",
     "bids",
 }
