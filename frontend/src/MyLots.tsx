@@ -14,13 +14,13 @@ import {
 } from './lotCancellation'
 import type { CancelNotice } from './lotCancellation'
 import { lotTitleText } from './lotLabels'
-import { phaseLabel } from './lotPhase'
+import { phaseStatusText } from './lotPhase'
 import { formatDateTime } from './lotTime'
 import { formatCents } from './money'
 
 type ListState =
   | { status: 'loading' }
-  | { status: 'ready'; items: MyLotResponse[] }
+  | { status: 'ready'; items: MyLotResponse[]; asOf: string; totalReceivedCents: number }
   | { status: 'failed'; failure: MyLotsFailure }
 
 // 'stale': a leitura foi substituída ou a tela desmontou; o resultado foi descartado.
@@ -46,6 +46,8 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [notice, setNotice] = useState<CancelNotice | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [stale, setStale] = useState(false)
   const headingRef = useRef<HTMLHeadingElement>(null)
   // O pai recria `onSessionExpired` a cada renderização; a referência evita que isso
   // dispare uma nova busca.
@@ -54,6 +56,9 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
   // Só a leitura mais recente vale: um snapshot antigo nunca apaga um cancelamento.
   const readSeqRef = useRef(0)
   const readControllerRef = useRef<AbortController | null>(null)
+  const readPromiseRef = useRef<Promise<ReadOutcome> | null>(null)
+  const hasSnapshotRef = useRef(false)
+  const blockedRef = useRef(false)
   // Marcado de forma síncrona, antes do primeiro `await`: clique e Enter repetidos não
   // iniciam um segundo POST.
   const submittingRef = useRef(false)
@@ -80,37 +85,81 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
     readSeqRef.current += 1
     readControllerRef.current?.abort()
     readControllerRef.current = null
+    readPromiseRef.current = null
   }
 
-  function readList(mode: 'initial' | 'refresh'): Promise<ReadOutcome> {
-    invalidateReads()
+  function readList(mode: 'initial' | 'refresh', afterCancellation = false): Promise<ReadOutcome> {
+    if (blockedRef.current || (submittingRef.current && !afterCancellation)) return Promise.resolve('stale')
+    if (readPromiseRef.current !== null) return readPromiseRef.current
     const controller = new AbortController()
     readControllerRef.current = controller
     const seq = readSeqRef.current
-    return fetchMyLots(controller.signal).then((result): ReadOutcome => {
+    const pending = fetchMyLots(controller.signal).then((result): ReadOutcome => {
       if (controller.signal.aborted || seq !== readSeqRef.current || !mountedRef.current) {
         return 'stale'
       }
       if (result.ok) {
-        setState({ status: 'ready', items: result.items })
+        hasSnapshotRef.current = true
+        setState({ status: 'ready', items: result.items, asOf: result.asOf, totalReceivedCents: result.totalReceivedCents })
+        setStale(false)
         return 'ok'
       }
       if (result.failure === 'unauthorized') {
+        blockedRef.current = true
+        hasSnapshotRef.current = false
+        setState({ status: 'failed', failure: 'unauthorized' })
         expiredRef.current()
         return 'unauthorized'
       }
       // Na releitura a lista anterior continua na tela; só a carga inicial falha inteira.
-      if (mode === 'initial') setState({ status: 'failed', failure: result.failure })
+      if (result.failure === 'forbidden') {
+        blockedRef.current = true
+        hasSnapshotRef.current = false
+        setState({ status: 'failed', failure: 'forbidden' })
+      } else if (mode === 'initial') setState({ status: 'failed', failure: result.failure })
+      else setStale(true)
       return 'failed'
+    }).finally(() => {
+      if (seq === readSeqRef.current && mountedRef.current) {
+        readPromiseRef.current = null
+        readControllerRef.current = null
+        setRefreshing(false)
+      }
     })
+    readPromiseRef.current = pending
+    return pending
+  }
+
+  function refreshList() {
+    if (blockedRef.current || submittingRef.current || readPromiseRef.current !== null) return
+    setRefreshing(true)
+    void readList(hasSnapshotRef.current ? 'refresh' : 'initial')
   }
 
   useEffect(() => {
     mountedRef.current = true
     void readList('initial')
+    // Blur/hidden delimitam uma retomada; visible e focus da mesma retomada leem uma vez.
+    let resumed = false
+    const refreshOnReturn = () => {
+      if (document.visibilityState === 'hidden' || resumed) return
+      resumed = true
+      refreshList()
+    }
+    const resetReturn = () => { resumed = false }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') resetReturn()
+      else refreshOnReturn()
+    }
+    window.addEventListener('focus', refreshOnReturn)
+    window.addEventListener('blur', resetReturn)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       mountedRef.current = false
       invalidateReads()
+      window.removeEventListener('focus', refreshOnReturn)
+      window.removeEventListener('blur', resetReturn)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
     // `readList` só usa refs e setters estáveis; a carga reinicia apenas no `attempt`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,12 +189,16 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
     setNotice(null)
     // Uma leitura em andamento mostraria o estado de antes do POST.
     invalidateReads()
+    setRefreshing(false)
     try {
       const result = await cancelLot(lotId)
       if (!mountedRef.current) return
       let failure: Exclude<CancelLotFailure, 'unauthorized'> | null = null
       if (!result.ok) {
         if (result.failure === 'unauthorized') {
+          blockedRef.current = true
+          hasSnapshotRef.current = false
+          setState({ status: 'failed', failure: 'unauthorized' })
           expiredRef.current()
           return
         }
@@ -158,7 +211,8 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
           : cancelFailureNotice(failure),
       )
       if (shouldRefetch(failure)) {
-        const outcome = await readList('refresh')
+        setRefreshing(true)
+        const outcome = await readList('refresh', true)
         if (outcome === 'failed') {
           // O resultado do POST não é invertido pela releitura que falhou.
           if (failure === null) {
@@ -183,6 +237,22 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
       <h1 id="my-lots-title" ref={headingRef} tabIndex={-1}>
         Meus lotes
       </h1>
+
+      {state.status === 'ready' && (
+        <div className="my-lots-summary">
+          <p className="my-lots-total">Total recebido <strong>{formatCents(state.totalReceivedCents)}</strong></p>
+          <div className="my-lots-refresh">
+            <p className="muted">Situação atualizada: {formatDateTime(state.asOf)}</p>
+            <button type="button" className="button button-secondary" disabled={submitting} aria-disabled={refreshing || submitting}
+              onClick={refreshList}>
+              {refreshing ? 'Atualizando…' : 'Atualizar'}
+            </button>
+          </div>
+        </div>
+      )}
+      <p role="status" className={refreshing || stale ? 'muted my-lots-read-status' : 'visually-hidden'}>
+        {refreshing ? 'Atualizando…' : stale ? 'Não foi possível atualizar a lista. Os dados exibidos podem estar desatualizados.' : state.status === 'ready' ? 'Lista atualizada.' : ''}
+      </p>
 
       {/* Sempre montada: o aviso de sucesso ou de incerteza não some com a releitura. */}
       <p
@@ -254,10 +324,19 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
                       {lot.cancelled_at !== null ? (
                         <strong className="lot-cancelled-mark">Cancelado</strong>
                       ) : (
-                        <strong>{phaseLabel(lot.phase)}</strong>
+                        <strong>{lot.settlement?.outcome === 'sold' ? 'Vendido' : lot.settlement?.outcome === 'unsold' ? 'Sem arremate' : phaseStatusText(lot.phase)}</strong>
                       )}
                       <span className="muted"> · {bidCountText(lot.bid_count)}</span>
                     </span>
+                    {lot.settlement !== null && (
+                      <dl className="lot-row-result">
+                        {lot.settlement.outcome === 'sold' && (<>
+                          <div><dt>Valor final</dt><dd className="lot-money-small">{formatCents(lot.settlement.final_amount_cents)}</dd></div>
+                          <div><dt>Vencedor</dt><dd>{lot.settlement.winner_alias}</dd></div>
+                        </>)}
+                        <div><dt>Apurado em</dt><dd>{formatDateTime(lot.settlement.settled_at)}</dd></div>
+                      </dl>
+                    )}
                   </div>
                   <dl className="lot-row-facts">
                     <div>

@@ -1655,3 +1655,96 @@ retries comprovada. Os gates finais passaram: 42 testes 4.4, 153 regressões,
 2208 backend, 179 frontend, 227 Playwright e 5 skips preexistentes. Story,
 sprint e SPEC `done`; Epic 4 permanece `in-progress` e 4.5 `backlog`. Nenhuma
 suíte foi executada nem código ou teste alterado no fechamento documental.
+
+
+## Especificação da Story 4.5 — 28/10/2026
+
+Pedi ao Codex somente criar e validar a especificação com bmad-spec, sem código,
+testes de aplicação, Git, leitura de .env* ou início do Epic 5. Sol/High constavam
+como recomendações do pedido; não atribuo uma troca de modelo não comprovada.
+
+A IA inspecionou as fontes obrigatórias e o código vivo do painel, API privada,
+Lot/LotSettlement/Receipt, readers, autenticação/policy, React/formatadores e testes.
+Confirmou que /api/lots/mine é uma lista completa por proprietário, sem paginação,
+com ordem por criação, snapshot único e sem resultado. Os readers individuais da
+4.3 não devem ser chamados em loop: propôs composição estrutural em lote, seguindo
+o precedente público da 4.4, sem chamar serviço financeiro ou publicar evento.
+
+Criei story draft e pacote spec-story-4-5-resultado-dos-lotes-no-painel-do-leiloeiro,
+com memória append-only via writer oficial, kernel CAP-1–6 e oito companions de
+estado atual, dados/API, autorização, UX, refresh, testes, decisões e validação.
+QH-01–12 continuam abertas; recomendações não foram aprovadas silenciosamente.
+Descobri que o épico original exige total recebido e recebi a questão adicional
+QH-13: escolhi **manter uma soma simples de vendidos**, superando a recomendação
+da IA de retirar o agregado. A especificação incorpora a soma dos próprios sold,
+sem ler wallet ou criar analytics. As demais decisões continuam sob minha revisão.
+
+Planejei CA01–CA12, B01–B24, F01–F22 e E01–E08, incluindo estados, conflitos,
+queries constantes, autorização/privacidade, ausência de efeitos e total coerente.
+Não executei nenhum desses testes. Fiz somente autovalidação documental em duas
+passagens e conferência estática de referências/IDs/tracking/hashes. Isso não é
+review independente, prova PG/E2E ou aceite de produto.
+
+Os resolvers BMAD falharam inicialmente por lock no cache padrão do uv e passaram
+com cache em /private/tmp, sem necessidade de escalada. Mantive story/SPEC draft,
+sprint 4.5 backlog e Epic 4 in-progress. Não reconciliei estados review históricos
+das 4.1/4.2: registrei diferença em relação à conclusão informada no pedido.
+Não executei código de aplicação, testes, verify, SQL, migrations, navegador, smoke,
+deploy ou Git; não li .env*. Código/testes e demais stories foram preservados.
+
+Conferência documental final: exit 0, errors[]; links e companions existentes,
+IDs e tracking conferidos. Comparei 213 arquivos da baseline: somente sprint
+foi alterado por comentários, sem mudança de status; código/testes e arquivos
+protegidos capturados permaneceram idênticos. QH-01–12 abertas, QH-13 decidida;
+sem ready-for-dev. Vereditos de coerência/preservação registrados na memória.
+
+
+## Consolidação e build autorizado da Story 4.5 — 28/10/2026
+
+Decidi QH-01–13 e autorizei consolidação/revalidação e implementação sequenciais,
+sem nova confirmação. A IA rederivou a especificação pela memória append-only,
+preservou CAP-1–6 e as matrizes B01–24/F01–22/E01–08 e não encontrou conflito AD.
+Após o gate documental, promoveu ready-for-dev e iniciou o build autorizado.
+
+A skill bmad-build delegou a implementação; a coordenação conferiu tarefas e
+critérios e executou gates e smoke. Não solicitei code review nesta sessão.
+Somente lots.py, api/lots.ts, MyLots.tsx e App.css mudaram como produção. Mantive
+fonte 4.3, scheduler 4.4, carteira, lances, autenticação e migrations intactos.
+A entrega tem resumo persistido, total próprio no mesmo snapshot e montagem/manual/
+foco sem polling. Identidade privada, hash, HMAC e receipt ficam fora da resposta.
+
+Resultados reais: 108 testes backend focados passaram em 13.35s; Node, 182;
+Chromium focado, 34 em 8.2s. Verifies finais exit 0: 2237 backend em 131.20s e
+2237 em 147.69s, frontend 182 em ambos; Playwright 241 em 34.1s, com 5 skips
+existentes. Ruff/formato, ESLint, tsc, Vite e Docker passaram. O primeiro par de
+gates também passou (2235/182/241+5); repeti os dois após reforçar a prova privada
+de unsold+receipt, receipt órfão e ausência de publicação. As FKs de teste foram
+restauradas exatamente em finally. O warning Starlette/httpx é preexistente.
+
+Smoke com API real, PostgreSQL exclusivo e Chromium: estados mistos, total de
+13000 para 30000, alias/valor, unsold sem vencedor, GET/manual sem efeitos,
+settlement externo seguido de manual/foco, stale após 503 e recuperação, 401/403,
+e segundo leiloeiro somente com seu lote/total de 7000. Conferi capturas desktop
+1440 px e mobile 320 px. Imagens foram interceptadas com 503 para testar fallback.
+O navegador integrado não conectou; usei Chromium local. Corrigi imports e a
+sincronização do harness antes da prova final; a primeira corrida de sinais não
+foi usada como evidência de pureza. O banco exclusivo foi removido. A primeira
+rodada E2E também revelou perda de foco do Atualizar, corrigida antes dos gates.
+Não validei Render, dispositivo físico ou outros navegadores nesta sessão.
+
+Usei guardas contra dotenv em uv/Python/Node/Compose e execução local elevada
+quando o sandbox exigiu. Não executei Git, não li .env*, não fiz deploy nem iniciei Epic 5.
+Story/sprint ficam review, SPEC in-review e Epic 4 in-progress. Review independente
+da story e agregado do Epic 4 continuam posteriores. A evidência completa fica no
+pacote 4.5; frontend/test-results/.last-run.json foi regenerado fora da lista prevista.
+
+Conferência estática final exit 0/errors[]: 27 arquivos alterados, quatro de produção,
+links/companions e tracking válidos. Corpo anterior da memória preservado; o timestamp
+updated do writer não é parte do conteúdo append-only. Financeiro, contratos públicos,
+scheduler, auth, migrations, verify e ADs idênticos à baseline. Nenhum arquivo de
+segredo alterado na checagem por nomes; conteúdo não lido nem comparado.
+
+
+### Fechamento documental da Story 4.5 e do Epic 4 — 28/10/2026
+
+Autorizei o fechamento com review final da Story 4.5 aprovado, 0 HIGH / 0 MEDIUM / 0 LOW, e Epic 4 aprovado para fechamento. A IA registrou Story, sprint e SPEC 4.5 como `done` e Epic 4 como `done`, preservando o histórico. Nesta etapa não alterou código ou testes, não executou testes nem Git, não leu .env* e não iniciou Epic 5.

@@ -462,12 +462,39 @@ e é quem decide. "Revisar lote" revalida os horários antes da revisão.
 No dinheiro, `655.3` é recusado com a dica de usar vírgula (`655,30`): o ponto só vale como
 milhar.
 
-**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): `{as_of, items}` com todos os lotes
+**Meus lotes** (`GET /api/lots/mine`, só `AUCTIONEER`): `{as_of, items, total_received_cents}` com todos os lotes
 do leiloeiro da sessão, **inclusive os cancelados**, do mais recente para o mais antigo,
 sem paginação e sem limite. É leitura pura (só `SELECT`) e não consulta a AIC. Cada item
-traz, além dos campos da criação, `cancelled_at`, `bid_count` (contagem persistida, só uma
-dica de tela) e `phase` (`scheduled`, `live` ou `ended`), calculada no servidor com o
-`as_of` do banco. Um lote cancelado mostra o selo "Cancelado" no lugar da fase.
+traz, além dos campos da criação, `cancelled_at`, `bid_count` e `phase`
+(`scheduled`, `live` ou `ended`), calculada no servidor com o `as_of` do banco.
+Um lote cancelado mostra "Cancelado" no lugar da fase. A contagem é a atual antes
+da apuração e a congelada no settlement depois dela.
+
+### Resultado no painel (Story 4.5)
+
+Estendi a mesma rota com `settlement_status` (`pending`/`settled`) e `settlement`
+por lote; o envelope agora é `{as_of, items, total_received_cents}`. Sold apresenta
+`outcome`, `winner_alias`, `final_amount_cents`, `bid_count` e `settled_at`;
+unsold tem alias/valor nulos, count zero e o instante persistido. Nenhum hash,
+HMAC, ID/email real do vencedor, wallet ou receipt é devolvido. Settlement da 4.3
+é autoritativo; leitura não liquida, cria receipt ou publica evento.
+
+O painel mantém Agendado/Ao vivo/Cancelado e distingue "Encerrado, apurando resultado",
+"Vendido" e "Sem arremate". Exibe alias, valor final e apuração em vendido; unsold
+não ganha vencedor nem preço fictício. "Total recebido" é uma soma simples no backend
+de centavos dos sold próprios, no mesmo snapshot; não é saldo de carteira.
+
+Uma consulta de negócio lê lote/settlement/receipt por joins 1:1 com clock materializado,
+sem N+1; autenticação é uma consulta fixa adicional. Inconsistência causa 409
+`lot_integrity_conflict` integral, sem reparo ou lista/total parcial. Erros operacionais
+retornam 500 genérico. Política AUCTIONEER/ownership, 401/403 e no-store preservados.
+
+A tela lê ao abrir, pelo botão "Atualizar" e ao retornar ao foco. Descartei polling,
+WebSocket do painel, nova tela, filtros e reordenação por settlement. Falha inicial
+mostra erro; falha posterior conserva a lista/total e avisa que podem estar antigos.
+Sucesso substitui todo o snapshot e limpa o aviso. Datas usam o fuso do navegador
+e dinheiro usa o formatador BRL existente. Abas que permanecem abertas e visíveis
+precisam de atualização manual para descobrir mudanças.
 
 ### Lote demo
 
@@ -883,7 +910,7 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   da 3.5 há contagem regressiva visual e releitura no zero de cada `ends_at`,
   em "Atualizar sala" e depois do próprio lance. A Story 4.1 acrescenta snapshots
   WebSocket depois dos commits; o servidor sempre decide fase e aceitação do lance.
-- A interface continua mostrando "Encerrado, apurando resultado" para lotes encerrados.
+- As superfícies públicas continuam mostrando "Encerrado, apurando resultado" para lotes encerrados; o painel privado da 4.5 já distingue os resultados persistidos.
   A Story 4.4 apura automaticamente e expõe o resultado persistido no contrato
   público REST/WS, com cleanup terminal do transporte; mantive a apresentação
   existente até a story de UX do resultado. Nenhuma leitura liquida lote.

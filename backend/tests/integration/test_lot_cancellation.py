@@ -654,7 +654,11 @@ def test_the_owner_still_lists_the_cancelled_lot_with_the_new_fields(
     response = auctioneer.get("/api/lots/mine")
 
     body = response.json()
-    assert response.status_code == 200 and sorted(body) == ["as_of", "items"]
+    assert response.status_code == 200 and sorted(body) == [
+        "as_of",
+        "items",
+        "total_received_cents",
+    ]
     by_id = {item["id"]: item for item in body["items"]}
     assert set(by_id) == {str(cancelled), str(open_lot), str(with_bid)}
     assert parse(by_id[str(cancelled)]["cancelled_at"]) == stored
@@ -662,7 +666,8 @@ def test_the_owner_still_lists_the_cancelled_lot_with_the_new_fields(
     assert by_id[str(open_lot)]["bid_count"] == 0
     assert by_id[str(with_bid)]["bid_count"] == 1
     for item in by_id.values():
-        assert item["phase"] == "live" and len(item) == 21
+        assert item["phase"] == "live" and len(item) == 23
+        assert item["settlement_status"] == "pending" and item["settlement"] is None
 
 
 def test_a_cancelled_lot_that_later_ended_keeps_its_temporal_phase_for_the_owner(

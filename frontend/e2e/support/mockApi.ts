@@ -3,6 +3,7 @@
 // banco de desenvolvimento, a AIC ou o proxy de imagem real.
 
 import type { Page, Route } from '@playwright/test'
+import type { PrivateLotSettlementSummary } from '../../src/api/lots'
 
 export type Phase = 'scheduled' | 'live' | 'ended'
 export type Role = 'AUCTIONEER' | 'BIDDER'
@@ -187,6 +188,7 @@ export interface MockMyLot {
   phase: Phase
   bid_count: number
   cancelled_at: string | null
+  settlement?: PrivateLotSettlementSummary | null
 }
 
 export type CancelMode =
@@ -261,6 +263,7 @@ export interface MockApi {
   hold(request: string): { release: () => void; fail: () => void }
   // Troca os lances do lote no meio do teste (sequência crescente).
   setBids(lotId: string, bids: MockBid[]): void
+  setMyLotSettlement(lotId: string, settlement: PrivateLotSettlementSummary): void
   unexpected: string[]
 }
 
@@ -372,6 +375,14 @@ export async function mockApi(
     setBids: (id, bids) => {
       roomOf(id).bids = [...bids]
     },
+    setMyLotSettlement: (id, settlement) => {
+      const lot = myLots.find((item) => item.id === id)
+      if (lot !== undefined) {
+        lot.settlement = settlement
+        lot.bid_count = settlement.bid_count
+        lot.phase = 'ended'
+      }
+    },
     unexpected: [],
   }
 
@@ -462,6 +473,7 @@ export async function mockApi(
       }
       return json(route, 200, {
         as_of: AS_OF,
+        total_received_cents: myLots.reduce((total, lot) => total + (lot.settlement?.outcome === 'sold' ? lot.settlement.final_amount_cents : 0), 0),
         items: myLots.map((lot) => ({
           id: lot.id,
           external_id: 27_000,
@@ -484,6 +496,8 @@ export async function mockApi(
           cancelled_at: lot.cancelled_at,
           bid_count: lot.bid_count,
           phase: lot.phase,
+          settlement_status: lot.settlement ? 'settled' : 'pending',
+          settlement: lot.settlement ?? null,
         })),
       })
     }

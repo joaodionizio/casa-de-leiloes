@@ -56,6 +56,8 @@ KEYS = sorted(
         "cancelled_at",
         "bid_count",
         "phase",
+        "settlement_status",
+        "settlement",
     ]
 )
 
@@ -118,7 +120,8 @@ def test_an_auctioneer_without_lots_gets_an_empty_list(
 
     assert response.status_code == 200
     body = response.json()
-    assert sorted(body) == ["as_of", "items"]  # Story 3.6: o instante do banco
+    assert sorted(body) == ["as_of", "items", "total_received_cents"]
+    assert body["total_received_cents"] == 0
     assert body["as_of"].endswith("Z")
     assert body["items"] == []
     assert response.headers["cache-control"] == "no-store"

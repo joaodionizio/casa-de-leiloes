@@ -3,6 +3,9 @@
 // gate, lances, fim, concorrência) são do back-end e têm testes em PostgreSQL real; aqui
 // se prova DOM, foco, teclado e a contagem de pedidos contra a API simulada.
 import { expect, test, type Page } from '@playwright/test'
+import type { PrivateLotSettlementSummary } from '../src/api/lots'
+import { formatCents } from '../src/money'
+import { formatDateTime } from '../src/lotTime'
 import {
   CANCELLED_AT,
   LONG_TITLE,
@@ -21,6 +24,9 @@ const NEUTRAL_409 =
   'Não foi possível concluir a operação porque a integridade do lote não pôde ser confirmada.'
 const AMBIGUOUS =
   'Não foi possível confirmar o cancelamento. Confira a lista atualizada antes de tentar novamente.'
+const SOLD: PrivateLotSettlementSummary = { outcome: 'sold', winner_alias: 'Licitante-0123456789ABCDEF', final_amount_cents: 13000, bid_count: 3, settled_at: '2026-10-25T10:01:02.123456Z' }
+const UNSOLD: PrivateLotSettlementSummary = { outcome: 'unsold', winner_alias: null, final_amount_cents: null, bid_count: 0, settled_at: SOLD.settled_at }
+const STALE = 'Não foi possível atualizar a lista. Os dados exibidos podem estar desatualizados.'
 
 function myLot(n: number, phase: Phase, overrides: Partial<MockMyLot> = {}): MockMyLot {
   const window =
@@ -119,6 +125,209 @@ test.describe('elegibilidade e selo', () => {
     await expect(page.getByText('Não foi possível carregar seus lotes.')).toBeVisible()
     await expect(page.getByText('Você ainda não criou lotes.')).toHaveCount(0)
   })
+})
+
+test.describe('resultado persistido e atualização (4.5)', () => {
+  test('loading e falha inicial não inventam total nem vazio; retry recupera', async ({ page }) => {
+    const api = await mockApi(page, owner())
+    const held = api.hold(MINE)
+    await page.goto(PATH)
+    await expect(page.getByText('Carregando seus lotes…')).toBeVisible()
+    await expect(page.locator('.my-lots-total')).toHaveCount(0)
+    held.fail()
+    await expect(page.getByText('Não foi possível carregar seus lotes.')).toBeVisible()
+    await expect(page.getByText('Você ainda não criou lotes.')).toHaveCount(0)
+    await expect(page.locator('.my-lots-total')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Tentar novamente' }).click()
+    await expect(page.locator('li.lot-row')).toHaveCount(2)
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(0))
+    expect(api.count(MINE)).toBe(2)
+  })
+
+  test('sold/unsold/pending/cancelled mostram dados corretos e total na mesma lista', async ({ page }) => {
+    const api = await mockApi(page, owner('ok', { myLots: [
+      myLot(1, 'ended', { settlement: SOLD, bid_count: 3 }),
+      myLot(2, 'ended', { settlement: UNSOLD }),
+      myLot(3, 'ended'),
+      myLot(4, 'ended', { cancelled_at: CANCELLED_AT }),
+      myLot(5, 'live'), myLot(6, 'scheduled'),
+    ] }))
+    await openList(page)
+    await expect(row(page, 1).getByText('Vendido', { exact: true })).toBeVisible()
+    await expect(row(page, 1).getByText(SOLD.winner_alias!)).toBeVisible()
+    await expect(row(page, 1).getByText(formatCents(13000))).toBeVisible()
+    await expect(row(page, 1).getByText('3 lances')).toHaveCount(1)
+    await expect(row(page, 1).getByText(formatDateTime(SOLD.settled_at))).toBeVisible()
+    await expect(row(page, 2).getByText('Sem arremate', { exact: true })).toBeVisible()
+    await expect(row(page, 2).getByText('Vencedor', { exact: true })).toHaveCount(0)
+    await expect(row(page, 2).getByText('Valor final', { exact: true })).toHaveCount(0)
+    await expect(row(page, 3).getByText('Encerrado, apurando resultado')).toBeVisible()
+    await expect(row(page, 4).getByText('Cancelado', { exact: true })).toBeVisible()
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(13000))
+    await expect(page.getByText(/Situação atualizada:/)).toBeVisible()
+    expect(api.count(MINE)).toBe(1)
+    expect(api.unexpected).toEqual([])
+  })
+
+  for (const [outcome, result, label] of [['sold', SOLD, 'Vendido'], ['unsold', UNSOLD, 'Sem arremate']] as const) {
+    test(`manual pending→${outcome} troca resultado e total juntos sem mover foco`, async ({ page }) => {
+      const api = await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended')] }))
+      await openList(page)
+      await expect(row(page, 1).getByText('Encerrado, apurando resultado')).toBeVisible()
+      api.setMyLotSettlement(TARGET, result)
+      const button = page.getByRole('button', { name: 'Atualizar', exact: true })
+      await button.click()
+      await expect(row(page, 1).getByText(label, { exact: true })).toBeVisible()
+      await expect(button).toBeFocused()
+      await expect(page.locator('.my-lots-total')).toContainText(formatCents(outcome === 'sold' ? 13000 : 0))
+      expect(api.count(MINE)).toBe(2)
+      expect(api.cancelPosts).toHaveLength(0)
+    })
+  }
+
+  test('focus/visible/manual são deduplicados durante leitura e cancelamento pendente', async ({ page }) => {
+    const api = await mockApi(page, owner('ok', { cancelDelayMs: 700 }))
+    await openList(page)
+    const held = api.hold(MINE)
+    await page.getByRole('button', { name: 'Atualizar', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Atualizando…', exact: true })).toBeDisabled()
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('blur'))
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('focus'))
+    })
+    expect(api.count(MINE)).toBe(2)
+    held.release()
+    await expect(page.getByRole('button', { name: 'Atualizar', exact: true })).toBeEnabled()
+    await startCancel(page)
+    await confirm(page)
+    await expect(page.getByRole('button', { name: 'Cancelando…' })).toBeDisabled()
+    await page.evaluate(() => { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')) })
+    expect(api.count(MINE)).toBe(2)
+    await expect(page.getByText('Lote cancelado.', { exact: true })).toBeVisible()
+    expect(api.count(MINE)).toBe(3)
+  })
+
+  test('foco relê resultado uma vez; refresh falho conserva snapshot e total com stale', async ({ page }) => {
+    const api = await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended', { settlement: SOLD, bid_count: 3 })] }))
+    await openList(page)
+    const held = api.hold(MINE)
+    await page.evaluate(() => { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')) })
+    await expect(page.getByRole('button', { name: 'Atualizando…', exact: true })).toBeDisabled()
+    held.fail()
+    await expect(page.getByText(STALE, { exact: true })).toBeVisible()
+    await expect(row(page, 1).getByText('Vendido', { exact: true })).toBeVisible()
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(13000))
+    await page.getByRole('button', { name: 'Atualizar', exact: true }).click()
+    await expect(page.getByText(STALE, { exact: true })).toHaveCount(0)
+    expect(api.count(MINE)).toBe(3)
+  })
+
+  for (const status of [401, 403]) {
+    test(`${status} limpa resultado e total e encerra tentativas automáticas`, async ({ page }) => {
+      await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended', { settlement: SOLD, bid_count: 3 })] }))
+      await openList(page)
+      let requests = 0
+      await page.route('**/api/lots/mine', (route) => {
+        requests += 1
+        return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ status, code: status === 401 ? 'unauthorized' : 'forbidden', message: 'PRIVATE' }) })
+      })
+      await page.getByRole('button', { name: 'Atualizar', exact: true }).click()
+      await expect(page.locator('.my-lots-total')).toHaveCount(0)
+      await expect(page.getByText(SOLD.winner_alias!)).toHaveCount(0)
+      if (status === 403) {
+        await expect(page.getByText('Sua conta não tem acesso a esta lista.')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Tentar novamente' })).toHaveCount(0)
+      }
+      await page.evaluate(() => { window.dispatchEvent(new Event('blur')); window.dispatchEvent(new Event('focus')) })
+      expect(requests).toBe(1)
+      await expect(page.getByText('PRIVATE', { exact: true })).toHaveCount(0)
+    })
+  }
+
+  test('contrato privado inesperado falha inteiro e conserva snapshot anterior', async ({ page }) => {
+    await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended', { settlement: SOLD, bid_count: 3 })] }))
+    await openList(page)
+    const current = await page.evaluate(async () => (await fetch('/api/lots/mine')).json())
+    current.items[0].settlement.winner_user_id = 'PRIVATE-WINNER-ID'
+    await page.route('**/api/lots/mine', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(current) }))
+    await page.getByRole('button', { name: 'Atualizar', exact: true }).click()
+    await expect(page.getByText(STALE, { exact: true })).toBeVisible()
+    await expect(page.getByText('PRIVATE-WINNER-ID')).toHaveCount(0)
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(13000))
+  })
+
+  test('resposta antiga entregue apesar de abort após remontagem não substitui sold', async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = window.fetch.bind(window)
+      let held = false
+      window.fetch = async (...args) => {
+        const response = await original(...args)
+        if (!held && String(args[0]) === '/api/lots/mine') {
+          held = true
+          return new Promise<Response>((resolve) => {
+            Object.assign(window, { releaseOldMine: () => resolve(response) })
+          })
+        }
+        return response
+      }
+    })
+    const api = await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended')] }))
+    await page.goto(PATH)
+    await expect(page.getByText('Carregando seus lotes…')).toBeVisible()
+    await expect.poll(() => api.count(MINE)).toBe(1)
+    await page.getByRole('link', { name: 'Vitrine', exact: true }).click()
+    api.setMyLotSettlement(TARGET, SOLD)
+    await page.getByRole('link', { name: 'Meus lotes', exact: true }).click()
+    await expect(row(page, 1).getByText('Vendido', { exact: true })).toBeVisible()
+    await page.evaluate(() => { (window as unknown as { releaseOldMine: () => void }).releaseOldMine() })
+    await expect(row(page, 1).getByText('Vendido', { exact: true })).toBeVisible()
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(13000))
+  })
+
+  test('logout invalida uma leitura antiga antes de entrar em outra conta', async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = window.fetch.bind(window)
+      let reads = 0
+      window.fetch = async (...args) => {
+        const response = await original(...args)
+        if (String(args[0]) === '/api/lots/mine' && ++reads === 2) {
+          return new Promise<Response>((resolve) => {
+            Object.assign(window, { releaseAccountRead: () => resolve(response) })
+          })
+        }
+        return response
+      }
+    })
+    const api = await mockApi(page, owner('ok', { myLots: [myLot(1, 'ended', { settlement: SOLD, bid_count: 3 })] }))
+    await openList(page)
+    await page.getByRole('button', { name: 'Atualizar', exact: true }).click()
+    await expect.poll(() => api.count(MINE)).toBe(2)
+    await page.getByRole('button', { name: 'Sair', exact: true }).click()
+    await expect(page.getByText(SOLD.winner_alias!)).toHaveCount(0)
+    await page.route('**/api/lots/mine', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ as_of: '2026-10-25T15:00:00Z', items: [], total_received_cents: 0 }) }))
+    await page.getByRole('link', { name: 'Entrar', exact: true }).click()
+    await page.getByLabel('E-mail', { exact: true }).fill('auctioneer2@example.com')
+    await page.getByLabel('Senha', { exact: true }).fill('Demo123!')
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+    await page.getByRole('link', { name: 'Meus lotes', exact: true }).click()
+    await expect(page.getByText('Você ainda não criou lotes.')).toBeVisible()
+    await page.evaluate(() => { (window as unknown as { releaseAccountRead: () => void }).releaseAccountRead() })
+    await expect(page.getByText('Você ainda não criou lotes.')).toBeVisible()
+    await expect(page.getByText(SOLD.winner_alias!)).toHaveCount(0)
+    await expect(page.locator('.my-lots-total')).toContainText(formatCents(0))
+  })
+
+  for (const width of [320, 375, 1440]) {
+    test(`50 resultados, valor máximo e imagem falha em ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await mockApi(page, owner('ok', { images: 'broken', myLots: Array.from({ length: 50 }, (_, index) => myLot(index + 1, 'ended', { title: index === 0 ? LONG_TITLE : `Obra de teste ${index + 1}`, bid_count: 3, settlement: { ...SOLD, final_amount_cents: index === 0 ? Number.MAX_SAFE_INTEGER - 49 * 13000 : 13000 } })) }))
+      await page.goto(PATH)
+      await expect(page.locator('li.lot-row')).toHaveCount(50)
+      await expect(page.locator('.my-lots-total')).toContainText(formatCents(Number.MAX_SAFE_INTEGER))
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0)
+    })
+  }
 })
 
 test.describe('confirmação inline', () => {

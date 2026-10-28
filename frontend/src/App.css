@@ -930,6 +930,40 @@ a:focus-visible {
   margin: 0 0 1rem;
 }
 
+.my-lots-summary {
+  margin: 1rem 0;
+}
+
+.my-lots-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.my-lots-total strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.my-lots-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.my-lots-refresh p { margin: 0; }
+.my-lots-read-status { overflow-wrap: anywhere; }
+
+.lot-row-result { margin: 0.5rem 0 0; }
+.lot-row-result > div { min-width: 0; }
+.lot-row-result dt { font-size: 0.8125rem; color: var(--color-muted); }
+.lot-row-result dd { margin: 0 0 0.25rem; overflow-wrap: anywhere; }
+
 .lot-list {
   margin: 0;
   padding: 0;

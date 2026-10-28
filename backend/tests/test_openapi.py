@@ -242,7 +242,7 @@ def test_my_lots_documents_200_and_the_auth_errors(api_only: TestClient) -> None
     assert operation["responses"]["200"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/MyLotsResponse")
-    for status in ("401", "403"):
+    for status in ("401", "403", "409", "500"):
         assert response_ref(operation, status) == ERROR_REF
     assert "parameters" not in operation  # o dono vem só da sessão
     # Story 2.5: `GET /api/lots` (vitrine) divide o caminho com o `POST` da 2.4.
@@ -269,14 +269,39 @@ def test_lot_schemas_have_exactly_the_contract_fields(api_only: TestClient) -> N
     ]
     assert schemas["CreateLotRequest"]["additionalProperties"] is False
     assert sorted(schemas["LotResponse"]["properties"]) == LOT_FIELDS
-    assert sorted(schemas["MyLotsResponse"]["properties"]) == ["as_of", "items"]
-    assert sorted(schemas["MyLotsResponse"]["required"]) == ["as_of", "items"]
+    assert sorted(schemas["MyLotsResponse"]["properties"]) == [
+        "as_of",
+        "items",
+        "total_received_cents",
+    ]
+    assert sorted(schemas["MyLotsResponse"]["required"]) == [
+        "as_of",
+        "items",
+        "total_received_cents",
+    ]
     # Story 3.6, D7: o item da lista do dono é o `LotResponse` mais três campos; a
     # criação (201) continua com o `LotResponse`.
     assert sorted(schemas["MyLotResponse"]["properties"]) == sorted(
-        [*LOT_FIELDS, "cancelled_at", "bid_count", "phase"]
+        [
+            *LOT_FIELDS,
+            "cancelled_at",
+            "bid_count",
+            "phase",
+            "settlement_status",
+            "settlement",
+        ]
     )
-    assert len(schemas["MyLotResponse"]["properties"]) == len(LOT_FIELDS) + 3
+    assert len(schemas["MyLotResponse"]["properties"]) == len(LOT_FIELDS) + 5
+    summary_keys = [
+        "bid_count",
+        "final_amount_cents",
+        "outcome",
+        "settled_at",
+        "winner_alias",
+    ]
+    assert sorted(schemas["PrivateLotSettlementSummary"]["properties"]) == summary_keys
+    assert sorted(schemas["PrivateLotSettlementSummary"]["required"]) == summary_keys
+    assert schemas["PrivateLotSettlementSummary"]["additionalProperties"] is False
     assert "HTTPValidationError" not in schemas
 
 

@@ -18,7 +18,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from fastapi import Depends, FastAPI, Request, Response
 from pydantic import (
@@ -30,6 +31,8 @@ from pydantic import (
     Field,
     StrictInt,
     StringConstraints,
+    ValidationError,
+    model_validator,
 )
 from pydantic_core import PydanticCustomError
 from sqlalchemy import (
@@ -65,12 +68,16 @@ from app.db import Base, get_session
 from app.errors import (
     ARTWORK_NOT_ELIGIBLE,
     CATALOG_UNAVAILABLE,
+    LOT_INTEGRITY_CONFLICT,
     error_response,
     error_responses,
 )
 from app.lot_time import LotPhase, lot_phase
 from app.money import MAX_CENTS, Cents
 from app.users import User
+
+if TYPE_CHECKING:
+    from app.bids import IntegrityConflict
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
@@ -411,6 +418,39 @@ class LotResponse(BaseModel):
     created_at: datetime
 
 
+class PrivateLotSettlementSummary(BaseModel):
+    """Whitelist privada: só valores persistidos, sem identidade ou prova técnica."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["sold", "unsold"]
+    winner_alias: (
+        Annotated[str, StringConstraints(pattern=r"^Licitante-[0-9A-F]{16}$")] | None
+    )
+    final_amount_cents: Cents | None
+    bid_count: Annotated[StrictInt, Field(ge=0, le=MAX_CENTS)]
+    settled_at: ApiDatetime
+
+    @model_validator(mode="after")
+    def validate_outcome(self):
+        if self.outcome == "sold":
+            valid = (
+                self.winner_alias is not None
+                and self.final_amount_cents is not None
+                and self.bid_count > 0
+            )
+        else:
+            valid = (
+                self.winner_alias is None
+                and self.final_amount_cents is None
+                and self.bid_count == 0
+            )
+        if not valid:
+            raise ValueError("Resultado inválido.")
+        self.settled_at = self.settled_at.astimezone(UTC)
+        return self
+
+
 class MyLotResponse(LotResponse):
     """Item da lista do leiloeiro (Story 3.6, D7): o `LotResponse` mais o cancelamento,
     a contagem persistida (dica de UX, não autenticada) e a fase temporal. O 201 da
@@ -419,11 +459,14 @@ class MyLotResponse(LotResponse):
     cancelled_at: datetime | None
     bid_count: int
     phase: LotPhase
+    settlement_status: Literal["pending", "settled"]
+    settlement: PrivateLotSettlementSummary | None
 
 
 class MyLotsResponse(BaseModel):
     as_of: datetime
     items: list[MyLotResponse]
+    total_received_cents: Annotated[StrictInt, Field(ge=0, le=MAX_CENTS)]
 
 
 def lot_response(lot: Lot) -> LotResponse:
@@ -449,14 +492,18 @@ def lot_response(lot: Lot) -> LotResponse:
     )
 
 
-def my_lot_response(lot: Lot, as_of: datetime) -> MyLotResponse:
+def my_lot_response(
+    lot: Lot, as_of: datetime, settlement: PrivateLotSettlementSummary | None = None
+) -> MyLotResponse:
     return MyLotResponse(
         **lot_response(lot).model_dump(),
         cancelled_at=(
             None if lot.cancelled_at is None else lot.cancelled_at.astimezone(UTC)
         ),
-        bid_count=lot.bid_count,
+        bid_count=settlement.bid_count if settlement else lot.bid_count,
         phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
+        settlement_status="settled" if settlement else "pending",
+        settlement=settlement,
     )
 
 
@@ -527,21 +574,126 @@ def my_lots_statement(auctioneer_id: uuid.UUID) -> Select:
     """O statement da lista do leiloeiro (Story 3.6, D7): o instante e os lotes do dono
     no mesmo snapshot, **inclusive os cancelados**. Parte do CTE, então há `as_of` mesmo
     sem lotes; a ordem é a de sempre, `created_at DESC, id DESC`."""
+    from app.lot_settlement import LotSettlement, Receipt
+
     clock = _clock_cte()
+    lot_columns = [name for name in LotResponse.model_fields if name != "image_url"] + [
+        "cancelled_at",
+        "bid_count",
+        "current_bid_cents",
+        "current_leader_id",
+        "final_hash",
+    ]
+    settlement_columns = (
+        "id",
+        "lot_id",
+        "outcome",
+        "winner_user_id",
+        "winner_alias",
+        "winning_bid_sequence",
+        "final_amount_cents",
+        "bid_count",
+        "final_hash",
+        "settled_at",
+    )
+    receipt_columns = (
+        "id",
+        "lot_id",
+        "settlement_id",
+        "winner_alias",
+        "winning_bid_sequence",
+        "final_amount_cents",
+        "bid_count",
+        "final_hash",
+        "settled_at",
+    )
     return (
-        select(clock.c.as_of, Lot)
+        select(
+            clock.c.as_of,
+            *[getattr(Lot, name).label("l_" + name) for name in lot_columns],
+            *[
+                getattr(LotSettlement, name).label("s_" + name)
+                for name in settlement_columns
+            ],
+            *[getattr(Receipt, name).label("r_" + name) for name in receipt_columns],
+        )
         .select_from(clock)
         .outerjoin(Lot, Lot.auctioneer_id == auctioneer_id)
+        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
+        .outerjoin(Receipt, Receipt.lot_id == Lot.id)
         .order_by(Lot.created_at.desc().nulls_last(), Lot.id.desc().nulls_last())
+        .execution_options(autoflush=False)
     )
 
 
 def read_my_lots_snapshot(
     session: Session, auctioneer_id: uuid.UUID
-) -> tuple[datetime, list[Lot]]:
+) -> "MyLotsResponse | IntegrityConflict":
+    from app.bids import IntegrityConflict, IntegrityFailure
+    from app.lot_settlement import _structural_conflict
+
     rows = session.execute(my_lots_statement(auctioneer_id)).all()
     as_of = rows[0].as_of.astimezone(UTC)
-    return as_of, [row.Lot for row in rows if row.Lot is not None]
+    items = []
+    total = 0
+    for row in rows:
+
+        def projected(prefix, row=row):
+            values = {
+                name[2:]: value
+                for name, value in row._mapping.items()
+                if name.startswith(prefix)
+            }
+            return SimpleNamespace(**values) if values["id"] is not None else None
+
+        lot, settlement, receipt = projected("l_"), projected("s_"), projected("r_")
+        if lot is None:
+            continue
+        conflict = _structural_conflict(settlement, receipt)
+        summary = None
+        if settlement is not None and not conflict:
+            try:
+                summary = PrivateLotSettlementSummary(
+                    **{
+                        name: getattr(settlement, name)
+                        for name in PrivateLotSettlementSummary.model_fields
+                    }
+                )
+                valid = (
+                    lot.cancelled_at is None
+                    and lot_phase(lot.starts_at, lot.ends_at, as_of) == LotPhase.ENDED
+                    and settlement.lot_id == lot.id
+                    and summary.settled_at >= lot.ends_at
+                    and settlement.bid_count == lot.bid_count
+                    and settlement.final_hash == lot.final_hash
+                    and re.fullmatch(r"[0-9a-f]{64}", settlement.final_hash) is not None
+                    and settlement.final_amount_cents == lot.current_bid_cents
+                    and settlement.winner_user_id == lot.current_leader_id
+                    and (
+                        settlement.outcome != "sold"
+                        or (
+                            settlement.winner_user_id is not None
+                            and settlement.winning_bid_sequence == settlement.bid_count
+                        )
+                    )
+                )
+            except ValidationError:
+                valid = False
+            if not valid:
+                conflict = IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
+        if conflict:
+            logger.error(
+                "private lot read failed lot_id=%s category=settlement_structure",
+                lot.id,
+            )
+            return conflict
+        items.append(my_lot_response(lot, as_of, summary))
+        if summary and summary.outcome == "sold":
+            total += summary.final_amount_cents
+    if total > MAX_CENTS:
+        logger.error("private lot read failed category=total_range")
+        return IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
+    return MyLotsResponse(as_of=as_of, items=items, total_received_cents=total)
 
 
 def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
@@ -695,20 +847,26 @@ def register_lot_routes(app: FastAPI) -> None:
         methods=["GET"],
         policy=AccessPolicy.AUCTIONEER,
         response_model=MyLotsResponse,
-        responses=error_responses(401, 403),
+        responses=error_responses(401, 403, 409, 500),
     )
     def my_lots(
         response: Response,
         user: User = Depends(require_auctioneer),
         session: Session = Depends(get_session),
-    ) -> MyLotsResponse:
+    ) -> MyLotsResponse | Response:
         # Leitura pura (AD-19): um SELECT, só o dono da sessão, sem a AIC, sem limite.
         # Inclui os cancelados (D3); a fase vem do `as_of` do banco, não do navegador.
-        as_of, lots = read_my_lots_snapshot(session, user.id)
-        result = MyLotsResponse(
-            as_of=as_of, items=[my_lot_response(lot, as_of) for lot in lots]
-        )
-        session.rollback()
+        from app.bids import IntegrityConflict
+
+        try:
+            result = read_my_lots_snapshot(session, user.id)
+        except Exception:
+            logger.error("private lot read failed category=operational")
+            return error_response(500, "internal_error", headers=NO_STORE)
+        finally:
+            session.rollback()
+        if isinstance(result, IntegrityConflict):
+            return error_response(409, LOT_INTEGRITY_CONFLICT, headers=NO_STORE)
         response.headers["Cache-Control"] = "no-store"
         return result
 

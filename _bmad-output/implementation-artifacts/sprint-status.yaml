@@ -67,7 +67,8 @@ development_status:
   3-6-leiloeiro-cancela-lote-sem-lances: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  # Fechamento documental aprovado pelo usuário em 28/10/2026.
+  epic-4: done
   # Story 4.1 implementada em 27/10/2026; verify e VERIFY_E2E=1 verify passaram.
   # Pendentes: meu teste manual no navegador e o review independente. Sem prova no Render.
   4-1-sala-ao-vivo-por-websocket-snapshot-e-atualizações: review
@@ -84,7 +85,10 @@ development_status:
   # Promoção após gate documental; sem autorização de código nesta sessão.
   # Fechamento 4.4 aprovado; 4.5 permanece pendente.
   4-4-gatilhos-do-fechamento-e-evento-de-encerramento: done
-  4-5-resultado-dos-lotes-no-painel-do-leiloeiro: backlog
+  # 4.5: QH-01–13 decididas; build/gates/smoke concluídos em 28/10/2026.
+  # Review independente da story e agregado do Epic 4 permanecem pendentes.
+  # Review final aprovado: 0 HIGH / 0 MEDIUM / 0 LOW; fechamento autorizado.
+  4-5-resultado-dos-lotes-no-painel-do-leiloeiro: done
   epic-4-retrospective: optional
 
   epic-5: backlog

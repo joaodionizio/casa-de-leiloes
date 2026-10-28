@@ -28,15 +28,22 @@ export interface LotResponse {
 // calculou com o `as_of`. O 201 da criação continua devolvendo `LotResponse`.
 export type MyLotPhase = 'scheduled' | 'live' | 'ended'
 
+export type PrivateLotSettlementSummary =
+  | { outcome: 'sold'; winner_alias: string; final_amount_cents: number; bid_count: number; settled_at: string }
+  | { outcome: 'unsold'; winner_alias: null; final_amount_cents: null; bid_count: 0; settled_at: string }
+
 export interface MyLotResponse extends LotResponse {
   cancelled_at: string | null
   bid_count: number
   phase: MyLotPhase
+  settlement_status: 'pending' | 'settled'
+  settlement: PrivateLotSettlementSummary | null
 }
 
 export interface MyLotsBody {
   as_of: string
   items: MyLotResponse[]
+  total_received_cents: number
 }
 
 export interface CreateLotRequest {
@@ -75,7 +82,7 @@ export type CreateLotResult =
 export type MyLotsFailure = 'unauthorized' | 'forbidden' | 'server'
 
 export type MyLotsResult =
-  | { ok: true; asOf: string; items: MyLotResponse[] }
+  | { ok: true; asOf: string; items: MyLotResponse[]; totalReceivedCents: number }
   | { ok: false; failure: MyLotsFailure }
 
 // Falhas do POST de cancelamento. As de negócio (`has_bids`, `ended`, `integrity`,
@@ -147,20 +154,47 @@ function isTimestamp(value: unknown): value is string {
 function isMyLot(value: unknown): value is MyLotResponse {
   if (!isLotResponse(value)) return false
   const lot = value as unknown as Record<string, unknown>
-  return (
-    (lot.cancelled_at === null || isTimestamp(lot.cancelled_at)) &&
+  if (!(
+    Object.keys(lot).length === MY_LOT_KEYS.length && Object.keys(lot).every((key) => MY_LOT_KEYS.includes(key)) &&
+    isUtcTimestamp(lot.starts_at) && isUtcTimestamp(lot.ends_at) && isUtcTimestamp(lot.created_at) &&
+    (lot.cancelled_at === null || isUtcTimestamp(lot.cancelled_at)) &&
     typeof lot.bid_count === 'number' &&
     Number.isSafeInteger(lot.bid_count) &&
     lot.bid_count >= 0 &&
     (lot.phase === 'scheduled' || lot.phase === 'live' || lot.phase === 'ended')
-  )
+  )) return false
+  if (lot.settlement_status === 'pending') return lot.settlement === null
+  if (lot.settlement_status !== 'settled' || lot.cancelled_at !== null || lot.phase !== 'ended') return false
+  const summary = lot.settlement
+  if (typeof summary !== 'object' || summary === null) return false
+  const result = summary as Record<string, unknown>
+  if (Object.keys(result).length !== 5 || !Object.keys(result).every((key) => SETTLEMENT_KEYS.includes(key)) ||
+    !isUtcTimestamp(result.settled_at) || Date.parse(result.settled_at) < Date.parse(value.ends_at) ||
+    result.bid_count !== lot.bid_count) return false
+  if (result.outcome === 'sold') {
+    return typeof result.winner_alias === 'string' && /^Licitante-[0-9A-F]{16}$/.test(result.winner_alias) &&
+      isCents(result.final_amount_cents) && lot.bid_count > 0
+  }
+  return result.outcome === 'unsold' && result.winner_alias === null && result.final_amount_cents === null && result.bid_count === 0
+}
+
+const MY_LOT_KEYS = ['id', 'external_id', 'title', 'artist_display', 'date_display', 'medium_display',
+  'dimensions', 'department_title', 'artwork_type_title', 'credit_line', 'source_url', 'image_id',
+  'image_url', 'starting_bid_cents', 'min_increment_cents', 'starts_at', 'ends_at', 'created_at',
+  'cancelled_at', 'bid_count', 'phase', 'settlement_status', 'settlement']
+const SETTLEMENT_KEYS = ['outcome', 'winner_alias', 'final_amount_cents', 'bid_count', 'settled_at']
+
+function isUtcTimestamp(value: unknown): value is string {
+  return isTimestamp(value) && value.endsWith('Z') && new Date(value).toISOString().slice(0, 19) === value.slice(0, 19)
 }
 
 // Uma lista sem `as_of` (contrato antigo) não é sucesso nem lista vazia.
 export function isMyLotsBody(value: unknown): value is MyLotsBody {
   if (typeof value !== 'object' || value === null) return false
-  const body = value as { as_of?: unknown; items?: unknown }
-  return isTimestamp(body.as_of) && Array.isArray(body.items) && body.items.every(isMyLot)
+  const body = value as { as_of?: unknown; items?: unknown; total_received_cents?: unknown }
+  return Object.keys(body).length === 3 && isUtcTimestamp(body.as_of) &&
+    typeof body.total_received_cents === 'number' && Number.isSafeInteger(body.total_received_cents) && body.total_received_cents >= 0 &&
+    Array.isArray(body.items) && body.items.every(isMyLot)
 }
 
 function errorCode(value: unknown): string | null {
@@ -245,7 +279,7 @@ export async function fetchMyLots(signal: AbortSignal): Promise<MyLotsResult> {
   if (response.status !== 200) return { ok: false, failure: 'server' }
   const body = await readJson(response)
   if (!isMyLotsBody(body)) return { ok: false, failure: 'server' }
-  return { ok: true, asOf: body.as_of, items: body.items }
+  return { ok: true, asOf: body.as_of, items: body.items, totalReceivedCents: body.total_received_cents }
 }
 
 // Classifica uma resposta já lida do POST. Separado do `fetch` para o teste puro. Só o
