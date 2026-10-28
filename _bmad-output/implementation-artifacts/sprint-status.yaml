@@ -91,11 +91,15 @@ development_status:
   4-5-resultado-dos-lotes-no-painel-do-leiloeiro: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  # Exceção explícita do pedido de 28/10/2026: done documental após os dois reviews.
+  # Não comprova merge/deploy/smoke; limites em code-review-epic-5.md.
+  epic-5: done
   # Review independente final aprovado em 28/10/2026; fechamento documental autorizado.
   5-1-verificação-pública-da-integridade-do-lote: done
-  5-2-comprovante-de-arremate-compartilhável-por-link: backlog
-  5-3-meus-arremates: backlog
+  # Review funcional curto 5.2 aprovado em 28/10/2026, sem HIGH/MEDIUM.
+  5-2-comprovante-de-arremate-compartilhável-por-link: done
+  # 5.3: review independente e agregado aprovados; fechamento documental autorizado.
+  5-3-meus-arremates: done
   epic-5-retrospective: optional
 
   epic-6: backlog

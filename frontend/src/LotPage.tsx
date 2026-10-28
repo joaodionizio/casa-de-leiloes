@@ -841,6 +841,7 @@ function LotPage({
         </a>
       </p>
       <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
+      {roomData?.settlement?.outcome === 'sold' && <p><AppLink to={`/lots/${lotId}/receipt`}>Ver comprovante de arremate</AppLink></p>}
       <div className="lot-page-grid">
         {roomStatus}
         <div className="lot-page-art">
