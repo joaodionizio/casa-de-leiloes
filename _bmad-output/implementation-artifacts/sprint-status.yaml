@@ -76,7 +76,10 @@ development_status:
   # Build 4.2 verificado em 27/10/2026: dois verify e smoke local reais concluídos.
   # Pronta para teste manual do dono; code review não executado nesta sessão.
   4-2-heartbeat-e-reconexao-automatica: review
-  4-3-fechamento-liquidação-idempotente-e-comprovante-base: backlog
+  # 4.3: QH-01–10 decididas; story/spec consolidadas e revalidadas em 27/10/2026.
+  # Build 4.3 concluído: PG01–35, mutações, dois verifies e smoke reais passaram.
+  # Review/aceite humanos pendentes; 4.4 permanece backlog.
+  4-3-fechamento-liquidação-idempotente-e-comprovante-base: done
   4-4-gatilhos-do-fechamento-e-evento-de-encerramento: backlog
   4-5-resultado-dos-lotes-no-painel-do-leiloeiro: backlog
   epic-4-retrospective: optional

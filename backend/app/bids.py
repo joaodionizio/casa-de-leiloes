@@ -139,6 +139,8 @@ class IntegrityFailure(StrEnum):
     ANCHOR_MISMATCH = "anchor_mismatch"
     SUMMARY_MISMATCH = "summary_mismatch"
     OPERATIONAL_MISMATCH = "operational_mismatch"
+    SETTLEMENT_MISMATCH = "settlement_mismatch"
+    RECEIPT_MISMATCH = "receipt_mismatch"
 
 
 @dataclass(frozen=True)
@@ -287,6 +289,16 @@ def place_bid(
         return authenticated
     if lot.cancelled_at is not None:  # Story 3.6, D4: depois do gate, antes das regras
         return BidRefusal.LOT_CANCELLED
+    # A durable settlement remains terminal even if temporal terms are corrupted.
+    from app.lot_settlement import LotSettlement
+
+    terminal = session.scalar(
+        select(LotSettlement.id).where(LotSettlement.lot_id == lot_id)
+    )
+    if terminal is not None:
+        if now < lot.ends_at:
+            return IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
+        return BidRefusal.LOT_ENDED
     current = authenticated.current
 
     state = LotBidState(  # 5: regras pré-carteira sobre o estado autenticado

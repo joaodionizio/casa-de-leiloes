@@ -22,10 +22,16 @@ from enum import StrEnum
 
 from fastapi import Depends, FastAPI, Response
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.access import NO_STORE, AccessPolicy, api_route, require_auctioneer
-from app.bids import IntegrityConflict, authenticate_previous_state, read_history
+from app.bids import (
+    IntegrityConflict,
+    IntegrityFailure,
+    authenticate_previous_state,
+    read_history,
+)
 from app.config import IntegrityConfig
 from app.db import get_session
 from app.errors import (
@@ -78,6 +84,16 @@ def cancel_lot(
     )
     if isinstance(authenticated, IntegrityConflict):
         return authenticated
+
+    from app.lot_settlement import LotSettlement
+
+    terminal = session.scalar(
+        select(LotSettlement.id).where(LotSettlement.lot_id == lot_id)
+    )
+    if terminal is not None:
+        if lot.cancelled_at is not None or now < lot.ends_at:
+            return IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
+        return CancellationRefusal.LOT_ENDED
 
     if lot.cancelled_at is not None:  # 5: idempotente, sem novo UPDATE nem timestamp
         return CancelledLot(

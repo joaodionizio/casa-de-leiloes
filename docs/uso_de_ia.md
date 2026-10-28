@@ -1344,3 +1344,153 @@ HMAC, final_hash, pseudônimo, carteira, compromisso financeiro e ordem de locks
 `ends_at` continua fora do canônico. Não iniciei nenhuma parte da Story 4.3;
 não executei Git nem fiz commit. Arquivos alterados e históricos anotados estão
 listados em `docs/EVIDENCIA-ANTI-SNIPING-CUMULATIVO.md`.
+
+## Especificação da Story 4.3 — 27/10/2026
+
+Pedi ao Codex usar `bmad-spec` somente para criar e validar a especificação do
+fechamento, liquidação idempotente e comprovante base. Não autorizei código.
+A IA leu as fontes obrigatórias e confrontou a arquitetura com o modelo vivo do
+Epic 3: só o líder reserva saldo e cada perdedor já foi liberado ao ser superado.
+Mantive o débito definitivo do vencedor e crédito ao leiloeiro previstos na
+Story 4.3; descartei inventar ledger ou liberar todos os lances novamente.
+
+A IA criou a story draft e o pacote
+`_bmad-output/specs/spec-story-4-3-fechamento-liquidacao-idempotente-e-comprovante-base/`,
+com memória append-only via writer oficial, kernel e contratos de transação,
+concorrência, dinheiro, resultado/receipt, questões, critérios/testes e validação.
+Explicitou clock pós-lock, releitura do fim cumulativo, UPDATE que respeita CHECK,
+um commit único, vazio sem receipt e falha segura de integridade sem reassinatura.
+Separou rollback certo de COMMIT com confirmação perdida e preservou o consumo
+apenas da reserva do lote alvo, incluindo cenários de múltiplos lotes.
+
+QH-01–10 continuam abertas: invocação manual, persistência do resultado, campos do
+comprovante, consulta, outcomes, HTTP condicional, representação pública, crédito
+acima do teto, referências de integridade e revalidação na repetição. Não aprovei
+nenhuma recomendação implicitamente. A story permanece draft e o sprint backlog;
+não houve scheduler/catch-up, evento WS, painel, link ou início da 4.4/4.5/5.x.
+
+Executei somente resolução de configuração/customização BMAD, escrita documental
+e conferências estáticas de referências/IDs/tracking. O cache uv padrão foi
+bloqueado; os resolvers passaram com cache em `/private/tmp`. Consultei as fontes
+primárias do PostgreSQL 18 para locks, isolamento e clock (links no companion de
+concorrência). A autovalidação em coerência/preservação não é review independente
+nem aprovação para desenvolvimento; o plano PG real permanece a executar no build.
+Não houve pytest, verify, Playwright, SQL, migrations, smoke ou deploy nesta sessão.
+Não executei Git, não li `.env*` e não alterei código ou as decisões arquiteturais.
+
+## Consolidação humana da especificação 4.3 — 27/10/2026
+
+Decidi QH-01–10 e pedi somente consolidar a especificação com `bmad-spec`,
+revalidar e depois promover story/sprint a ready-for-dev. Não autorizei código.
+Descartei novas rotas HTTP e fixei serviço/readers internos; settlement próprio
+é o registro econômico autoritativo para sold/unsold e receipt é separado, só
+sold. Ambos têm ID próprio e UNIQUE por lote; receipt também tem settlement_id
+UNIQUE e não contém winner_user_id ou HMAC nem no schema. A âncora validada fica
+congelada somente no settlement interno. Não congelo metadados extras da obra.
+
+A IA retomou a memória append-only e rederivou kernel, companions e story com as
+decisões, preservando CAP-1–5. Adaptou a referência conceitual winning_bid_id à
+PK real (lot_id,sequence) por winning_bid_sequence/FK composta, sem alterar bids
+ou canonical v1. Explicitou o comando interno dono da confirmação transacional,
+helper provisório sem transitioned, quatro statuses e falhas tipadas separadas.
+Ready-for-dev significa contrato pronto, não autorização para começar build.
+
+Fixei consumo da reserva F sem segundo débito no disponível, conservação dos
+totais e preservação de perdedores/outros lotes. Teto excedido falha integralmente;
+a 4.4 tratará a condição operacional sem retry quente infinito, sem resolver esse
+mecanismo na 4.3. Repetição revalida lote/settlement/receipt/referências, sem repair,
+recriação ou nova transferência; sold sem receipt e unsold com receipt são conflitos.
+A confirmação perdida de commit segue distinta do rollback conhecido.
+
+A IA preservou PG01–24 e acrescentou PG25–35, um por cada prova adicional que pedi,
+além de CA19–21. Retirou as alternativas e testes condicionais de nova API; registrou
+HTTP 200 novo/repetido somente como orientação futura. Manteve phase, WS, máquina
+4.2, UI da sala, painel, gatilhos/eventos 4.4 e stories 5.x fora do escopo.
+
+As duas passagens de autovalidação de coerência/preservação e a conferência estática
+pré-promoção passaram; só então story/SPEC/sprint foram promovidos. Foram conferidos
+referências, IDs, schemas/privacidade/outcomes, tracking, preservação do corpo anterior
+da memória e hashes de arquivos de aplicação/testes selecionados na partida.
+Isso não é review independente nem execução dos testes planejados. Não rodei pytest,
+verify, Playwright, SQL, migrations, navegador, smoke ou deploy. Não executei Git,
+não li .env* e não iniciei código ou Story 4.4. Todas QH-01–10 estão fechadas.
+
+## Build autorizado da Story 4.3 — 27/10/2026
+
+Autorizei o Codex a implementar somente a Story 4.3 usando `bmad-build`, a partir
+da SPEC e das decisões QH-01–10 já fechadas. Mantive serviço/readers internos,
+settlement autoritativo sold/unsold e receipt separado só para sold. Descartei
+nova contabilidade, rota HTTP, gatilhos/scheduler/catch-up, publicação WS, UI e
+início da 4.4. O review independente fica para meu aceite posterior.
+
+A IA iniciou story/SPEC/sprint em in-progress e preservou baseline local sem Git.
+Leu o contrato aprovado e confirmou no Epic 3 a liberação da reserva de cada líder
+superado: o fechamento deve consumir apenas F do vencedor, preservando outras
+reservas. O workflow delegou a implementação a um agente; verificação e evidência
+final permanecem sob coordenação do agente principal. PostgreSQL dedicado de
+teste preparado com Docker; resultados serão registrados após execução real.
+
+Concluí o build da 4.3: migration `0007`, modelos/DTOs/readers e comando com
+Session própria, um commit e sucesso confirmado só após ele. A implementação
+consome T−F/C−F do vencedor e credita T+F ao leiloeiro; preserva disponível,
+reservas alheias, perdedores e teto. Retry autentica/revalida sem carteiras ou
+reparo. Protegi o terminal em lance/cancelamento, sem gatilhos ou publicação.
+
+Os PG01–35 foram executados em **81 casos: 81 passed, 1 warning in 11.82s**.
+Concorrência usa PostgreSQL real e PID bloqueado especificamente por outro PID.
+Aborto real de COMMIT foi provocado por trigger diferida só de teste; perda
+sintética de confirmação foi lançada depois de COMMIT real e o retry não
+repetiu transferência. Cinco mutações foram detectadas (débito extra, fim
+pré-lock, reliquidação, receipt unsold e gate ignorado), restauradas em finally
+e conferidas byte a byte. Smoke transacional exit 0: W 80000/32000 → 68000/20000
+(disponível 48000 constante), S 5000/0 → 17000/0; F=12000; reserva alheia 20000;
+receipt sold=1/unsold=0; retries already_settled/false.
+
+`./verify.sh` final exit 0: **2164 passed, 1 warning in 116.14s**, frontend
+**175/175**. `VERIFY_E2E=1 ./verify.sh` exit 0: **2164 passed, 1 warning in
+115.82s**, frontend **175/175**, Playwright **222 passed (25.0s), 5 skipped**.
+Ruff/format (96 arquivos), ESLint, tsc, Vite e Docker aprovados em ambos, com
+`verify.sh: todas as etapas passaram.`. Os cinco skips existentes da pilha
+real continuam opt-in; não os apresentei como executados. Primeiro verify:
+1 failed/2163 passed por enumeração antiga das tabelas; atualizei somente a
+lista exata e repeti o gate completo. Falhas exploratórias de fixture WS e
+harness de concorrência também foram corrigidas sem alterar o contrato.
+
+Nenhum agente abriu `.env*` diretamente. A primeira rodada exploratória começou
+sem a guarda externa contra dotenv; não certifico ausência de leitura implícita
+nessa rodada. As posteriores/finais usaram as guardas externas de Python/Node,
+uv e Compose sem modificar produto/verify. O sandbox bloqueou Docker na partida;
+a execução autorizada usou PostgreSQL dedicado e cache uv em /private/tmp.
+A checagem final trata segredos só por nomes. Nenhum Git, deploy ou code review.
+
+Story 4.3/sprint ficaram **review**, SPEC **in-review**, Epic 4 **in-progress**;
+4.4 **backlog**, sem início de implementação. Arquivos/resultados/limites em
+`_bmad-output/specs/spec-story-4-3-fechamento-liquidacao-idempotente-e-comprovante-base/implementation-evidence.md`.
+`frontend/test-results/.last-run.json` foi regenerado pelo Playwright; nenhum
+código de UI/WS/máquina 4.2 mudou. Review e aceite finais continuam meus.
+
+## Ajuste de cobertura após review da Story 4.3 — 27/10/2026
+
+Solicitei somente os dois testes para os LOWs do review, sem alterar produção,
+Git, dotenv ou iniciar a Story 4.4. A IA identificou que não há settlement válido
+para lote previamente cancelado; confirmei o cenário do review para F43-02:
+settlement unsold, prazo adulterado e tentativa de cancelamento. O teste também
+exige conflito no retry do settlement. F43-01 altera somente o vencedor de um
+sold válido. Ambos verificam conflito, ausência de escritas e snapshot preservado.
+
+Os dois testes passaram isoladamente e detectaram as respectivas mutações focais
+executadas separadamente em memória. A suíte da story passou com 83 testes. As
+execuções usaram PostgreSQL dedicado e proteções externas contra leitura de
+dotenv. A story não foi marcada como done; evidência detalhada está no relatório
+final e em `implementation-evidence.md`.
+
+O `./verify.sh` final passou: backend **2166 passed, 1 warning in 117.98s**,
+frontend **175 passed**, lint/typecheck/build e imagem Docker aprovados.
+Playwright não foi reexecutado, pois não houve mudança de frontend ou E2E.
+
+## Fechamento formal da Story 4.3 — 27/10/2026
+
+Autorizei o fechamento documental após o review aprovado e a cobertura dos dois
+LOWs. Story, entrada do sprint e SPEC passam a **done**; Epic 4 permanece
+**in-progress**. Não solicitei novas execuções de testes ou mudanças de produção;
+a Story 4.4 não foi iniciada.

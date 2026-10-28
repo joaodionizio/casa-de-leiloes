@@ -234,6 +234,8 @@ def assert_invariants(factory: sessionmaker[Session]) -> None:
                 text(
                     "SELECT current_leader_id, sum(current_bid_cents)::bigint "
                     "FROM lots WHERE current_leader_id IS NOT NULL "
+                    "AND NOT EXISTS (SELECT 1 FROM lot_settlements "
+                    "WHERE lot_settlements.lot_id = lots.id) "
                     "GROUP BY current_leader_id"
                 )
             ).all()
@@ -424,7 +426,9 @@ def drop_checks(
         if captured:
             with db_engine.begin() as connection:
                 assert_connection_is_test_database(connection, database)
-                connection.execute(text("TRUNCATE bids, lots"))
+                connection.execute(
+                    text("TRUNCATE receipts, lot_settlements, bids, lots")
+                )
                 present = read_checks(connection, list(captured))
                 for definition in captured.values():
                     if definition.name not in present:

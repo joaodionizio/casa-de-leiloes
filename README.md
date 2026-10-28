@@ -300,10 +300,12 @@ Fonte dos nomes/regras: `backend/app/config.py`, `main.py`, `seed.py`,
 O `start.sh` usa `set -eu`: executa **`alembic upgrade head` →
 `python -m app.seed` → uvicorn**. Erro em migration ou seed impede o servidor;
 configuração inválida também pode falhar no import de `app.main` depois do seed.
-Não há scheduler/catch-up/liquidação nesta versão; são escopo do Epic 4.
+Não há scheduler/catch-up no startup. A Story 4.3 entrega liquidação somente por
+serviço interno; os gatilhos automáticos pertencem à 4.4.
 
 Migrations atuais: `0001` baseline, `0002` users, `0003` lots, `0004` wallets,
-`0005` bids e `0006` lot_cancellation (**head esperado: `0006`**). No deploy,
+`0005` bids, `0006` lot_cancellation e `0007` lot_settlements/receipts
+(**head local esperado: `0007`**; não aplicada em produção nesta sessão). No deploy,
 acompanho upgrades ainda necessários sem exigir reaplicação dos já concluídos.
 Não executo downgrade, limpeza de dados ou reassinatura de histórico em produção.
 
@@ -667,6 +669,29 @@ curl -sS -i http://localhost:8000/api/lots/abc         # 422 validation_error
 curl -sS -i http://localhost:8000/lots/<uuid>          # 200, text/html (SPA montada)
 ```
 
+## Fechamento interno (Story 4.3)
+
+Implementei `app.lot_settlement.settle_lot(session_factory, lot_id=..., integrity=...)`
+como comando síncrono interno, dono de sua Session e commit. Ele trava o lote, lê
+`clock_timestamp()` após a trava e relê o término vigente; prazo futuro retorna
+`not_due`. Histórico íntegro expirado confirma `settled_sold` ou `settled_unsold`.
+A repetição revalida os registros e retorna `already_settled`, sem nova transferência.
+`transitioned=true` só sai depois de commit confirmado.
+
+Para valor F, o vencedor fica com total T−F e comprometido C−F, preservando
+disponível T−C e reservas de outros lotes; o leiloeiro recebe F no total. Teto ou
+reserva inválidos revertem toda a operação. `lot_settlements` registra sold/unsold;
+`receipts` existe somente para sold e contém apenas os campos pseudonimizados
+aprovados, sem usuário privado ou HMAC. Os readers internos `read_settlement` e
+`read_receipt` consultam por lote sem escrever.
+
+Não criei rota HTTP ou integração de UI/WS. Scheduler, catch-up, fechamento em
+tentativa de lance e publicação são da 4.4. Em confirmação perdida de commit, o
+chamador recebe falha; uma nova chamada explícita em outra Session descobre o
+resultado persistido e não repete a transferência. Descartei reparo automático
+de histórico ou comprovante inconsistente. Reverter a migration `0007` apaga
+settlements/receipts e não desfaz transferências já confirmadas; não é estorno.
+
 ## Carteira
 
 O licitante vê o próprio saldo e faz um **depósito simulado** (valor fictício, sem
@@ -678,8 +703,10 @@ dinheiro real). Valores em **centavos inteiros** (`BIGINT`, sufixo `_cents`), se
 | `POST /api/wallet/deposit` | só `BIDDER` | corpo `{"amount_cents": n}`; soma `n` ao total da **própria** carteira e devolve `200` com os mesmos três valores. |
 
 - **Saldo:** o disponível é sempre `total - comprometido`, calculado no servidor, e nunca
-  é gravado. O comprometido é alterado só pelo lance (Story 3.4, veja
-  "Lances"): sobe com o lance do líder e volta ao disponível quando ele é superado. O `AUCTIONEER` recebe 403 nas duas rotas e não tem tela de carteira.
+  é gravado. O comprometido sobe com o lance do líder e volta ao disponível quando
+  ele é superado (Story 3.4, veja "Lances"). No fechamento interno da 4.3, a reserva
+  vencedora é consumida junto com o débito do total. O `AUCTIONEER` recebe 403 nas
+  duas rotas e não tem tela de carteira.
 - **Entrada estrita:** `amount_cents` é um inteiro de `1` a `9007199254740991`. Zero,
   negativo, `100.5`, `1e2`, texto, booleano, ausente, campo extra (inclusive `user_id`) e
   valor acima do teto dão 422 `validation_error`. A carteira alterada é sempre a do
@@ -816,9 +843,9 @@ Em toda escrita (`POST`, `PUT`, `PATCH`, `DELETE`) sob `/api`, antes do roteamen
   da 3.5 há contagem regressiva visual e releitura no zero de cada `ends_at`,
   em "Atualizar sala" e depois do próprio lance. A Story 4.1 acrescenta snapshots
   WebSocket depois dos commits; o servidor sempre decide fase e aceitação do lance.
-- Todo lote encerrado aparece como "Encerrado, apurando resultado" até a liquidação
-  existir (Story 4.3). Hoje isso é só texto de interface: não há vencedor, valor final
-  nem comprovante, e nenhuma leitura liquida lote.
+- A interface continua mostrando "Encerrado, apurando resultado" para lotes encerrados.
+  A Story 4.3 persiste resultado e comprovante por serviço interno, ainda sem
+  integração pública; nenhuma leitura liquida lote.
 - A vitrine traz todos os lotes, sem paginação, e os lotes demo encerrados se acumulam a
   cada 72 horas de inicialização. "Mostrar mais encerrados" revela mais 6 por clique, só
   no navegador, sem nova chamada à API.
