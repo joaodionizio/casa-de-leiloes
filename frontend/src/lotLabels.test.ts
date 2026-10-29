@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { PublicLotSummary } from './api/publicLots.ts'
-import { lotLinkLabel, lotTitleText, UNTITLED } from './lotLabels.ts'
+import { lotLinkLabel, lotTitleText, publicLotStatusText, UNTITLED } from './lotLabels.ts'
 
 function lot(overrides: Partial<PublicLotSummary> = {}): PublicLotSummary {
   return {
@@ -15,6 +15,7 @@ function lot(overrides: Partial<PublicLotSummary> = {}): PublicLotSummary {
     starts_at: '2026-10-25T12:00:00Z',
     ends_at: '2026-10-26T12:00:00Z',
     phase: 'live',
+    settlement_status: 'pending',
     ...overrides,
   }
 }
@@ -45,4 +46,20 @@ test('o encerrado não leva valor no nome do link', () => {
 
 test('o nome do link nunca fala em "lance atual"', () => {
   assert.equal(lotLinkLabel(lot()).includes('atual'), false)
+})
+
+
+test('a Vitrine distingue pending/settled com o mesmo estado visual e acessível', () => {
+  for (const [settlement_status, expected] of [
+    ['pending', 'Encerrado, apurando resultado'],
+    ['settled', 'Encerrado'],
+  ] as const) {
+    const item = lot({ phase: 'ended', settlement_status })
+    assert.equal(publicLotStatusText(item), expected)
+    assert.equal(lotLinkLabel(item), `Nighthawks. ${expected}.`)
+  }
+  for (const settlement_status of ['pending', 'settled'] as const) {
+    assert.equal(publicLotStatusText(lot({ phase: 'live', settlement_status })), 'Ao vivo')
+    assert.equal(publicLotStatusText(lot({ phase: 'scheduled', settlement_status })), 'Agendado')
+  }
 })

@@ -22,6 +22,7 @@ function lot(id: string, phase: PublicLotSummary['phase']): PublicLotSummary {
     starts_at: '2026-10-25T12:00:00Z',
     ends_at: '2026-10-26T12:00:00Z',
     phase,
+    settlement_status: 'pending',
   }
 }
 

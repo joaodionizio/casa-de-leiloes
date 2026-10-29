@@ -12,11 +12,17 @@ export function lotTitleText(title: string | null): string {
   return title !== null && title.trim() !== '' ? title : UNTITLED
 }
 
+// A Vitrine recebe settlement explícito; outros contextos conservam o rótulo genérico.
+export function publicLotStatusText(lot: PublicLotSummary): string {
+  if (lot.phase === 'ended' && lot.settlement_status === 'settled') return 'Encerrado'
+  return phaseStatusText(lot.phase)
+}
+
 // Nome acessível do link de um lote: começa pelo título, depois o estado em texto e o
 // lance inicial (nunca "lance atual": ainda não existe lance). O encerrado não leva o
-// valor, como a linha dele na tela: sem resultado, o lance inicial pareceria preço final.
+// valor, como a linha dele na tela: o lance inicial pareceria preço final.
 export function lotLinkLabel(lot: PublicLotSummary): string {
-  const base = `${lotTitleText(lot.title)}. ${phaseStatusText(lot.phase)}.`
+  const base = `${lotTitleText(lot.title)}. ${publicLotStatusText(lot)}.`
   if (lot.phase === 'ended') return base
   return `${base} Lance inicial ${formatCents(lot.starting_bid_cents)}.`
 }

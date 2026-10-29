@@ -2,7 +2,7 @@ import type { PublicLotSummary } from './api/publicLots'
 import AppLink from './AppLink'
 import ArtworkImage from './ArtworkImage'
 import LotState from './LotState'
-import { lotLinkLabel, lotTitleText } from './lotLabels'
+import { lotLinkLabel, lotTitleText, publicLotStatusText } from './lotLabels'
 import { formatDateTime } from './lotTime'
 import { routePath } from './route'
 
@@ -12,7 +12,7 @@ interface ClosedLotRowProps {
 }
 
 // Encerrado na lista densa (blueprint §8): miniatura, título e artista, estado e
-// quando terminou. Sem valor: não existe resultado ainda, e o lance inicial pareceria
+// quando terminou. Sem valor: o contrato não traz resultado, e o lance inicial pareceria
 // preço final. Um único link por linha.
 function ClosedLotRow({ lot, onOpen }: ClosedLotRowProps) {
   const title = lotTitleText(lot.title)
@@ -36,7 +36,7 @@ function ClosedLotRow({ lot, onOpen }: ClosedLotRowProps) {
           )}
         </div>
         <div className="closed-status">
-          <LotState phase={lot.phase} />
+          <LotState phase={lot.phase} text={publicLotStatusText(lot)} />
           <span className="muted">Terminou {formatDateTime(lot.ends_at)}</span>
         </div>
       </AppLink>

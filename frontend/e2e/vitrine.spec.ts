@@ -1,7 +1,7 @@
 // Vitrine pública em navegador real (Story 2.5): anônimo, deep-link, History API,
 // "Mostrar mais" e imagem quebrada. API simulada por interceptação de rede.
 import { expect, test } from '@playwright/test'
-import { lotId, makeBids, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './support/mockApi'
+import { lotId, makeBids, makeLot, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './support/mockApi'
 
 const LOTS = makeLots({ live: 3, scheduled: 2, ended: 3 })
 
@@ -342,3 +342,37 @@ test.describe('imagem quebrada', () => {
     expect(api.count(`GET /api/lots/${lotId(1)}/bids`)).toBeGreaterThan(0)
   })
 })
+
+
+for (const width of [1440, 375, 320]) {
+  test(`R6.4-01: pending/settled e nomes acessíveis sem overflow em ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const pending = makeLot(201, 'ended', { title: 'Resultado pendente', settlement_status: 'pending' })
+    const settled = makeLot(202, 'ended', { title: 'Resultado apurado', settlement_status: 'settled' })
+    const api = await mockApi(page, { lots: [
+      makeLot(1, 'live'), makeLot(101, 'scheduled'), pending, settled,
+    ] })
+    await page.goto('/')
+    const pendingLink = page.locator(`[data-lot-id="${pending.id}"]`)
+    const settledLink = page.locator(`[data-lot-id="${settled.id}"]`)
+    await expect(pendingLink.locator('.lot-state')).toHaveText('Encerrado, apurando resultado')
+    await expect(pendingLink).toHaveAccessibleName('Resultado pendente. Encerrado, apurando resultado.')
+    await expect(settledLink.locator('.lot-state')).toHaveText('Encerrado')
+    await expect(settledLink).toHaveAccessibleName('Resultado apurado. Encerrado.')
+    await expect(settledLink).not.toContainText('apurando resultado')
+    await expect(page.locator('.featured .lot-state')).toHaveText('●Ao vivo')
+    await expect(page.locator('.rail-item-upcoming .lot-state')).toHaveText('Agendado')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    for (const link of [pendingLink, settledLink]) {
+      await link.scrollIntoViewIfNeeded()
+      await expect(link.locator('.lot-state')).toBeVisible()
+      const bounds = await link.boundingBox()
+      expect(bounds).not.toBeNull()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0)
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+    }
+    expect(api.count('GET /api/lots')).toBe(1)
+    expect(api.requests.filter(request => /GET \/api\/lots\//.test(request))).toEqual([])
+    expect(api.unexpected).toEqual([])
+  })
+}

@@ -91,7 +91,9 @@ def test_phase_values_are_exactly_the_three_phases() -> None:
 
 
 def test_public_summary_has_exactly_the_contract_keys() -> None:
-    summary = public_lot_summary(make_lot(), START + timedelta(hours=1))
+    summary = public_lot_summary(
+        make_lot(), START + timedelta(hours=1), has_settlement=False
+    )
 
     assert sorted(summary.model_dump()) == sorted(
         [
@@ -104,6 +106,7 @@ def test_public_summary_has_exactly_the_contract_keys() -> None:
             "starts_at",
             "ends_at",
             "phase",
+            "settlement_status",
         ]
     )
     assert summary.image_url == f"/api/catalog/images/{IMAGE_ID}"
@@ -115,7 +118,7 @@ def test_public_summary_normalizes_timestamps_to_utc() -> None:
     brasilia = timezone(timedelta(hours=-3))
     lot = make_lot(START.astimezone(brasilia), END.astimezone(brasilia))
 
-    summary = public_lot_summary(lot, START)
+    summary = public_lot_summary(lot, START, has_settlement=False)
 
     assert summary.starts_at == START
     assert summary.starts_at.tzinfo == UTC
@@ -123,7 +126,7 @@ def test_public_summary_normalizes_timestamps_to_utc() -> None:
 
 
 def test_public_detail_has_exactly_the_contract_keys() -> None:
-    detail = public_lot_detail(make_lot(), END)
+    detail = public_lot_detail(make_lot(), END, has_settlement=False)
 
     assert sorted(detail.model_dump()) == sorted(
         [
@@ -136,6 +139,7 @@ def test_public_detail_has_exactly_the_contract_keys() -> None:
             "starts_at",
             "ends_at",
             "phase",
+            "settlement_status",
             "external_id",
             "medium_display",
             "dimensions",
@@ -160,7 +164,9 @@ def test_build_public_lots_classifies_every_lot_with_the_same_as_of() -> None:
     starts_now = make_lot(as_of, as_of + timedelta(hours=2))
     ends_now = make_lot(as_of - timedelta(hours=2), as_of)
 
-    response = build_public_lots([scheduled, live, ended, starts_now, ends_now], as_of)
+    response = build_public_lots(
+        [scheduled, live, ended, starts_now, ends_now], as_of, set()
+    )
 
     assert response.as_of == as_of
     assert {lot.id for lot in response.live} == {live.id, starts_now.id}
@@ -172,7 +178,7 @@ def test_build_public_lots_classifies_every_lot_with_the_same_as_of() -> None:
 
 
 def test_build_public_lots_with_no_lots_keeps_as_of_and_three_empty_groups() -> None:
-    response = build_public_lots([], START)
+    response = build_public_lots([], START, set())
 
     assert response.model_dump() == {
         "as_of": START,
@@ -201,8 +207,8 @@ def test_groups_are_ordered_by_the_documented_keys() -> None:
         make_lot(as_of + timedelta(hours=2), as_of + timedelta(hours=9), lot_id=b),
         make_lot(as_of + timedelta(hours=1), as_of + timedelta(hours=9), lot_id=c),
     ]
-    live_response = build_public_lots(live, as_of)
-    scheduled_response = build_public_lots(scheduled, as_of)
+    live_response = build_public_lots(live, as_of, set())
+    scheduled_response = build_public_lots(scheduled, as_of, set())
 
     assert [lot.id for lot in live_response.live] == [c, b, a]
     assert [lot.id for lot in scheduled_response.scheduled] == [c, b, a]
@@ -220,7 +226,7 @@ def test_ended_group_is_newest_first_and_ties_break_by_id_ascending() -> None:
         make_lot(newer - timedelta(days=1), newer, lot_id=b),
     ]
 
-    response = build_public_lots(lots, as_of)
+    response = build_public_lots(lots, as_of, set())
 
     # ends_at DESC (a/b/c primeiro); empate por id ASC; o mais antigo por último.
     assert [lot.id for lot in response.ended] == [a, b, c, d]
@@ -238,9 +244,24 @@ def test_ties_break_by_id_ascending_in_live_and_scheduled_too() -> None:
         for lot_id in (b, c, a)
     ]
 
-    assert [lot.id for lot in build_public_lots(live, as_of).live] == [a, b, c]
-    assert [lot.id for lot in build_public_lots(scheduled, as_of).scheduled] == [
+    assert [lot.id for lot in build_public_lots(live, as_of, set()).live] == [a, b, c]
+    assert [lot.id for lot in build_public_lots(scheduled, as_of, set()).scheduled] == [
         a,
         b,
         c,
     ]
+
+
+@pytest.mark.parametrize(
+    "has_settlement,expected", [(False, "pending"), (True, "settled")]
+)
+def test_public_settlement_status_is_explicit_not_inferred_from_phase(
+    has_settlement: bool, expected: str
+) -> None:
+    lot = make_lot()
+    for as_of in (START - MICRO, START, END):
+        summary = public_lot_summary(lot, as_of, has_settlement=has_settlement)
+        detail = public_lot_detail(lot, as_of, has_settlement=has_settlement)
+        assert summary.settlement_status == detail.settlement_status == expected
+    response = build_public_lots([lot], END, {lot.id} if has_settlement else set())
+    assert response.ended[0].settlement_status == expected

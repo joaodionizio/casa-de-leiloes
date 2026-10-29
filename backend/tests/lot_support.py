@@ -191,12 +191,12 @@ def fixed_as_of(monkeypatch: pytest.MonkeyPatch, moment: datetime) -> None:
     real_lot_snapshot = lots.read_public_lot_snapshot
 
     def snapshot(session):  # type: ignore[no-untyped-def]
-        _, rows = real_snapshot(session)
-        return moment, rows
+        _, rows, settled = real_snapshot(session)
+        return moment, rows, settled
 
     def lot_snapshot(session, lot_id):  # type: ignore[no-untyped-def]
-        _, row = real_lot_snapshot(session, lot_id)
-        return moment, row
+        _, row, settled = real_lot_snapshot(session, lot_id)
+        return moment, row, settled
 
     monkeypatch.setattr(lots, "read_public_snapshot", snapshot)
     monkeypatch.setattr(lots, "read_public_lot_snapshot", lot_snapshot)

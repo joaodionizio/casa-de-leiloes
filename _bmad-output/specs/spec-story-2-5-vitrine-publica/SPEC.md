@@ -19,6 +19,16 @@ sources:
   - ../../implementation-artifacts/2-5-vitrine-pública-e-página-do-lote.md
 ---
 
+> **Atualização R6.4-01 — 29/10/2026:** o contrato público vigente está em
+> [public-lot-dtos.md](public-lot-dtos.md). A decisão humana substitui neste
+> documento a proibição histórica de `settlement_status`, as contagens 9/17 e
+> o rótulo incondicional de `ended`: resumo/detalhe têm 10/18 campos, incluindo
+> `settlement_status` obrigatório (`pending|settled`), derivado exclusivamente
+> do settlement persistido. Vitrine: `ended+pending` → “Encerrado, apurando
+> resultado”; `ended+settled` → “Encerrado”. Os demais trechos registram o
+> escopo original da 2.5.
+
+
 > **Contrato canônico.** Esta SPEC e os arquivos em `companions:` são o contrato
 > completo da Story 2.5. P1 a P9 foram aprovadas pelo Joaodionizio antes desta spec e
 > **não são reabertas** (`decisions.md` §1). D1 a D20 detalham essas aprovações e os

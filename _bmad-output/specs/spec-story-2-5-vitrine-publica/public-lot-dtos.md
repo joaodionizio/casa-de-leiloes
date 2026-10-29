@@ -1,4 +1,4 @@
-# DTOs públicos — Story 2.5 (P1, P6, P8)
+# DTOs públicos — Story 2.5 (P1, P6, P8), atualizado por R6.4-01
 
 Em `app/lots.py`, separados do `LotResponse` privado da 2.4 (que não muda).
 
@@ -13,6 +13,7 @@ class PublicLotSummary(BaseModel):          # item da vitrine
     starts_at: datetime                     # UTC, "Z"
     ends_at: datetime                       # UTC, "Z"
     phase: LotPhase                         # "scheduled" | "live" | "ended"
+    settlement_status: Literal["pending", "settled"]
 
 class PublicLotDetail(PublicLotSummary):    # página do lote
     external_id: int
@@ -39,8 +40,8 @@ class PublicLotDetailResponse(BaseModel):   # GET /api/lots/{lot_id}
 
 | DTO | Chaves |
 | --- | --- |
-| `PublicLotSummary` | `id`, `title`, `artist_display`, `date_display`, `image_url`, `starting_bid_cents`, `starts_at`, `ends_at`, `phase` |
-| `PublicLotDetail` | as 9 acima + `external_id`, `medium_display`, `dimensions`, `department_title`, `artwork_type_title`, `credit_line`, `source_url`, `min_increment_cents` |
+| `PublicLotSummary` | `id`, `title`, `artist_display`, `date_display`, `image_url`, `starting_bid_cents`, `starts_at`, `ends_at`, `phase`, `settlement_status` |
+| `PublicLotDetail` | as 10 acima + `external_id`, `medium_display`, `dimensions`, `department_title`, `artwork_type_title`, `credit_line`, `source_url`, `min_increment_cents` |
 | `PublicLotsResponse` | `as_of`, `live`, `scheduled`, `ended` |
 | `PublicLotDetailResponse` | `as_of`, `lot` |
 
@@ -49,7 +50,7 @@ Campos `None` saem como `null` (sempre presentes).
 ## Fora de qualquer DTO público
 
 `auctioneer_id`, `is_demo`, `created_at`, `image_id` cru (já está em `image_url`), e-mail,
-nome, papel, qualquer dado de usuário, `status`, `settlement_status`, lance atual, líder,
+nome, papel, qualquer dado de usuário, `status`, lance atual, líder,
 quantidade de lances. Nada da AIC fora dos campos persistidos.
 
 ## Formatos
@@ -76,14 +77,14 @@ GET /api/lots → 200
      "starting_bid_cents": 10000,
      "starts_at": "2026-10-25T12:00:00.481203Z",
      "ends_at": "2026-10-28T12:00:00.481203Z",
-     "phase": "live"}
+     "phase": "live", "settlement_status": "pending"}
   ],
   "scheduled": [],
   "ended": []
 }
 
 GET /api/lots/{id} → 200
-{"as_of": "…Z", "lot": {…os 9 campos…, "external_id": 27992,
+{"as_of": "…Z", "lot": {…os 10 campos…, "external_id": 27992,
   "medium_display": "Oil on canvas", "dimensions": "207.5 × 308.1 cm (…)",
   "department_title": "Painting and Sculpture of Europe",
   "artwork_type_title": "Painting",
@@ -101,6 +102,7 @@ export interface PublicLotSummary {
   id: string; title: string | null; artist_display: string | null
   date_display: string | null; image_url: string; starting_bid_cents: number
   starts_at: string; ends_at: string; phase: LotPhase
+  settlement_status: 'pending' | 'settled'
 }
 export interface PublicLotDetail extends PublicLotSummary {
   external_id: number; medium_display: string | null; dimensions: string | null
@@ -116,4 +118,20 @@ export interface PublicLotDetailResponse { as_of: string; lot: PublicLotDetail }
 
 Type guards exportados (`isPublicLotsResponse`, `isPublicLotDetailResponse`) recusam
 `phase` fora dos três valores, centavos que não sejam `Number.isSafeInteger` e `>= 1`, e
-qualquer campo obrigatório ausente. Resposta fora do contrato = falha `server`.
+qualquer campo obrigatório ausente. `settlement_status` é obrigatório: ausência ou
+valor diferente de `pending`/`settled` invalida tanto listagem quanto detalhe; não
+há fallback para backend antigo. Resposta fora do contrato = falha `server`.
+
+## R6.4-01 — contrato coordenado aprovado em 29/10/2026
+
+Decidi acrescentar somente `settlement_status` ao resumo e ao detalhe herdado.
+A existência de `LotSettlement` persistido determina `settled`; sua ausência,
+`pending`. Descartei inferir por horário, receipt, lances ou fazer novas chamadas.
+Listagem e detalhe leem lote + existência do settlement no mesmo statement e
+snapshot, com o relógio materializado existente; sem locks, mutações ou N+1.
+
+Na Vitrine, `ended+pending` mostra **Encerrado, apurando resultado** e
+`ended+settled` mostra **Encerrado**, com nome acessível correspondente.
+Ao vivo/agendado mantêm seus rótulos e cancelados continuam ocultos. Sala/QH-01
+preserva seu contrato rico separado; não adota o DTO da Vitrine. Backend e
+frontend exigem publicação coordenada; o status não expõe resultado ou pessoa.

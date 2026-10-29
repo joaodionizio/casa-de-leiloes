@@ -14,6 +14,7 @@ export interface PublicLotSummary {
   starts_at: string
   ends_at: string
   phase: LotPhase
+  settlement_status: 'pending' | 'settled'
 }
 
 export interface PublicLotDetail extends PublicLotSummary {
@@ -75,7 +76,8 @@ export function isPublicLotSummary(value: unknown): value is PublicLotSummary {
     isCents(value.starting_bid_cents) &&
     typeof value.starts_at === 'string' &&
     typeof value.ends_at === 'string' &&
-    isLotPhase(value.phase)
+    isLotPhase(value.phase) &&
+    (value.settlement_status === 'pending' || value.settlement_status === 'settled')
   )
 }
 

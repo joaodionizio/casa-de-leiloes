@@ -2203,3 +2203,121 @@ ou 6.5–6.7, não alterei status de story/SPEC/sprint e mantive o épico in-pro
 Os sete real-stack opt-in e a prova pública continuam pendentes. Não houve
 review independente nesta implementação: paro para re-review, sem aprovação
 agregada ou liberação de merge/deploy.
+
+## Story 6.4 — validação do ambiente publicado — 29/10/2026
+
+Autorizei a execução pública completa da spec da Story 6.4, com cadastro
+sintético example.com, criação legítima pela AIC, depósitos e lances simulados.
+A IA atuou como avaliador externo por UI/REST/WS na origem HTTPS do Render,
+sem interceptar APIs. A tentativa de navegador integrado encontrou ponte
+indisponível; Chromium/Playwright local foi a alternativa instrumental. Senhas
+descartáveis e sessões ficaram em memória, sem storageState/HAR/tracing,
+captura de cabeçalhos crus ou registro de identidades privadas. O agente de
+execução não usou Git; a coordenação usou somente os quatro comandos read-only
+autorizados no pedido para identificar main/SHA/estado inicial. Não houve
+commit/push/merge/deploy, leitura de `.env*`/credenciais/segredos ou acesso ao
+banco de produção.
+
+Entre 11:02 e 11:11 America/Maceio, raiz/health/assets/API responderam 200; a
+vitrine já tinha dois lotes ao vivo antes de criar qualquer dado. As três demos
+autenticaram e as guardas de papel recusaram acessos cruzados 403. Cookie real
+`__Host-auction_session` aceito/enviado: Secure/HttpOnly/Lax/Path=/, sem Domain;
+login/me 200 e logout 204/me 401 com cookie removido nos cinco contextos. Preflight
+estrangeiro 405 sem CORS permissivo; register com Origin estrangeiro 403 e mídia
+ausente/text/plain 415. CA2 publicado foi aprovado nesses contratos, sem alegar
+revogação JWT ou correspondência de SHA/Render não autenticada.
+
+Os dois papéis foram cadastrados pela UI com 201, confirmação em login, sem
+cookie/autologin; login e reload mantiveram sessão. A UI buscou Monet na AIC e
+criou Water Lilies, ID público `98497701-51da-47ff-a6f2-8e3ece875511`, sem
+alterar o título. Dois contextos depositaram R$ 1.000 e deram R$ 100/R$ 110. A
+reserva do superado foi liberada e ambos receberam atualização WS sem reload.
+O lance das 11:05:31.717593, com 28,282407 s restantes, prorrogou o fim das 11:06
+para 11:08 exatamente +120 s. Offline apenas no primeiro contexto por 3 s fechou
+seu WS e recuperou snapshot com dois lances, sem reenvio.
+
+O **mesmo lote** recebeu lot_closed em ambos WS às 11:08:01.810386, sold/R$ 110,
+dois lances e pseudônimo vencedor correto; nenhuma leitura de lote foi feita
+entre 11:07:24 e o terminal para observar apuração autônoma. Carteiras, total
+recebido do leiloeiro, wins vencedor/perdedor e link só no item vencedor
+conferiram. Receipt/audit públicos e autenticados 200, sem identidade privada,
+UI “Integridade verificada”; os dois SHA-256 canônicos e encadeamento foram
+recalculados independentemente e conferiram. Não acessei o segredo HMAC: a
+âncora é atestada pela verificação pública do servidor. Deep-links e reload
+das rotas públicas/privadas também funcionaram.
+
+Foi confirmado **R6.4-01 MEDIUM**: a vitrine exibe “Encerrado, apurando
+resultado” para Water Lilies e Judith, ambos já liquidados. Navegação direta
+às 11:08:37 e reload às 11:08:38 repetiram o defeito; sala/audit/receipt e WS
+comprovam resultado disponível. Isso é apresentação pública persistentemente
+incorreta, sem corrupção financeira observada. Registrei causa e correção
+mínima proposta na [Story 6.4](../_bmad-output/implementation-artifacts/6-4-validação-final-no-ambiente-publicado.md),
+sem corrigir produto. Após a confirmação, terminei somente leituras/logout e
+documentação, sem novas mutações de negócio. A coordenação completou às 11:16
+a prova de Content-Type realmente ausente com POST register de corpo `{}`
+inválido, retornando 415, distinguindo-a do cabeçalho vazio usado inicialmente.
+Não criei outro lote para cancelar
+nem exercitei resultado sem lances; essas demonstrações permanecem não
+exercitadas. As recusas de carteira/depósito foram testadas no leiloeiro demo,
+mas não no novo AUCTIONEER; lance pelo leiloeiro também não foi exercitado.
+Não induzi cold start/queda AIC/mídia nem fiz carga ou adulteração.
+
+O README permaneceu intacto; suas declarações de review agregado pendente e
+6.4 não executada ficaram registradas como divergências documentais. Não
+autentiquei SHA do Render; logs de startup fornecidos pelo usuário são relato
+complementar. Não repeti verify local, pois não houve alteração executável.
+O registro detalhado contém horários, HTTP, saldos, pseudônimos e hash final;
+a coleta pública temporária sanitizada está em
+`/private/tmp/atrio64-evidence-public.json`, sem cookies/JWT/senhas/identidades.
+
+**Fechamento impedido:** 6.4 e Épico 6 seguem in-progress por MEDIUM aberto;
+6.1/6.2A/6.3 seguem review apesar das provas públicas positivas, 6.2 done com
+R6.2-01 LOW aceito preservado, e 6.5–6.7 backlog/cortadas. Não alego sucesso
+integral do roteiro ou aprovação final do candidato publicado.
+
+## R6.4-01 — correção local do status público — 29/10/2026
+
+Autorizei explicitamente ampliar o resumo/detalhe público com somente
+`settlement_status: pending|settled`, depois de a investigação confirmar que
+`phase` temporal não distinguia liquidação. Decidi usar a existência persistida
+de LotSettlement no mesmo LEFT OUTER JOIN de cada leitura pública; descartei
+relógio do navegador, receipt/lances como inferência, novo endpoint, migration,
+N+1 e exposição de resultado ou identidade. Backend e frontend exigem o campo
+no mesmo deploy, sem fallback para servidor antigo.
+
+Um agente implementou código/regressões; a coordenação conferiu o diff sem Git,
+completou a propagação contratual do teste de cancelamento, atualizou documentos
+e executou o gate. A Vitrine usa um helper para texto visual e nome acessível:
+ended+pending mantém apurando; ended+settled mostra Encerrado. Sala/QH-01,
+R6-AGG-01, Painel, Meus arremates, comprovante, auditoria e regras financeiras
+permanecem preservados. Não alterei settlement, scheduler ou WebSocket.
+
+Os focais finais passaram: 98 backend (lotes públicos/fases/OpenAPI), 38 backend
+(cancelamento), 199 Node e 136 Playwright (Vitrine/layout/Sala/WS), incluindo
+1440/375/320, pending/settled, nomes acessíveis e ausência de novas chamadas.
+A primeira rodada de navegador teve 133 passed/3 failed por expectativa nova
+que omitira o marcador decorativo ● em Ao vivo; corrigida só a asserção. O
+primeiro gate teve 2412 passed/1 failed por expectativa antiga de 17 campos no
+detalhe público; atualizei para 18 e assert pending, executei o focal e renovei
+o gate inteiro.
+
+**VERIFY_E2E=1 ./verify.sh final: exit 0.** Contagens reais: **2413 pytest passed**
+(1 warning preexistente, 139.29 s), **199 Node pass**, **322 Playwright passed /
+7 skipped** (33.2 s), Ruff/formato (111 arquivos), lint, typecheck, Vite e Docker
+aprovados. Usei /private/tmp/atrio-r6401/run.py gate sobre cópia sem dotenv ou
+credenciais, ambiente filtrado e PostgreSQL exclusivo de teste; conferi
+256/256 hashes SHA-256, sem diferenças. Parei só o container criado para esta
+execução, sem apagar volume ou manipular banco de desenvolvimento.
+
+As três camadas internas da skill bmad-build não mantiveram finding novo de
+código após triagem; isso não é aceite humano ou aprovação publicada. Registrei
+a evidência na Story 6.4 e a triagem na spec-r6-4-01-public-settlement.md.
+Restaurei a evidência anterior da 6.4, ausente no workspace da retomada, a partir
+do diff documental da mesma sessão; não repeti a execução de produção.
+Acrescentei notas de substituição contratual nos documentos históricos 2.5.
+
+**R6.4-01 corrigido localmente — aguardando revalidação publicada.** Novo deploy
+coordenado ainda necessário. 6.4/Épico 6 seguem in-progress; 6.1 review apesar
+CA2 público evidenciado; 6.2 done; 6.2A/6.3 tecnicamente revisadas; 6.5–6.7
+cortadas. Os sete real-stack opt-in e novo aceite humano/produção não foram
+executados. Não fiz commit, push, merge ou deploy nem iniciei outra funcionalidade.

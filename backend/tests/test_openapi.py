@@ -377,6 +377,7 @@ PUBLIC_SUMMARY_FIELDS = [
     "id",
     "image_url",
     "phase",
+    "settlement_status",
     "starting_bid_cents",
     "starts_at",
     "title",
@@ -397,7 +398,10 @@ INTERNAL_FIELDS = {
     "created_at",
     "image_id",
     "status",
-    "settlement_status",
+    "winner_user_id",
+    "winner_alias",
+    "receipt",
+    "final_amount_cents",
 }
 
 
@@ -452,6 +456,12 @@ def test_public_lot_schemas_have_exactly_the_contract_fields(
     assert sorted(schemas["PublicLotDetailResponse"]["properties"]) == ["as_of", "lot"]
     assert schemas["LotPhase"]["enum"] == ["scheduled", "live", "ended"]
     assert "HTTPValidationError" not in schemas
+    for name in ("PublicLotSummary", "PublicLotDetail"):
+        assert "settlement_status" in schemas[name]["required"]
+        assert schemas[name]["properties"]["settlement_status"]["enum"] == [
+            "pending",
+            "settled",
+        ]
 
 
 def test_no_public_lot_schema_exposes_internal_fields(api_only: TestClient) -> None:

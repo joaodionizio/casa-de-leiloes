@@ -18,6 +18,7 @@ export interface MockLot {
   starts_at: string
   ends_at: string
   phase: Phase
+  settlement_status: 'pending' | 'settled'
   external_id: number
   medium_display: string | null
   dimensions: string | null
@@ -67,6 +68,7 @@ export function makeLot(
     starting_bid_cents: 10_000 + n * 1_000,
     ...window,
     phase,
+    settlement_status: 'pending',
     external_id: 27_000 + n,
     medium_display: 'Óleo sobre tela',
     dimensions: '207,5 × 308,1 cm',
@@ -106,6 +108,7 @@ const SUMMARY_KEYS = [
   'starts_at',
   'ends_at',
   'phase',
+  'settlement_status',
 ] as const
 
 function summary(lot: MockLot): Record<string, unknown> {

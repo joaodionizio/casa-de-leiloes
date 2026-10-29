@@ -522,6 +522,7 @@ class PublicLotSummary(BaseModel):
     starts_at: datetime
     ends_at: datetime
     phase: LotPhase
+    settlement_status: Literal["pending", "settled"]
 
 
 class PublicLotDetail(PublicLotSummary):
@@ -562,11 +563,15 @@ def public_snapshot_statement() -> Select:
     O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes. O
     cancelado (Story 3.6, D3) é excluído na condição do JOIN, nunca num `WHERE`: o
     `WHERE` apagaria a linha do `as_of` quando só há lotes cancelados."""
+    from app.lot_settlement import LotSettlement
+
     clock = _clock_cte()
     return (
-        select(clock.c.as_of, Lot)
+        select(clock.c.as_of, Lot, LotSettlement.id.label("settlement_id"))
         .select_from(clock)
         .outerjoin(Lot, Lot.cancelled_at.is_(None))
+        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
+        .execution_options(autoflush=False)
     )
 
 
@@ -696,27 +701,39 @@ def read_my_lots_snapshot(
     return MyLotsResponse(as_of=as_of, items=items, total_received_cents=total)
 
 
-def read_public_snapshot(session: Session) -> tuple[datetime, list[Lot]]:
+def read_public_snapshot(
+    session: Session,
+) -> tuple[datetime, list[Lot], set[uuid.UUID]]:
     rows = session.execute(public_snapshot_statement()).all()
     as_of = rows[0].as_of.astimezone(UTC)
-    return as_of, [row.Lot for row in rows if row.Lot is not None]
+    return (
+        as_of,
+        [row.Lot for row in rows if row.Lot is not None],
+        {row.Lot.id for row in rows if row.settlement_id is not None},
+    )
 
 
 def read_public_lot_snapshot(
     session: Session, lot_id: uuid.UUID
-) -> tuple[datetime, Lot | None]:
+) -> tuple[datetime, Lot | None, bool]:
     # A condição do id (e a do cancelamento, D3) fica no JOIN, nunca num WHERE: o WHERE
     # apagaria a linha do `as_of` quando o lote não existe ou está cancelado.
+    from app.lot_settlement import LotSettlement
+
     clock = _clock_cte()
     row = session.execute(
-        select(clock.c.as_of, Lot)
+        select(clock.c.as_of, Lot, LotSettlement.id.label("settlement_id"))
         .select_from(clock)
         .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
+        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
+        .execution_options(autoflush=False)
     ).one()
-    return row.as_of.astimezone(UTC), row.Lot
+    return row.as_of.astimezone(UTC), row.Lot, row.settlement_id is not None
 
 
-def public_lot_summary(lot: Lot, as_of: datetime) -> PublicLotSummary:
+def public_lot_summary(
+    lot: Lot, as_of: datetime, *, has_settlement: bool
+) -> PublicLotSummary:
     return PublicLotSummary(
         id=lot.id,
         title=lot.title,
@@ -727,12 +744,15 @@ def public_lot_summary(lot: Lot, as_of: datetime) -> PublicLotSummary:
         starts_at=lot.starts_at.astimezone(UTC),
         ends_at=lot.ends_at.astimezone(UTC),
         phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
+        settlement_status="settled" if has_settlement else "pending",
     )
 
 
-def public_lot_detail(lot: Lot, as_of: datetime) -> PublicLotDetail:
+def public_lot_detail(
+    lot: Lot, as_of: datetime, *, has_settlement: bool
+) -> PublicLotDetail:
     return PublicLotDetail(
-        **public_lot_summary(lot, as_of).model_dump(),
+        **public_lot_summary(lot, as_of, has_settlement=has_settlement).model_dump(),
         external_id=lot.external_id,
         medium_display=lot.medium_display,
         dimensions=lot.dimensions,
@@ -744,7 +764,9 @@ def public_lot_detail(lot: Lot, as_of: datetime) -> PublicLotDetail:
     )
 
 
-def build_public_lots(lots: list[Lot], as_of: datetime) -> PublicLotsResponse:
+def build_public_lots(
+    lots: list[Lot], as_of: datetime, settled_lot_ids: set[uuid.UUID]
+) -> PublicLotsResponse:
     """Classifica todos os lotes com o MESMO `as_of` e ordena cada grupo (P4, D3):
     ao vivo `ends_at ASC`, agendados `starts_at ASC`, encerrados `ends_at DESC`;
     `id ASC` desempata nos três."""
@@ -760,9 +782,18 @@ def build_public_lots(lots: list[Lot], as_of: datetime) -> PublicLotsResponse:
     ended.sort(key=lambda lot: lot.ends_at, reverse=True)
     return PublicLotsResponse(
         as_of=as_of,
-        live=[public_lot_summary(lot, as_of) for lot in live],
-        scheduled=[public_lot_summary(lot, as_of) for lot in scheduled],
-        ended=[public_lot_summary(lot, as_of) for lot in ended],
+        live=[
+            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
+            for lot in live
+        ],
+        scheduled=[
+            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
+            for lot in scheduled
+        ],
+        ended=[
+            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
+            for lot in ended
+        ],
     )
 
 
@@ -882,8 +913,8 @@ def register_lot_routes(app: FastAPI) -> None:
     ) -> PublicLotsResponse:
         # Leitura pública (AD-19): um único statement `SELECT`, sem trava, sem a AIC e
         # sem sessão. O instante e as linhas vêm do mesmo snapshot (P2 refinada).
-        as_of, lots = read_public_snapshot(session)
-        result = build_public_lots(lots, as_of)
+        as_of, lots, settled_lot_ids = read_public_snapshot(session)
+        result = build_public_lots(lots, as_of, settled_lot_ids)
         session.rollback()  # encerra a transação de leitura antes da resposta (D2)
         response.headers["Cache-Control"] = "no-store"
         return result
@@ -902,11 +933,14 @@ def register_lot_routes(app: FastAPI) -> None:
         response: Response,
         session: Session = Depends(get_session),
     ) -> PublicLotDetailResponse | Response:
-        as_of, lot = read_public_lot_snapshot(session, lot_id)
+        as_of, lot, has_settlement = read_public_lot_snapshot(session, lot_id)
         result = (
             None
             if lot is None
-            else PublicLotDetailResponse(as_of=as_of, lot=public_lot_detail(lot, as_of))
+            else PublicLotDetailResponse(
+                as_of=as_of,
+                lot=public_lot_detail(lot, as_of, has_settlement=has_settlement),
+            )
         )
         session.rollback()
         if result is None:

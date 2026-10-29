@@ -109,7 +109,7 @@ development_status:
   # 6.2A: gates aprovados; review individual DEFERIDO ao agregado final por prazo.
   6-2a-cadastro-de-usuarios: review
   6-3-readme-completo-e-registro-de-uso-de-ia: review
-  6-4-validação-final-no-ambiente-publicado: backlog
+  6-4-validação-final-no-ambiente-publicado: in-progress
   # 6.5–6.7 CORTADAS por prazo em 29/10; backlog preservado pelo schema, não planejadas.
   6-5-busca-e-filtro-de-lotes: backlog
   6-6-cancelamento-com-estorno-automático: backlog

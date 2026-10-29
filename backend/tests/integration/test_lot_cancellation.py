@@ -639,7 +639,8 @@ def test_other_lots_stay_public_and_no_phase_is_cancelled(
 
     assert [item["id"] for item in body["live"]] == [str(kept)]
     assert detail.status_code == 200 and detail.json()["lot"]["phase"] == "live"
-    assert len(detail.json()["lot"]) == 17  # contrato público intacto
+    assert len(detail.json()["lot"]) == 18  # inclui settlement_status (R6.4-01)
+    assert detail.json()["lot"]["settlement_status"] == "pending"
 
 
 def test_the_owner_still_lists_the_cancelled_lot_with_the_new_fields(

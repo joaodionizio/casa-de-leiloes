@@ -18,6 +18,7 @@ function summary(overrides: Record<string, unknown> = {}): Record<string, unknow
     starts_at: '2026-10-25T12:00:00.481203Z',
     ends_at: '2026-10-28T12:00:00.481203Z',
     phase: 'live',
+    settlement_status: 'pending',
     ...overrides,
   }
 }
@@ -135,4 +136,22 @@ test('o detalhe recusa campo ausente ou fora do contrato', () => {
       JSON.stringify(bad),
     )
   }
+})
+
+
+test('settlement_status é obrigatório em resumo e detalhe e aceita só pending/settled', () => {
+  for (const status of ['pending', 'settled']) {
+    assert.equal(isPublicLotsResponse(list({ ended: [summary({ phase: 'ended', settlement_status: status })] })), true)
+    const base = detail().lot as Record<string, unknown>
+    assert.equal(isPublicLotDetailResponse({ ...detail(), lot: { ...base, settlement_status: status } }), true)
+  }
+  for (const status of [undefined, null, '', 'sold', 'unsold', true, 1]) {
+    const invalid = summary({ settlement_status: status })
+    assert.equal(isPublicLotsResponse(list({ ended: [invalid] })), false)
+    const base = detail().lot as Record<string, unknown>
+    assert.equal(isPublicLotDetailResponse({ ...detail(), lot: { ...base, settlement_status: status } }), false)
+  }
+  assert.equal(isPublicLotsResponse(list({ ended: [without(summary(), 'settlement_status')] })), false)
+  const base = detail().lot as Record<string, unknown>
+  assert.equal(isPublicLotDetailResponse({ ...detail(), lot: without(base, 'settlement_status') }), false)
 })

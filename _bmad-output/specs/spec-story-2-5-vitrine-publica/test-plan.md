@@ -1,5 +1,15 @@
 # Plano de testes — Story 2.5
 
+> **Atualização R6.4-01 — 29/10/2026:** o contrato público vigente está em
+> [public-lot-dtos.md](public-lot-dtos.md). A decisão humana substitui neste
+> documento a proibição histórica de `settlement_status`, as contagens 9/17 e
+> o rótulo incondicional de `ended`: resumo/detalhe têm 10/18 campos, incluindo
+> `settlement_status` obrigatório (`pending|settled`), derivado exclusivamente
+> do settlement persistido. Vitrine: `ended+pending` → “Encerrado, apurando
+> resultado”; `ended+settled` → “Encerrado”. Os demais trechos registram o
+> escopo original da 2.5.
+
+
 Toda contagem vem do `verify` desta story; a regressão é a suíte inteira (último
 registro: 985 do back-end e 39 do front, 2.4). Banco: PostgreSQL `_test` real; AIC pelo
 `ArticClient` com `MockTransport` (`catalog_support.py`); a guarda de rede continua

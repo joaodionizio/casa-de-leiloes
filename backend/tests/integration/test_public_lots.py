@@ -58,6 +58,7 @@ SUMMARY_KEYS = sorted(
         "starts_at",
         "ends_at",
         "phase",
+        "settlement_status",
     ]
 )
 DETAIL_KEYS = sorted(
@@ -82,7 +83,10 @@ FORBIDDEN_KEYS = {
     "password_hash",
     "role",
     "status",
-    "settlement_status",
+    "winner_user_id",
+    "winner_alias",
+    "receipt",
+    "final_amount_cents",
 }
 LOCK_PATTERN = re.compile(
     r"\bFOR\s+(NO\s+KEY\s+UPDATE|UPDATE|KEY\s+SHARE|SHARE)\b|\bLOCK\b", re.IGNORECASE
@@ -412,7 +416,7 @@ def test_the_sql_returns_one_distinct_as_of_for_all_rows(
     with seeded() as session:
         rows = session.execute(public_snapshot_statement()).all()
         session.rollback()
-        as_of, lots = read_public_snapshot(session)
+        as_of, lots, settled = read_public_snapshot(session)
         session.rollback()
     after = db_now(seeded)
 
@@ -421,6 +425,7 @@ def test_the_sql_returns_one_distinct_as_of_for_all_rows(
     assert len({row.as_of for row in rows}) == 1
     assert before <= rows[0].as_of.astimezone(UTC) <= as_of <= after
     assert len(lots) == 20
+    assert settled == set()
 
 
 @pytest.mark.parametrize("target", ["list", "detail"])
@@ -442,6 +447,10 @@ def test_each_route_runs_exactly_one_statement_with_one_clock(
     (statement,) = [normalized(sql) for sql in recorder.statements]
     assert statement.startswith("WITH clock AS MATERIALIZED")
     assert statement.count("clock_timestamp") == 1
+    assert (
+        "LEFT OUTER JOIN lot_settlements ON lot_settlements.lot_id = lots.id"
+        in statement
+    )
     assert "FROM clock LEFT OUTER JOIN lots ON" in statement
     assert " ORDER BY " not in statement
     assert " LIMIT " not in statement.upper()
@@ -452,10 +461,11 @@ def test_an_empty_database_still_has_as_of_from_the_single_row_of_the_join(
     seeded: sessionmaker[Session],
 ) -> None:
     with seeded() as session:
-        as_of, found = read_public_snapshot(session)
+        as_of, found, settled = read_public_snapshot(session)
         session.rollback()
 
     assert found == []
+    assert settled == set()
     assert as_of.tzinfo is not None
 
 
@@ -718,7 +728,7 @@ def test_detail_is_the_same_for_every_role(
     assert len({response.content for response in responses}) == 1
 
 
-def test_detail_has_the_17_keys_and_the_values_of_the_row(
+def test_detail_has_the_18_keys_and_the_values_of_the_row(
     monkeypatch: pytest.MonkeyPatch,
     seeded: sessionmaker[Session],
     auctioneer_id: uuid.UUID,
@@ -747,7 +757,7 @@ def test_detail_has_the_17_keys_and_the_values_of_the_row(
     assert sorted(body) == ["as_of", "lot"]
     lot = body["lot"]
     assert sorted(lot) == DETAIL_KEYS
-    assert len(lot) == 17
+    assert len(lot) == 18
     assert lot["id"] == str(lot_id)
     assert lot["external_id"] == 27992
     assert lot["title"] == "A Sunday on La Grande Jatte — 1884"
@@ -841,6 +851,9 @@ def test_public_reads_are_pure_selects_without_locks(
     )
     path = URL if target == "list" else f"{URL}/{expired}"
     client = client_for(monkeypatch, seeded)
+    from tests.settlement_support import snapshot
+
+    full_before = snapshot(seeded)
     rows_before = lot_rows(seeded)
     count_before = count_lots(seeded)
     run_seed = mock.Mock(side_effect=AssertionError("o seed não pode rodar"))
@@ -855,6 +868,7 @@ def test_public_reads_are_pure_selects_without_locks(
     assert statement.split(" ", 1)[0].upper() == "WITH"
     assert WRITE_PATTERN.search(statement) is None
     assert LOCK_PATTERN.search(statement) is None
+    assert snapshot(seeded) == full_before
     assert lot_rows(seeded) == rows_before
     assert count_lots(seeded) == count_before
     run_seed.assert_not_called()
@@ -1082,3 +1096,78 @@ def test_collection_and_item_do_not_accept_writes_other_than_the_creation(
 
     assert statuses == [405] * 8
     assert lot_rows(seeded) == before
+
+
+@pytest.mark.parametrize("outcome", ["pending", "sold", "unsold"])
+def test_persisted_settlement_alone_sets_public_status_in_list_and_detail(
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: sessionmaker[Session],
+    auctioneer_id: uuid.UUID,
+    db_engine: Engine,
+    outcome: str,
+) -> None:
+    from app.lots import PublicLotDetail, PublicLotSummary
+    from tests.bid_support import live_lot
+    from tests.settlement_support import (
+        ALICE,
+        expire,
+        run_settle,
+        snapshot,
+        sold_lot,
+    )
+    from tests.wallet_support import seed_users_with_wallets, set_wallet
+
+    seed_users_with_wallets(seeded)
+    set_wallet(seeded, ALICE, 80_000)
+    if outcome == "sold":
+        lot_id = sold_lot(seeded)
+    else:
+        lot_id = live_lot(seeded)
+        expire(seeded, lot_id)
+    if outcome != "pending":
+        result = run_settle(seeded, lot_id)
+        assert result.status == f"settled_{outcome}"
+    now = db_now(seeded)
+    scheduled = insert_lot(
+        seeded,
+        auctioneer_id=auctioneer_id,
+        starts_at=now + timedelta(hours=1),
+        ends_at=now + timedelta(hours=2),
+    )
+    live = insert_lot(seeded, auctioneer_id=auctioneer_id)
+    cancelled = insert_lot(seeded, auctioneer_id=auctioneer_id, cancelled_at=now)
+    before = snapshot(seeded)
+    client = client_for(monkeypatch, seeded)
+    expected = "pending" if outcome == "pending" else "settled"
+    with statement_recorder(db_engine) as recorder:
+        listing = client.get(URL)
+        detail = client.get(f"{URL}/{lot_id}")
+    assert len(recorder.statements) == 2  # uma leitura por GET, mesmo com vários lotes
+    assert listing.status_code == detail.status_code == 200
+    body = listing.json()
+    item = next(item for item in body["ended"] if item["id"] == str(lot_id))
+    assert item["phase"] == detail.json()["lot"]["phase"] == "ended"
+    assert (
+        item["settlement_status"]
+        == detail.json()["lot"]["settlement_status"]
+        == expected
+    )
+    assert [item["id"] for item in body["live"]] == [str(live)]
+    assert [item["id"] for item in body["scheduled"]] == [str(scheduled)]
+    assert all(
+        item["settlement_status"] == "pending"
+        for item in body["live"] + body["scheduled"]
+    )
+    assert str(cancelled) not in {item["id"] for item in all_items(body)}
+    assert client.get(f"{URL}/{cancelled}").status_code == 404
+    assert sorted(item) == SUMMARY_KEYS
+    assert sorted(detail.json()["lot"]) == DETAIL_KEYS
+    assert FORBIDDEN_KEYS.isdisjoint(keys_anywhere(body) | keys_anywhere(detail.json()))
+    assert snapshot(seeded) == before
+    for model in (PublicLotSummary, PublicLotDetail):
+        schema = model.model_json_schema()
+        assert "settlement_status" in schema["required"]
+        assert schema["properties"]["settlement_status"]["enum"] == [
+            "pending",
+            "settled",
+        ]
