@@ -264,3 +264,10 @@ leitura, sem alteração de arquivos. Registrei o ocorrido e não executei outro
 comando Git/gh. Não houve leitura de `.env*`, credenciais ou valores de
 segredos, cookies ou tokens reais.
 
+## Extensão local CA1 — W7 da Story 6.2A — 29/10/2026
+
+Decidi renovar a evidência CA1 afetada pelo POST /api/auth/register, sem alterar middleware nem CA2 publicado. Inventário bruto independente da política encontra sete escritas; expectativa histórica de seis falha; mutações agora acrescentam oitava inesperada e continuam reprovando, inclusive caminhos documentais. Matriz com/sem SPA cobre os três bloqueios antes do despacho. Integração PostgreSQL do cadastro comprova zero User/Wallet/cookie nos negativos e controle positivo no mesmo app/caminho. Políticas/OpenAPI/ausência de aliases atualizados sem enfraquecer descoberta.
+
+Focais ampliados 589 passed, exit 0; gate final VERIFY_E2E=1 ./verify.sh exit 0, 2408 pytest/197 Node/317 Playwright aprovados e 7 real-stack opt-in ignorados. Smoke pertinente separado: três testes reais aprovados e duas carteiras zero confirmadas. Comandos, candidato/cópia, correções e limites em [evidência da 6.2A](../spec-story-6-2a-cadastro-de-usuarios/implementation-evidence.md).
+
+A prova histórica de seis escritas não comprova o candidato com W7; esta extensão é evidência de implementação local, não re-review independente. 6.1 permanece review devido à pendência publicada; **CA2 publicado não foi alterado nem considerado aprovado**. Sem Git/deploy ou .env*.

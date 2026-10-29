@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   isAuctioneerRoute,
+  authReturnState,
   isBidderRoute,
   isRestrictedRoute,
   parseRoute,
@@ -23,6 +24,19 @@ test('as seis rotas conhecidas', () => {
   assert.deepEqual(parseRoute('/auctioneer/lots'), { kind: 'my-lots' })
   assert.deepEqual(parseRoute('/auctioneer/lots/new'), { kind: 'create-lot' })
   assert.deepEqual(parseRoute('/bidder/wallet'), { kind: 'wallet' })
+})
+
+test('cadastro tem rota própria e nunca pode ser destino de retorno', () => {
+  assert.deepEqual(parseRoute('/register?x=1#y'), { kind: 'register' })
+  assert.equal(routePath({ kind: 'register' }), '/register')
+  assert.equal(isRestrictedRoute({ kind: 'register' }), false)
+  for (const role of ['BIDDER', 'AUCTIONEER'] as const) {
+    for (const path of ['/register', '/register?x=1#y', '/login?x=1#y']) assert.equal(safeReturnPath(path, role), '/')
+  }
+  for (const value of ['https://evil.example', '//evil.example', '/login', '/register#x', '/unknown', null]) assert.deepEqual(authReturnState(value), {})
+  assert.deepEqual(authReturnState('/bidder/wallet?x=1#y'), { returnTo: '/bidder/wallet' })
+  assert.deepEqual(authReturnState('/auctioneer/lots'), { returnTo: '/auctioneer/lots' })
+  assert.deepEqual(readNavState({ notice: 'registered', password: 'discard-me', email: 'discard-me' }), { notice: 'registered' })
 })
 
 test('o que não é rota conhecida vira "não encontrado", sem chamar a API', () => {

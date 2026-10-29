@@ -2088,3 +2088,14 @@ publicada continuam limitações explícitas. Não executei Git/gh/commit/push/m
 deploy ou leitura de dotenv. Evidência vigente no adendo final de
 `_bmad-output/specs/spec-story-6-2-identidade-visual-e-responsividade/implementation-evidence.md`.
 
+### Story 6.2A — Cadastro de usuários — 29/10/2026
+
+Decidi consolidar QH-01–06 com bmad-spec e autorizei bmad-build na mesma sessão, sem nova aprovação intermediária. Codex implementou cadastro público dos dois papéis, sem Nome/migration/autologin, com User+Wallet atômicos, Argon2id existente e duplicidade explícita por constraint; aceitei conscientemente enumeração na demo. Descartei coletar Nome sem uso e renumerar 6.3–6.7. Um agente implementou produto/frontend e a coordenação completou provas backend, gates e registros.
+
+A IA verificou backend real (589 focais), frontend (107 Playwright focais/197 Node), smoke FastAPI+build+PostgreSQL (3 cenários e duas carteiras zero). Gate final VERIFY_E2E=1 ./verify.sh: exit 0, 2408 pytest, 197 Node e 317 Playwright aprovados/7 opt-in ignorados, Ruff/formato/lint/typecheck/Vite/Docker aprovados. Um catálogo literal de erro exigiu atualização e o CTA de header que perdia returnTo foi corrigido; gate anterior invalidado e renovado após a correção. Não afrouxei middleware, login ou política.
+
+Gerei capturas temporárias Cadastro 1440/375/320 e Login; ficam para inspeção humana, sem alegar novo aceite visual. SPEC/contrato final e evidência estão em _bmad-output/specs/spec-story-6-2a-cadastro-de-usuarios/. Identificação por pasta/chave completa 6-2a-cadastro-de-usuarios, sem confiar em resolver numérico de sufixos. Sincronizei 6.2 done por aceite humano técnico/visual/review com LOW aceito; 6.2A review/SPEC in-review, 6.1 review por CA2 público pendente e épico in-progress.
+
+Não executei revisão independente, Git/gh/commit/push/merge/deploy ou li .env*. Usei cópia permitida com hashes conferidos e bancos isolados *_test; nenhum banco de desenvolvimento. Limites e comandos reais em implementation-evidence.md da 6.2A; não inicio 6.3.
+
+

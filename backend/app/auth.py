@@ -5,18 +5,64 @@ O JWT vive só no cookie HttpOnly: nunca no corpo, na URL nem no cabeçalho
 `app/csrf.py` como qualquer outra escrita. GET nunca cria nem remove sessão.
 """
 
+import logging
+import uuid
+from typing import Literal
+
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import security
 from app.access import NO_STORE, AccessPolicy, api_route, require_user
 from app.config import SessionConfig
 from app.db import get_session
-from app.errors import INVALID_CREDENTIALS, error_response, error_responses
+from app.errors import (
+    EMAIL_ALREADY_REGISTERED,
+    INVALID_CREDENTIALS,
+    error_response,
+    error_responses,
+)
 from app.users import User, UserRole
+from app.wallet import create_wallet
+
+logger = logging.getLogger(__name__)
+
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=8, max_length=1024)
+    # Deliberately closed: a future internal role must never become public.
+    role: Literal["BIDDER", "AUCTIONEER"]
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, value: str) -> str:
+        if value.count("@") != 1 or any(char.isspace() for char in value):
+            raise ValueError("invalid email")
+        local, domain = value.split("@")
+        if not local or not domain:
+            raise ValueError("invalid email")
+        return value
+
+
+def is_email_conflict(exc: IntegrityError) -> bool:
+    original = exc.orig
+    return (
+        getattr(original, "sqlstate", None) == "23505"
+        and getattr(getattr(original, "diag", None), "constraint_name", None)
+        == "uq_users_email"
+    )
 
 
 class LoginRequest(BaseModel):
@@ -41,6 +87,48 @@ def invalid_credentials() -> Response:
 
 
 def register_auth_routes(app: FastAPI) -> None:
+    @api_route(
+        app,
+        "/api/auth/register",
+        methods=["POST"],
+        policy=AccessPolicy.PUBLIC,
+        status_code=201,
+        response_model=CurrentUser,
+        responses=error_responses(403, 409, 415, 422, 500),
+    )
+    def register(
+        payload: RegisterRequest,
+        session: Session = Depends(get_session),
+    ) -> Response:
+        password_hash = security.hash_password(payload.password)
+        user = User(
+            id=uuid.uuid4(),
+            email=payload.email,
+            password_hash=password_hash,
+            role=payload.role,
+        )
+        try:
+            session.add(user)
+            session.flush()
+            create_wallet(session, user.id)
+            session.commit()
+        except SQLAlchemyError as exc:
+            session.rollback()
+            if isinstance(exc, IntegrityError) and is_email_conflict(exc):
+                return error_response(409, EMAIL_ALREADY_REGISTERED, headers=NO_STORE)
+            # Never format the exception: PostgreSQL DETAIL may contain input
+            # even when the engine hides SQL parameters.
+            logger.error(
+                "registration persistence failure",
+                extra={"error_type": type(exc).__name__},
+            )
+            return error_response(500, "internal_error", headers=NO_STORE)
+        return JSONResponse(
+            {"email": payload.email, "role": payload.role},
+            status_code=201,
+            headers=NO_STORE,
+        )
+
     @api_route(
         app,
         "/api/auth/login",

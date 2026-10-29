@@ -12,6 +12,7 @@ import AuditPage from './AuditPage'
 import ReceiptPage from './ReceiptPage'
 import { documentTitle } from './brand'
 import LoginPage from './LoginPage'
+import RegisterPage from './RegisterPage'
 import LotCreation from './LotCreation'
 import LotPage from './LotPage'
 import type { Viewer } from './LotBidPanel'
@@ -21,6 +22,7 @@ import { NAVIGATION_EVENT, navigate, replaceRoute } from './navigation'
 import NotFoundPage from './NotFoundPage'
 import {
   isRestrictedRoute,
+  authReturnState,
   parseRoute,
   readNavState,
   routePath,
@@ -62,6 +64,7 @@ function pageTitle(kind: string): string | null {
   if (kind === 'receipt') return documentTitle('Comprovante de arremate')
   if (kind === 'audit') return documentTitle('Auditoria pública')
   if (kind === 'login') return documentTitle('Entrar')
+  if (kind === 'register') return documentTitle('Cadastro')
   if (kind === 'create-lot') return documentTitle('Criar lote')
   if (kind === 'my-lots') return documentTitle('Meus lotes')
   if (kind === 'my-wins') return documentTitle('Meus arremates')
@@ -181,7 +184,7 @@ function App() {
   // área restrita (leiloeiro ou carteira do licitante) vai ao login e volta para ela
   // depois, se o papel permitir.
   useEffect(() => {
-    if (route.kind === 'login' && session.status === 'authenticated') {
+    if ((route.kind === 'login' || route.kind === 'register') && session.status === 'authenticated') {
       replaceRoute(safeReturnPath(navState.returnTo, session.user.role))
     } else if (isRestrictedRoute(route) && session.status === 'anonymous') {
       replaceRoute('/login', { returnTo: routePath(route) })
@@ -275,6 +278,8 @@ function App() {
       return (
         <LoginPage
           focusHeading={navigated}
+          registered={navState.notice === 'registered'}
+          authState={authReturnState(navState.returnTo)}
           initialError={
             navState.notice === 'expired'
               ? 'Sua sessão expirou. Entre novamente.'
@@ -283,6 +288,13 @@ function App() {
           onLoggedIn={handleLoggedIn}
         />
       )
+    }
+    if (route.kind === 'register') {
+      if (session.status === 'authenticated') return null
+      return <RegisterPage focusHeading={navigated} authState={authReturnState(navState.returnTo)} onRegistered={() => {
+        setSessionNotice(null)
+        replaceRoute('/login', { ...authReturnState(navState.returnTo), notice: 'registered' })
+      }} />
     }
     // Carteira do licitante (Story 3.1). O leiloeiro vê só a vista de papel errado:
     // a página da carteira nem monta, então não há `GET /api/wallet`.

@@ -32,6 +32,68 @@ export type LogoutResult =
   | { ok: true }
   | { ok: false; failure: 'server' | 'rejected' }
 
+export type RegistrationField = 'email' | 'password' | 'role'
+export type RegistrationFailure = 'email_already_registered' | 'validation' | 'server' | 'rejected'
+export interface RegistrationErrors {
+  role?: string
+  email?: string
+  password?: string
+}
+export type RegisterResult =
+  | { ok: true; user: CurrentUser }
+  | { ok: false; failure: RegistrationFailure; fields: RegistrationField[] }
+
+export function registrationErrors(email: string, password: string, role: UserRole | ''): RegistrationErrors {
+  const errors: RegistrationErrors = {}
+  if (role !== 'BIDDER' && role !== 'AUCTIONEER') errors.role = 'Escolha como você quer participar.'
+  const normalized = email.trim().toLowerCase()
+  const parts = normalized.split('@')
+  if (Array.from(normalized).length > 254 || parts.length !== 2 || !parts[0] || !parts[1] || /\s/u.test(normalized)) {
+    errors.email = 'Informe um e-mail válido com até 254 caracteres.'
+  }
+  const length = Array.from(password).length
+  if (length < 8 || length > 1024) errors.password = 'Use uma senha de 8 a 1024 caracteres.'
+  return errors
+}
+
+export async function register(email: string, password: string, role: UserRole): Promise<RegisterResult> {
+  const failed = (failure: RegistrationFailure, fields: RegistrationField[] = []): RegisterResult => ({ ok: false, failure, fields })
+  let response: Response
+  try {
+    response = await fetch('/api/auth/register', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, role }),
+    })
+  } catch { return failed('server') }
+  if (response.status >= 500) return failed('server')
+  const body = await readJson(response)
+  if (response.status === 201) {
+    if (!isCurrentUser(body) || Object.keys(body).length !== 2 || body.email !== email.trim().toLowerCase() || body.role !== role) return failed('server')
+    return { ok: true, user: body }
+  }
+  if (!isApiErrorBody(body) || body.status !== response.status) return failed('server')
+  if (response.status === 409 && body.code === 'email_already_registered') return failed('email_already_registered', ['email'])
+  if (response.status === 422 && body.code === 'validation_error') {
+    const details = (body as ApiErrorBody & { details?: unknown }).details
+    const fields: RegistrationField[] = []
+    if (Array.isArray(details)) {
+      for (const detail of details) {
+        const loc: unknown = typeof detail === 'object' && detail !== null ? (detail as { loc?: unknown }).loc : null
+        if (Array.isArray(loc) && loc[0] === 'body' && (loc[1] === 'email' || loc[1] === 'password' || loc[1] === 'role') && !fields.includes(loc[1])) fields.push(loc[1])
+      }
+    }
+    return failed('validation', fields)
+  }
+  return failed('rejected')
+}
+
+export function registrationFailureMessage(failure: RegistrationFailure): string {
+  if (failure === 'email_already_registered') return 'Este e-mail já está cadastrado. Entre para continuar.'
+  if (failure === 'validation') return 'Confira os dados do cadastro e tente novamente.'
+  return failureMessage(failure)
+}
+
 function isCurrentUser(value: unknown): value is CurrentUser {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as { email?: unknown; role?: unknown }

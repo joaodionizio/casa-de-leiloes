@@ -26,6 +26,7 @@ def test_docs_and_schema_live_under_api(api_only: TestClient) -> None:
     assert schema.json()["info"]["title"] == "ÁTRIO"
     assert list(schema.json()["paths"]) == [
         "/health",
+        "/api/auth/register",
         "/api/auth/login",
         "/api/auth/logout",
         "/api/me",
@@ -700,3 +701,24 @@ def test_my_wins_has_private_whitelisted_dto_and_bidder_errors(api_only):
         "as_of",
         "items",
     }
+
+
+def test_register_contract_is_closed_public_and_has_no_private_response(api_only):
+    schema = api_only.get("/api/openapi.json").json()
+    operation = schema["paths"]["/api/auth/register"]
+    assert set(operation) == {"post"}
+    post = operation["post"]
+    assert post["responses"]["201"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/CurrentUser")
+    for status in ("403", "409", "415", "422", "500"):
+        assert response_ref(post, status) == ERROR_REF
+    request = schema["components"]["schemas"]["RegisterRequest"]
+    assert set(request["properties"]) == {"email", "password", "role"}
+    assert set(request["required"]) == {"email", "password", "role"}
+    assert request["additionalProperties"] is False
+    assert request["properties"]["role"]["enum"] == ["BIDDER", "AUCTIONEER"]
+    assert request["properties"]["email"]["maxLength"] == 254
+    assert request["properties"]["password"]["minLength"] == 8
+    assert request["properties"]["password"]["maxLength"] == 1024
+    assert "Set-Cookie" not in post["responses"]["201"].get("headers", {})

@@ -1,0 +1,249 @@
+import { expect, test, type Page } from '@playwright/test'
+import { mockApi, type Role } from './support/mockApi'
+
+const PASSWORD = 'Nova senha 123!'
+async function fill(page: Page, role: Role = 'BIDDER', email = 'nova.conta+arte@example.com') {
+  await page.locator(`input[type=radio][value=${role}]`).check()
+  await page.getByLabel('E-mail', { exact: true }).fill(email)
+  await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+}
+
+for (const role of ['BIDDER', 'AUCTIONEER'] as const) {
+  test(`cadastro ${role}: JSON exato, confirmação sem sessão e login manual/reload`, async ({ page, context }) => {
+    const api = await mockApi(page)
+    await page.goto('/register')
+    await expect(page).toHaveTitle('Cadastro — ÁTRIO')
+    await expect(page.locator('input[type=radio]:checked')).toHaveCount(0)
+    await expect(page.getByLabel('Nome', { exact: true })).toHaveCount(0)
+    await fill(page, role)
+    const post = page.waitForRequest('**/api/auth/register')
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    const sent = await post
+    expect(sent.method()).toBe('POST')
+    expect(sent.headers()['content-type']).toBe('application/json')
+    expect(sent.postDataJSON()).toEqual({ email: 'nova.conta+arte@example.com', password: PASSWORD, role })
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('status').filter({ hasText: 'Conta criada com sucesso. Entre para continuar.' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sair' })).toHaveCount(0)
+    await expect(page.getByLabel('Senha', { exact: true })).toHaveValue('')
+    expect(await context.cookies()).toEqual([])
+    expect(await page.evaluate(() => JSON.stringify({ state: history.state, local: { ...localStorage }, session: { ...sessionStorage }, url: location.href }))).not.toContain(PASSWORD)
+    await expect(page.locator('.login-demo button')).toHaveCount(3)
+    await page.getByLabel('E-mail').fill('nova.conta+arte@example.com')
+    await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.locator('.site-header').getByText(role === 'BIDDER' ? 'Licitante' : 'Leiloeiro', { exact: true })).toBeVisible()
+    await page.reload()
+    await expect(page.getByText('nova.conta+arte@example.com', { exact: true })).toBeVisible()
+    if (role === 'BIDDER') {
+      await page.getByRole('link', { name: 'Carteira', exact: true }).click()
+      await expect(page.getByRole('heading', { name: 'Carteira', exact: true })).toBeVisible()
+      expect(api.count('GET /api/wallet')).toBe(1)
+    }
+    expect(api.count('POST /api/auth/register')).toBe(1)
+    expect(api.unexpected).toEqual([])
+  })
+}
+
+test('validação local anuncia erro e move foco para primeiro campo; toggle conserva valor e foco', async ({ page }) => {
+  const api = await mockApi(page)
+  await page.goto('/register')
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.locator('input[value=BIDDER]')).toBeFocused()
+  await expect(page.getByRole('alert')).toContainText('Confira os campos')
+  await expect(page.getByRole('group', { name: 'Como você quer participar?' })).toHaveAttribute('aria-invalid', 'true')
+  await page.keyboard.press('Space')
+  await page.keyboard.press('ArrowDown')
+  await expect(page.locator('input[value=AUCTIONEER]')).toBeChecked()
+  await page.keyboard.press('ArrowUp')
+  await expect(page.locator('input[value=BIDDER]')).toBeChecked()
+  await page.keyboard.press('Tab')
+  await expect(page.getByLabel('E-mail', { exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.getByLabel('E-mail', { exact: true })).toBeFocused()
+  await page.getByLabel('E-mail', { exact: true }).fill('a@b')
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.getByLabel('Senha', { exact: true })).toBeFocused()
+  await page.getByLabel('Senha', { exact: true }).fill('  senha com espaços  ')
+  await page.keyboard.press('Tab')
+  const toggle = page.getByRole('button', { name: 'Mostrar senha', exact: true })
+  await expect(toggle).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Ocultar senha' })).toBeFocused()
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('type', 'text')
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveValue('  senha com espaços  ')
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('autocomplete', 'new-password')
+  await page.keyboard.press('Space')
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('type', 'password')
+  await page.keyboard.press('Shift+Tab')
+  await expect(page.getByLabel('Senha', { exact: true })).toBeFocused()
+  const outline = await page.getByLabel('Senha', { exact: true }).evaluate(element => getComputedStyle(element).outlineWidth)
+  expect(parseFloat(outline)).toBeGreaterThanOrEqual(2)
+  expect(api.count('POST /api/auth/register')).toBe(0)
+})
+
+for (const mode of ['duplicate', 'validation', 'forbidden', 'media', 'server', 'network', 'invalid201'] as const) {
+  test(`erro ${mode}: mensagem/foco, controles liberados e nenhum sucesso/retry`, async ({ page }) => {
+    const api = await mockApi(page, { registration: mode })
+    await page.goto('/register')
+    await fill(page)
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText(mode === 'duplicate' ? 'Este e-mail já está cadastrado. Entre para continuar.' : mode === 'validation' ? 'Confira os dados' : mode === 'forbidden' || mode === 'media' ? 'Recarregue a página' : 'Não foi possível falar com o servidor')
+    await expect(page).toHaveURL(/\/register$/)
+    const focused = mode === 'duplicate' ? page.getByLabel('E-mail', { exact: true }) : mode === 'validation' ? page.getByLabel('Senha', { exact: true }) : page.getByRole('alert')
+    await expect(focused).toBeFocused()
+    await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeEnabled()
+    await expect(page.locator('input[value=BIDDER]')).toBeEnabled()
+    await expect(page.getByLabel('E-mail', { exact: true })).not.toHaveAttribute('readonly')
+    expect(api.count('POST /api/auth/register')).toBe(1)
+    await expect(page.getByText('Conta criada com sucesso. Entre para continuar.')).toHaveCount(0)
+  })
+}
+
+for (const first of ['submit', 'click'] as const) {
+  test(`barreira síncrona ${first} e envio pendente: um POST; falha permite nova tentativa`, async ({ page }) => {
+    const api = await mockApi(page)
+    const hold = api.hold('POST /api/auth/register')
+    await page.goto('/register')
+    await fill(page)
+    await page.evaluate(first => {
+      const form = document.querySelector('form')!
+      const submit = () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      const click = () => (form.querySelector('button[type=submit]') as HTMLButtonElement).click()
+      if (first === 'submit') submit(); else click()
+      click(); submit(); submit()
+    }, first)
+    await expect.poll(() => api.count('POST /api/auth/register')).toBe(1)
+    await expect(page.getByRole('button', { name: 'Criando conta…' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Mostrar senha' })).toBeDisabled()
+    await expect(page.locator('input[type=radio]').first()).toBeDisabled()
+    await expect(page.getByLabel('E-mail', { exact: true })).toHaveAttribute('readonly')
+    await page.locator('form').dispatchEvent('submit')
+    expect(api.count('POST /api/auth/register')).toBe(1)
+    hold.fail()
+    await expect(page.getByRole('alert')).toBeFocused()
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    await expect(page).toHaveURL(/\/login$/)
+    expect(api.count('POST /api/auth/register')).toBe(2)
+  })
+}
+
+for (const width of [1440, 375, 320]) {
+  test(`cadastro ${width}px: formulário/erros sem overflow, alvos de toque e seleção`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 })
+    await mockApi(page, { registration: 'duplicate' })
+    await page.goto('/register')
+    await fill(page, 'AUCTIONEER', 'email.muito.longo+com.tag@exemplo.com')
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    const metrics = await page.locator('.register-section').evaluate(section => {
+      const visible = [...section.querySelectorAll('*')].filter(element => element.getBoundingClientRect().width > 0)
+      const outside = visible.filter(element => { const rect = element.getBoundingClientRect(); return rect.left < -1 || rect.right > innerWidth + 1 }).map(element => element.tagName)
+      return { width: document.documentElement.scrollWidth, viewport: innerWidth, outside }
+    })
+    expect(metrics.width).toBeLessThanOrEqual(metrics.viewport)
+    expect(metrics.outside).toEqual([])
+    for (const locator of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senha' }), page.getByRole('button', { name: 'Criar conta', exact: true })]) {
+      const box = await locator.boundingBox()
+      expect(box?.height).toBeGreaterThanOrEqual(44)
+    }
+    await page.locator('input[value=BIDDER]').check()
+    await expect(page.locator('input[value=BIDDER]')).toBeChecked()
+    await expect(page.locator('input[value=AUCTIONEER]')).not.toBeChecked()
+  })
+}
+
+test('links reais, navegação/foco/Back/Forward e returnTo conhecido sobrevivem a reload', async ({ page }) => {
+  await mockApi(page)
+  await page.goto('/bidder/wallet')
+  await expect(page).toHaveURL(/\/login$/)
+  const create = page.getByRole('link', { name: 'Criar conta', exact: true })
+  await expect(create).toHaveAttribute('href', '/register')
+  await create.click()
+  await expect(page.getByRole('heading', { name: 'Cadastro', exact: true })).toBeFocused()
+  expect(await page.evaluate(() => history.state)).toEqual({ returnTo: '/bidder/wallet' })
+  await page.reload()
+  expect(await page.evaluate(() => history.state)).toEqual({ returnTo: '/bidder/wallet' })
+  await expect(page.locator('.site-header').getByRole('link', { name: 'Entrar', exact: true })).toHaveCount(0)
+  const formLogin = page.locator('.register-form').getByRole('link', { name: 'Entrar', exact: true })
+  await expect(formLogin).toHaveAttribute('href', '/login')
+  await formLogin.click()
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await page.evaluate(() => history.state)).toEqual({ returnTo: '/bidder/wallet' })
+  await page.goBack()
+  await expect(page).toHaveURL(/\/register$/)
+  await page.goForward()
+  await expect(page).toHaveURL(/\/login$/)
+  await page.getByRole('link', { name: 'Criar conta', exact: true }).click()
+  await fill(page)
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await page.getByLabel('E-mail').fill('nova.conta+arte@example.com')
+  await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await expect(page).toHaveURL(/\/bidder\/wallet$/)
+})
+
+for (const target of ['https://evil.example/', '//evil.example/', '/register?x=1#y', '/login#y', '/unknown', '/auctioneer/lots?x=1#y']) {
+  test(`cadastro respeita retorno seguro/papel: ${target}`, async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/register')
+    await page.evaluate(returnTo => history.replaceState({ returnTo }, '', '/register'), target)
+    await page.reload()
+    expect(await page.evaluate(() => history.state.returnTo)).toBe(target)
+    await fill(page)
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    await page.getByLabel('E-mail').fill('nova.conta+arte@example.com')
+    await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+  })
+}
+
+test('usuário autenticado em /register segue destino seguro sem trocar conta', async ({ page }) => {
+  const api = await mockApi(page, { session: 'BIDDER' })
+  await page.goto('/register')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByText('bidder1@example.com', { exact: true })).toBeVisible()
+  expect(api.count('POST /api/auth/register')).toBe(0)
+})
+
+test('clique modificado mantém semântica do link para abrir cadastro em outra aba', async ({ page, context }) => {
+  await mockApi(page)
+  // The popup shares the route mock only after it exists, so this check verifies
+  // the browser-created real destination rather than requiring a mocked session.
+  await page.goto('/login')
+  const create = page.getByRole('link', { name: 'Criar conta', exact: true })
+  const popupPromise = context.waitForEvent('page')
+  await create.click({ modifiers: ['ControlOrMeta'] })
+  const popup = await popupPromise
+  await popup.waitForURL('**/register')
+  await expect(page).toHaveURL(/\/login$/)
+  await popup.close()
+})
+
+test('toque real em 320px seleciona papéis e alterna senha sem sobreposição ou submit', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 812 }, hasTouch: true })
+  const page = await context.newPage()
+  const api = await mockApi(page)
+  await page.goto('http://127.0.0.1:4173/register')
+  await page.locator('.register-role').last().tap()
+  await expect(page.locator('input[value=AUCTIONEER]')).toBeChecked()
+  await page.locator('.register-role').first().tap()
+  await expect(page.locator('input[value=BIDDER]')).toBeChecked()
+  await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+  await page.getByRole('button', { name: 'Mostrar senha' }).tap()
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveValue(PASSWORD)
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('type', 'text')
+  await page.getByRole('button', { name: 'Ocultar senha' }).tap()
+  for (const target of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senha' }), page.getByRole('button', { name: 'Criar conta', exact: true }), page.locator('.auth-switch a')]) {
+    await target.scrollIntoViewIfNeeded()
+    expect(await target.evaluate(element => {
+      const box = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+      return hit !== null && (element === hit || element.contains(hit))
+    })).toBe(true)
+  }
+  expect(api.count('POST /api/auth/register')).toBe(0)
+  await context.close()
+})

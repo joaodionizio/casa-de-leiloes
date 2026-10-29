@@ -63,7 +63,7 @@ Preservo seu `done` histórico com essa pendência explícita. Recuperação con
 - **D1 = A:** o primeiro deploy (Story 1.4) valida também WebSocket e cookie,
   como validação mínima de infraestrutura (mitigação do AD-14), sem antecipar
   autenticação nem a sala de leilão.
-- **D2 = A:** sem cadastro público no escopo obrigatório. Só as contas semeadas
+- **D2 = A (escopo original da 2.2, preservado como histórico):** sem cadastro público no escopo obrigatório. Só as contas semeadas
   exigidas pelo desafio: 1 `AUCTIONEER` e 2 `BIDDER`. Não há story de cadastro.
 - **D3:** descartei criar lances sem integridade e resetar o banco de produção
   depois. O motor de lances do Épico 3 já grava pseudônimo, representação
@@ -76,7 +76,7 @@ Preservo seu `done` histórico com essa pendência explícita. Recuperação con
 
 ### Requisitos funcionais
 
-FR1: Existem dois papéis distintos: leiloeiro (`AUCTIONEER`) e licitante (`BIDDER`), com login e logout. Sem cadastro público (D2): só contas semeadas.
+FR1: Existem dois papéis distintos: leiloeiro (`AUCTIONEER`) e licitante (`BIDDER`), com login e logout. A 2.2 entregou somente contas semeadas (D2 original). Ampliação humana de 29/10/2026: Story 6.2A adiciona cadastro público dos dois papéis, sem Nome/migration/autologin, preservando demos.
 FR2: O leiloeiro busca itens na API externa (Art Institute of Chicago), só obras de domínio público.
 FR3: O leiloeiro cria um lote a partir de um item buscado, com imagem, título, atributos do item, início, fim, lance inicial e incremento mínimo.
 FR4: O leiloeiro cancela um lote que ainda não recebeu lances.
@@ -391,6 +391,8 @@ Para que a interface mostre mensagens claras, nenhum stack trace vaze e a base c
 **Então** há testes para erro previsto, 422 de validação, 500 genérico e rejeição por origem e por conteúdo.
 
 ### Story 2.2: Login, papéis e política de acesso
+
+> Escopo histórico entregue na 2.2: contas semeadas, sem cadastro público. A ampliação aprovada em 29/10/2026 pertence exclusivamente à Story 6.2A; preservo os critérios abaixo como histórico da entrega original.
 
 Como leiloeiro ou licitante semeado,
 Quero entrar e sair com a minha conta e ter acesso só ao que o meu papel permite,
@@ -1078,6 +1080,14 @@ Para que a experiência seja clara e própria.
 **Dado** os estados "ganhando", "superado", "encerrado" e "apurando resultado"
 **Quando** são exibidos
 **Então** têm texto ou ícone, nunca só cor.
+
+### Story 6.2a: Cadastro de usuarios
+
+Nome humano: **Story 6.2A — Cadastro de usuários**. Chave técnica: `6-2a-cadastro-de-usuarios`.
+
+Decidi ampliar D2/FR1 em 29/10/2026, depois de 6.2 e antes de 6.3, sem renumerar stories. Cadastro público BIDDER/AUCTIONEER, e-mail normalizado e único, senha Argon2id de 8–1024 caracteres, User+Wallet zero atômicos, 201 sem sessão e confirmação no login. Sem Nome ou migration. Aceitei enumeração por 409 email_already_registered; descartei autologin e coleta sem uso.
+
+Contrato e matrizes: [SPEC.md](../specs/spec-story-6-2a-cadastro-de-usuarios/SPEC.md). CA1 da 6.1 passa a sete escritas; CA2 publicado continua pendente. 2.2 mantém seu escopo histórico original; nenhum alias de cadastro ou privilégio arbitrário.
 
 ### Story 6.3: README completo e registro de uso de IA
 

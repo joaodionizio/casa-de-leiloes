@@ -206,6 +206,8 @@ export type CancelMode =
 export const CANCELLED_AT = '2026-10-25T14:31:00.654321Z'
 
 export interface MockOptions {
+  registration?: 'ok' | 'duplicate' | 'validation' | 'forbidden' | 'media' | 'server' | 'network' | 'invalid201'
+  registrationDelayMs?: number
   // Lotes do leiloeiro em `GET /api/lots/mine` (padrão: nenhum).
   myLots?: MockMyLot[]
   // Resposta do `POST /api/lots/{id}/cancel`; `ok` grava `cancelled_at` no estado do mock.
@@ -288,6 +290,9 @@ export async function mockApi(
   options: MockOptions = {},
 ): Promise<MockApi> {
   const lots = options.lots ?? []
+  // Registered accounts are separate from the fixed public demo list. Creating
+  // one does not change the session; only the later ordinary login does that.
+  const registered = new Map<string, { password: string; role: Role }>()
   let session: { email: string; role: Role } | null =
     options.session === undefined || options.session === null
       ? null
@@ -409,14 +414,31 @@ export async function mockApi(
         ? json(route, 401, errorBody(401, 'unauthorized'))
         : json(route, 200, session)
     }
+    if (pathname === '/api/auth/register' && method === 'POST') {
+      const body = request.postDataJSON() as { email: string; password: string; role: Role }
+      if (options.registrationDelayMs !== undefined) await new Promise(resolve => setTimeout(resolve, options.registrationDelayMs))
+      const mode = options.registration ?? 'ok'
+      if (mode === 'network') return route.abort('failed')
+      if (mode === 'server') return json(route, 500, errorBody(500, 'internal_error'))
+      if (mode === 'forbidden') return json(route, 403, errorBody(403, 'csrf_origin_mismatch'))
+      if (mode === 'media') return json(route, 415, errorBody(415, 'unsupported_media_type'))
+      if (mode === 'validation') return json(route, 422, { ...errorBody(422, 'validation_error'), details: [{ loc: ['body', 'password'], type: 'string_too_short' }] })
+      const email = body.email.trim().toLowerCase()
+      if (mode === 'duplicate' || registered.has(email) || ['auctioneer@example.com', 'bidder1@example.com', 'bidder2@example.com'].includes(email)) return json(route, 409, errorBody(409, 'email_already_registered'))
+      registered.set(email, { password: body.password, role: body.role })
+      wallets.set(email, { total: 0, committed: 0 })
+      if (mode === 'invalid201') return json(route, 201, { token: 'invalid' })
+      return json(route, 201, { email, role: body.role })
+    }
     if (pathname === '/api/auth/login' && method === 'POST') {
       const body = request.postDataJSON() as { email: string; password: string }
-      if (body.password !== 'Demo123!') {
+      const account = registered.get(body.email.trim().toLowerCase())
+      if (account ? body.password !== account.password : body.password !== 'Demo123!') {
         return json(route, 401, errorBody(401, 'invalid_credentials'))
       }
       session = {
-        email: body.email,
-        role: body.email.startsWith('auctioneer') ? 'AUCTIONEER' : 'BIDDER',
+        email: body.email.trim().toLowerCase(),
+        role: account?.role ?? (body.email.startsWith('auctioneer') ? 'AUCTIONEER' : 'BIDDER'),
       }
       return json(route, 200, session)
     }

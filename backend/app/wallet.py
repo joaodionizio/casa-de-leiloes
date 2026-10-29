@@ -17,7 +17,15 @@ from enum import StrEnum
 
 from fastapi import Depends, FastAPI, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, exists, select, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Select,
+    exists,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -99,15 +107,27 @@ def apply_deposit(total: int, amount: int) -> int | DepositRefusal:
 # --- serviço (nenhum faz commit; a rota decide) ---
 
 
+def _wallet_insert(user_ids: Select[tuple[uuid.UUID]]):
+    # Both seed and registration leave the zero balances to the same defaults.
+    return insert(Wallet).from_select(["user_id"], user_ids)
+
+
+def create_wallet(session: Session, user_id: uuid.UUID) -> None:
+    """Create only this user's wallet, using the existing database defaults.
+
+    The caller owns the transaction. In particular registration never repairs
+    wallets belonging to other accounts.
+    """
+    session.execute(_wallet_insert(select(User.id).where(User.id == user_id)))
+
+
 def ensure_wallets(session: Session) -> int:
     """Dá uma carteira zerada a todo usuário que não tem uma e devolve quantas
     inseriu. Só `INSERT`: nunca altera saldo existente. É o único caminho de criação
-    de carteira fora da migration (P2); nenhuma requisição o chama."""
+    de carteiras em lote fora da migration (P2); nenhuma requisição o chama."""
     inserted = session.execute(
-        insert(Wallet)
-        .from_select(
-            ["user_id"],
-            select(User.id).where(~exists().where(Wallet.user_id == User.id)),
+        _wallet_insert(
+            select(User.id).where(~exists().where(Wallet.user_id == User.id))
         )
         .on_conflict_do_nothing(index_elements=[Wallet.user_id])
         .returning(Wallet.user_id)

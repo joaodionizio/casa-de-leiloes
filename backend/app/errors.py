@@ -33,6 +33,7 @@ CSRF_ORIGIN_MISSING = "csrf_origin_missing"
 CSRF_ORIGIN_MISMATCH = "csrf_origin_mismatch"
 # Login recusado (Story 2.2): sai só da rota de login, com 401.
 INVALID_CREDENTIALS = "invalid_credentials"
+EMAIL_ALREADY_REGISTERED = "email_already_registered"
 # Catálogo do museu fora do ar (Story 2.3): sai só das rotas do catálogo, com 503.
 CATALOG_UNAVAILABLE = "catalog_unavailable"
 # Obra que não pode virar lote (Story 2.4, P6): inexistente, fora do domínio público
@@ -71,6 +72,7 @@ MESSAGES = {
     CSRF_ORIGIN_MISSING: "Não foi possível verificar a origem da requisição.",
     CSRF_ORIGIN_MISMATCH: "Origem da requisição não permitida.",
     INVALID_CREDENTIALS: "E-mail ou senha inválidos.",
+    EMAIL_ALREADY_REGISTERED: "Este e-mail já está cadastrado. Entre para continuar.",
     CATALOG_UNAVAILABLE: (
         "O catálogo do museu está indisponível no momento. "
         "Tente novamente em instantes."

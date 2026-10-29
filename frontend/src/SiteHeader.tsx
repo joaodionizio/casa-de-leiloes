@@ -91,7 +91,7 @@ function SiteHeader({
             </>
           )}
         </nav>
-        {user === null && !checking && route.kind !== 'login' && (
+        {user === null && !checking && route.kind !== 'login' && route.kind !== 'register' && (
           <AppLink
             to="/login"
             state={{ returnTo: here }}

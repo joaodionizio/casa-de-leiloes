@@ -27,6 +27,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
 
 EXPECTED_POLICIES = {
+    ("/api/auth/register", "POST", "http"): AccessPolicy.PUBLIC,
     ("/api/me/wins", "GET", "http"): AccessPolicy.BIDDER,
     ("/health", "GET", "http"): AccessPolicy.PUBLIC,
     ("/api/auth/login", "POST", "http"): AccessPolicy.PUBLIC,
@@ -110,22 +111,28 @@ def test_the_imported_module_app_main_is_clean_too() -> None:
     assert policy_problems(main.app.routes) == []
 
 
-def test_there_is_no_signup_route(api_only_app: FastAPI) -> None:
+def test_register_is_the_only_public_signup_route(api_only_app: FastAPI) -> None:
     client = TestClient(api_only_app, base_url=HTTPS_ORIGIN)
     headers = {"Origin": HTTPS_ORIGIN, "Content-Type": "application/json"}
+    assert (
+        policy_by_route(api_only_app.routes)[("/api/auth/register", "POST", "http")]
+        is AccessPolicy.PUBLIC
+    )
     for method, path in [
-        ("post", "/api/auth/register"),
         ("post", "/api/users"),
         ("get", "/api/users"),
+        ("post", "/api/auth/signup"),
+        ("post", "/api/signup"),
     ]:
         response = getattr(client, method)(path, headers=headers)
         assert response.status_code in (404, 405)
         assert response.headers["content-type"].startswith("application/json")
-    assert not any(
-        word in path.lower()
+    signup_paths = {
+        path
         for path in paths_of(api_only_app)
-        for word in ("register", "signup", "users")
-    )
+        if any(word in path.lower() for word in ("register", "signup", "users"))
+    }
+    assert signup_paths == {"/api/auth/register"}
 
 
 # --- o meta-teste: o verificador reprova de verdade ---

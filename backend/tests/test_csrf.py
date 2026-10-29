@@ -543,6 +543,7 @@ def test_real_app_has_no_write_route_outside_api(tmp_path: Path) -> None:
 
 # Story 6.1: o próprio mapa executado é confrontado com todas as escritas reais.
 REAL_WRITES = [
+    ("POST", "/api/auth/register"),
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/logout"),
     ("POST", "/api/lots"),
@@ -890,3 +891,20 @@ def test_websocket_policy_is_not_changed_by_the_guard(
 )
 def test_effective_path(scope: dict[str, str], expected: str) -> None:
     assert effective_path(scope) == expected  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("with_spa", [False, True])
+def test_register_is_discovered_before_updating_the_old_ca1_expectation(
+    real_write_app, monkeypatch
+):
+    discovered = http_write_inventory(real_write_app.routes)
+    register = ("POST", "/api/auth/register")
+    assert register in discovered
+    assert len(discovered) == 7
+    # The previous six-write expectation must fail against the live app.
+    monkeypatch.setitem(
+        globals(), "REAL_WRITES", [entry for entry in REAL_WRITES if entry != register]
+    )
+    assert len(REAL_WRITES) == 6
+    with pytest.raises(AssertionError, match="inventário CA1"):
+        assert_real_write_inventory(real_write_app)

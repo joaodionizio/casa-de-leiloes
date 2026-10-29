@@ -10,6 +10,7 @@ export type AppRoute =
   | { kind: 'audit'; lotId: string }
   | { kind: 'receipt'; lotId: string }
   | { kind: 'login' }
+  | { kind: 'register' }
   | { kind: 'create-lot' }
   | { kind: 'my-lots' }
   | { kind: 'wallet' }
@@ -34,6 +35,7 @@ export function parseRoute(pathname: string): Route {
   const path = pathOnly(pathname)
   if (path === '/') return { kind: 'vitrine' }
   if (path === '/login') return { kind: 'login' }
+  if (path === '/register') return { kind: 'register' }
   if (path === '/auctioneer/lots/new') return { kind: 'create-lot' }
   if (path === '/auctioneer/lots') return { kind: 'my-lots' }
   if (path === '/bidder/wins') return { kind: 'my-wins' }
@@ -59,6 +61,7 @@ export function routePath(route: AppRoute): string {
   if (route.kind === 'audit') return `${LOT_PREFIX}${route.lotId}/audit`
   if (route.kind === 'lot') return `${LOT_PREFIX}${route.lotId}`
   if (route.kind === 'login') return '/login'
+  if (route.kind === 'register') return '/register'
   if (route.kind === 'create-lot') return '/auctioneer/lots/new'
   if (route.kind === 'my-lots') return '/auctioneer/lots'
   if (route.kind === 'my-wins') return '/bidder/wins'
@@ -98,7 +101,7 @@ export function isRestrictedRoute(
 export function safeReturnPath(value: unknown, role: UserRole): string {
   if (typeof value !== 'string') return '/'
   const route = parseRoute(value)
-  if (route.kind === 'not-found' || route.kind === 'login') return '/'
+  if (route.kind === 'not-found' || route.kind === 'login' || route.kind === 'register') return '/'
   if (isAuctioneerRoute(route) && role !== 'AUCTIONEER') return '/'
   if (isBidderRoute(route) && role !== 'BIDDER') return '/'
   return routePath(route)
@@ -126,7 +129,7 @@ export function shouldHandleClick(event: ClickLike): boolean {
 // O que guardamos em `history.state`, entrada por entrada (D8, D11).
 export interface NavState {
   returnTo?: string // só na entrada /login
-  notice?: 'expired' // só na entrada /login
+  notice?: 'expired' | 'registered' // só na entrada /login
   fromVitrine?: boolean // entrada /lots/{id} aberta a partir da vitrine
   restoreLotId?: string // entrada /: lote a focar no Back
   endedVisible?: number // entrada /: quantos encerrados estavam visíveis
@@ -138,7 +141,7 @@ export function readNavState(value: unknown): NavState {
   const raw = value as Record<string, unknown>
   const state: NavState = {}
   if (typeof raw.returnTo === 'string') state.returnTo = raw.returnTo
-  if (raw.notice === 'expired') state.notice = 'expired'
+  if (raw.notice === 'expired' || raw.notice === 'registered') state.notice = raw.notice
   if (raw.fromVitrine === true) state.fromVitrine = true
   if (typeof raw.restoreLotId === 'string' && UUID_PATTERN.test(raw.restoreLotId)) {
     state.restoreLotId = raw.restoreLotId
@@ -151,4 +154,13 @@ export function readNavState(value: unknown): NavState {
     state.endedVisible = raw.endedVisible
   }
   return state
+}
+
+// Auth links carry only a known canonical destination. Role authorization is
+// checked after the ordinary login, when the effective account is known.
+export function authReturnState(value: unknown): NavState {
+  if (typeof value !== 'string') return {}
+  const route = parseRoute(value)
+  if (route.kind === 'not-found' || route.kind === 'login' || route.kind === 'register') return {}
+  return { returnTo: routePath(route) }
 }

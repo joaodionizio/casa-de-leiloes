@@ -42,12 +42,48 @@ test.describe('pilha real (FastAPI + build + PostgreSQL)', () => {
   })
 
   test('rotas do front devolvem a SPA (deep-link)', async ({ request }) => {
-    for (const path of ['/', `/lots/${UNKNOWN}`, '/login', '/auctioneer/lots']) {
+    for (const path of ['/', `/lots/${UNKNOWN}`, '/login', '/register', '/auctioneer/lots']) {
       const response = await request.get(`${base}${path}`)
       expect(response.status(), path).toBe(200)
       expect(response.headers()['content-type'], path).toContain('text/html')
     }
   })
+
+  for (const role of ['BIDDER', 'AUCTIONEER'] as const) {
+    test(`cadastro real ${role}, login manual e sessão depois de reload`, async ({ page, context }) => {
+      const email = `registration-${role.toLowerCase()}-${crypto.randomUUID()}@example.com`
+      const password = 'Cadastro local 123!'
+      await page.route('**/api/catalog/images/**', route => route.abort())
+      await page.goto(`${base}/register`)
+      await expect(page.getByRole('heading', { name: 'Cadastro', exact: true })).toBeVisible()
+      await page.reload()
+      await page.locator(`input[type=radio][value=${role}]`).check()
+      await page.getByLabel('E-mail', { exact: true }).fill(email)
+      await page.getByLabel('Senha', { exact: true }).fill(password)
+      const result = page.waitForResponse(response => response.url().endsWith('/api/auth/register') && response.request().method() === 'POST')
+      await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+      const response = await result
+      expect(response.status()).toBe(201)
+      expect(await response.json()).toEqual({ email, role })
+      expect(response.headers()['set-cookie']).toBeUndefined()
+      await expect(page).toHaveURL(`${base}/login`)
+      await expect(page.getByText('Conta criada com sucesso. Entre para continuar.')).toBeVisible()
+      expect((await context.request.get(`${base}/api/me`)).status()).toBe(401)
+      await page.getByLabel('E-mail', { exact: true }).fill(email)
+      await page.getByLabel('Senha', { exact: true }).fill(password)
+      await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+      await expect(page).toHaveURL(`${base}/`)
+      await expect(page.locator('.site-header').getByText(role === 'BIDDER' ? 'Licitante' : 'Leiloeiro', { exact: true })).toBeVisible()
+      await page.reload()
+      await expect(page.getByText(email, { exact: true })).toBeVisible()
+      expect(await (await context.request.get(`${base}/api/me`)).json()).toEqual({ email, role })
+      const wallet = await context.request.get(`${base}/api/wallet`)
+      if (role === 'BIDDER') {
+        expect(wallet.status()).toBe(200)
+        expect(await wallet.json()).toEqual({ total_balance_cents: 0, committed_balance_cents: 0, available_balance_cents: 0 })
+      } else expect(wallet.status()).toBe(403)
+    })
+  }
 
   test('no navegador, /api/lots mostra JSON e um lote inexistente mostra o aviso', async ({
     page,
