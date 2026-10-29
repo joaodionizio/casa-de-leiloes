@@ -1,16 +1,21 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+from fastapi.routing import APIRoute, APIWebSocketRoute
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 from starlette.responses import PlainTextResponse
-from starlette.routing import Mount
+from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.websockets import WebSocketDisconnect
 
-from app import lot_room
+from app import lot_room, main
+from app.access import AccessPolicy, require_user
 from app.bids import PublicBidRoomResponse
+from app.config import SpaSettings
 from app.csrf import (
     ApiWriteGuardMiddleware,
     effective_path,
@@ -21,6 +26,7 @@ from app.csrf import (
 )
 from app.errors import MESSAGES
 from app.main import create_app
+from tests.access_policy import policy_by_route, policy_problems
 from tests.synthetic_api import (
     ALLOWED_ORIGIN,
     JSON_HEADERS,
@@ -533,6 +539,279 @@ def test_real_app_has_no_write_route_outside_api(tmp_path: Path) -> None:
     (dist / "index.html").write_text("<!doctype html>")
     app = create_app(dist, app_origin=ALLOWED_ORIGIN)
     assert unguarded_write_surfaces(app) == []
+
+
+# Story 6.1: o próprio mapa executado é confrontado com todas as escritas reais.
+REAL_WRITES = [
+    ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/logout"),
+    ("POST", "/api/lots"),
+    ("POST", "/api/wallet/deposit"),
+    ("POST", "/api/lots/{lot_id}/bids"),
+    ("POST", "/api/lots/{lot_id}/cancel"),
+]
+
+
+def http_write_inventory(
+    routes: Sequence[object], prefix: str = ""
+) -> set[tuple[str, str]]:
+    """Descobre escritas pela estrutura HTTP pública, sem consultar políticas.
+
+    Uma superfície que não posso inspecionar reprova em vez de desaparecer do
+    inventário. Mounts preservam o prefixo; nenhuma exceção documental se aplica.
+    """
+    inventory: set[tuple[str, str]] = set()
+    for route in routes:
+        if isinstance(route, Mount):
+            if not route.routes:
+                raise ValueError(
+                    f"mount sem rotas inspecionáveis: {prefix}{route.path}"
+                )
+            entries = http_write_inventory(route.routes, prefix + route.path)
+        elif isinstance(route, (APIRoute, Route)):
+            path = prefix + route.path
+            if not route.methods:
+                raise ValueError(f"rota HTTP sem métodos inspecionáveis: {path}")
+            entries = set()
+            for method in route.methods:
+                if method in WRITE_METHODS:
+                    entries.add((method, path))
+                elif method not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+                    raise ValueError(f"método HTTP não suportado: {method} {path}")
+        elif isinstance(route, (APIWebSocketRoute, WebSocketRoute)):
+            continue
+        else:
+            raise ValueError(f"tipo de rota não suportado: {type(route).__name__}")
+        duplicates = inventory & entries
+        if duplicates:
+            raise ValueError(f"escrita duplicada no inventário: {sorted(duplicates)}")
+        inventory.update(entries)
+    return inventory
+
+
+def assert_real_write_inventory(app: FastAPI) -> set[tuple[str, str]]:
+    registered = http_write_inventory(app.routes)
+    assert registered == set(REAL_WRITES), "inventário CA1 diverge das escritas W1–W7"
+    return registered
+
+
+@pytest.fixture
+def real_write_app(tmp_path, monkeypatch, with_spa) -> FastAPI:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html>")
+    monkeypatch.setattr(main, "get_spa_settings", lambda: SpaSettings(_env_file=None))
+    monkeypatch.delenv("SPA_DIST_DIR", raising=False)
+    return create_app(dist if with_spa else None, app_origin=ALLOWED_ORIGIN)
+
+
+@pytest.mark.parametrize("with_spa", [False, True])
+@pytest.mark.parametrize("route_type", [Route, APIRoute])
+@pytest.mark.parametrize("path", ["/api/docs", "/api/openapi.json", "/api/unexpected"])
+def test_write_inventory_rejects_unprotected_real_app_mutations(
+    real_write_app, route_type, path
+) -> None:
+    async def unprotected(request):
+        return PlainTextResponse("mutation only")
+
+    assert assert_real_write_inventory(real_write_app) == set(REAL_WRITES)
+    real_write_app.routes.append(route_type(path, unprotected, methods=["POST"]))
+
+    assert http_write_inventory(real_write_app.routes) == {
+        *REAL_WRITES,
+        ("POST", path),
+    }
+    # Estes caminhos documentais são tolerados pelo verificador de política;
+    # ainda assim a mesma validação CA1 da matriz deve reprovar a oitava escrita.
+    expected_problems = [] if path != "/api/unexpected" else [f"sem política: {path}"]
+    assert policy_problems(real_write_app.routes) == expected_problems
+    assert (path, "POST", "http") not in policy_by_route(real_write_app.routes)
+    with pytest.raises(AssertionError, match="inventário CA1"):
+        assert_real_write_inventory(real_write_app)
+
+
+@pytest.mark.parametrize("with_spa", [False, True])
+@pytest.mark.parametrize("invalid_policy", ["metadata", "dependency"])
+def test_write_inventory_includes_routes_with_invalid_policy(
+    real_write_app, invalid_policy
+) -> None:
+    def misconfigured():
+        return {"ok": True}
+
+    misconfigured.access_policy = (  # type: ignore[attr-defined]
+        "PUBLIC" if invalid_policy == "metadata" else AccessPolicy.AUCTIONEER
+    )
+    real_write_app.add_api_route(
+        "/api/misconfigured",
+        misconfigured,
+        methods=["POST"],
+        dependencies=[Depends(require_user)],
+    )
+
+    assert http_write_inventory(real_write_app.routes) == {
+        *REAL_WRITES,
+        ("POST", "/api/misconfigured"),
+    }
+    problem = (
+        "sem política"
+        if invalid_policy == "metadata"
+        else "política AUCTIONEER sem a dependência"
+    )
+    assert policy_problems(real_write_app.routes) == [f"{problem}: /api/misconfigured"]
+    assert ("/api/misconfigured", "POST", "http") not in policy_by_route(
+        real_write_app.routes
+    )
+    with pytest.raises(AssertionError, match="inventário CA1"):
+        assert_real_write_inventory(real_write_app)
+
+
+@pytest.mark.parametrize("route_type", [Route, APIRoute])
+def test_write_inventory_keeps_all_declared_write_methods(route_type) -> None:
+    async def handler(request):
+        return PlainTextResponse("ok")
+
+    route = route_type(
+        "/api/multiple", handler, methods=[*WRITE_METHODS, "GET", "HEAD", "OPTIONS"]
+    )
+    assert http_write_inventory([route]) == {
+        (method, "/api/multiple") for method in WRITE_METHODS
+    }
+
+
+@pytest.mark.parametrize("route_type", [Route, APIRoute])
+def test_write_inventory_ignores_only_safe_http_methods(route_type) -> None:
+    async def handler(request):
+        return PlainTextResponse("ok")
+
+    assert (
+        http_write_inventory(
+            [route_type("/safe", handler, methods=["GET", "HEAD", "OPTIONS", "TRACE"])]
+        )
+        == set()
+    )
+    with pytest.raises(ValueError, match="método HTTP não suportado: CONNECT"):
+        http_write_inventory([route_type("/tunnel", handler, methods=["CONNECT"])])
+
+
+@pytest.mark.parametrize("route_type", [WebSocketRoute, APIWebSocketRoute])
+def test_write_inventory_ignores_known_websockets(route_type) -> None:
+    async def socket(websocket):
+        await websocket.close()
+
+    assert http_write_inventory([route_type("/ws/room", socket)]) == set()
+
+
+def test_write_inventory_recurses_through_mounts_with_their_prefixes() -> None:
+    async def handler(request):
+        return PlainTextResponse("ok")
+
+    routes = [
+        Mount(
+            "/api",
+            routes=[
+                Mount("/nested", routes=[Route("/write", handler, methods=["PATCH"])])
+            ],
+        )
+    ]
+    assert http_write_inventory(routes) == {("PATCH", "/api/nested/write")}
+
+
+def test_write_inventory_rejects_uninspectable_mounts() -> None:
+    with pytest.raises(ValueError, match="mount sem rotas inspecionáveis: /api/opaque"):
+        http_write_inventory([Mount("/api/opaque", app=PlainTextResponse("ok"))])
+
+
+@pytest.mark.parametrize("declared_methods", [None, []])
+def test_write_inventory_rejects_http_routes_without_declared_methods(
+    declared_methods,
+) -> None:
+    class OpaqueApp:
+        async def __call__(self, scope, receive, send):
+            await PlainTextResponse("ok")(scope, receive, send)
+
+    with pytest.raises(ValueError, match="rota HTTP sem métodos inspecionáveis"):
+        http_write_inventory(
+            [Route("/api/opaque", OpaqueApp(), methods=declared_methods)]
+        )
+
+
+def test_write_inventory_rejects_unknown_route_types() -> None:
+    unknown = SimpleNamespace(path="/api/unknown", methods={"POST"})
+    with pytest.raises(ValueError, match="tipo de rota não suportado: SimpleNamespace"):
+        http_write_inventory([unknown])
+
+
+@pytest.mark.parametrize("mounted", [False, True])
+def test_write_inventory_rejects_duplicate_method_and_path(mounted) -> None:
+    async def handler(request):
+        return PlainTextResponse("ok")
+
+    first = Route("/api/twin", handler, methods=["POST"])
+    second = (
+        Mount("/api", routes=[APIRoute("/twin", handler, methods=["POST"])])
+        if mounted
+        else APIRoute("/api/twin", handler, methods=["POST"])
+    )
+    with pytest.raises(ValueError, match="escrita duplicada no inventário"):
+        http_write_inventory([first, second])
+
+
+@pytest.mark.parametrize("with_spa", [False, True])
+@pytest.mark.parametrize("method,path", REAL_WRITES)
+@pytest.mark.parametrize(
+    "origin,content_type,status,code",
+    [
+        ("https://evil.example", "application/json", 403, "csrf_origin_mismatch"),
+        (ALLOWED_ORIGIN, None, 415, "unsupported_media_type"),
+        (ALLOWED_ORIGIN, "text/plain", 415, "unsupported_media_type"),
+    ],
+    ids=["foreign-origin", "missing-content-type", "non-json-content-type"],
+)
+def test_every_real_write_is_refused_before_route_dispatch(
+    real_write_app, monkeypatch, method, path, origin, content_type, status, code
+) -> None:
+    app = real_write_app
+    registered = assert_real_write_inventory(app)
+    assert policy_problems(app.routes) == []
+    policy_writes = {
+        (verb, route_path)
+        for route_path, verb, kind in policy_by_route(app.routes)
+        if kind == "http" and verb in WRITE_METHODS
+    }
+    assert policy_writes == registered
+
+    reached = []
+
+    async def dispatch_probe(scope, receive, send):
+        reached.append(scope["path"])
+        raise AssertionError("real route dispatch reached")
+
+    route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", None) == path
+        and method in (getattr(route, "methods", None) or ())
+    )
+    # Antes de dependências/handler: se não há despacho, não há banco, AIC ou
+    # alteração de sessão. Os controles transacionais existentes são preservados.
+    monkeypatch.setattr(route, "app", dispatch_probe)
+    url = path.replace("{lot_id}", "00000000-0000-4000-8000-000000000001")
+    client = TestClient(app, base_url=ALLOWED_ORIGIN)
+    headers = {"Origin": origin}
+    if content_type is not None:
+        headers["Content-Type"] = content_type
+    response = client.request(method, url, headers=headers, content=b"{}")
+    assert response.request.headers.get("content-type") == content_type
+    assert_refused(response, status, code)
+    assert reached == []
+    assert "set-cookie" not in response.headers
+    assert not any(h.startswith("access-control-") for h in response.headers)
+
+    # Controle positivo: o mesmo caminho/método realmente alcança a sentinela
+    # com headers válidos; uma rota inexistente não pode produzir essa prova.
+    with pytest.raises(AssertionError, match="real route dispatch reached"):
+        client.request(method, url, headers=JSON_HEADERS, content=b"{}")
+    assert reached == [url]
 
 
 def test_structural_check_catches_plain_routes_and_mounts(monkeypatch) -> None:

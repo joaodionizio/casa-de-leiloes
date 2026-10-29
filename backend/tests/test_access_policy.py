@@ -85,12 +85,16 @@ def paths_of(app: FastAPI) -> list[str]:
 
 
 def test_real_app_without_spa_has_no_policy_problems(api_only_app: FastAPI) -> None:
+    assert api_only_app.debug is False
+    assert not any(path.startswith("/api/test") for path in paths_of(api_only_app))
     assert policy_problems(api_only_app.routes) == []
     assert policy_by_route(api_only_app.routes) == EXPECTED_POLICIES
 
 
 def test_real_app_with_spa_has_no_policy_problems(dist: Path) -> None:
     app = create_app(dist, app_origin=HTTPS_ORIGIN)
+    assert app.debug is False
+    assert not any(path.startswith("/api/test") for path in paths_of(app))
     assert policy_problems(app.routes) == []
     assert policy_by_route(app.routes) == {**EXPECTED_POLICIES, **SPA_POLICY}
 

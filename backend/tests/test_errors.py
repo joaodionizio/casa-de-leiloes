@@ -20,6 +20,11 @@ from tests.synthetic_api import (
 )
 
 INDEX_HTML = "<!doctype html><title>SPA de teste</title>"
+GENERIC_500 = {
+    "status": 500,
+    "code": "internal_error",
+    "message": "Erro interno. Tente novamente mais tarde.",
+}
 
 
 @pytest.fixture
@@ -223,7 +228,7 @@ def test_sanitize_drops_everything_but_location_and_type() -> None:
 
 def test_unexpected_error_is_a_generic_500(crash_client: TestClient) -> None:
     response = crash_client.get("/api/test/boom")
-    assert_contract(response, 500, "internal_error")
+    assert assert_contract(response, 500, "internal_error") == GENERIC_500
     for leaked in (
         "RuntimeError",
         SECRET_EXCEPTION,
@@ -242,7 +247,7 @@ def test_unexpected_error_is_reraised_for_the_server_log(client: TestClient) -> 
 
 def test_invalid_response_is_a_500_not_a_422(crash_client: TestClient) -> None:
     response = crash_client.get("/api/test/bad-response")
-    assert_contract(response, 500, "internal_error")
+    assert assert_contract(response, 500, "internal_error") == GENERIC_500
     assert "não é número" not in response.text
 
 
@@ -258,6 +263,6 @@ def test_failure_inside_the_guard_is_the_contract_500(
     response = TestClient(app, raise_server_exceptions=False).post(
         "/api/test/write", headers=JSON_HEADERS, content="{}"
     )
-    assert_contract(response, 500, "internal_error")
+    assert assert_contract(response, 500, "internal_error") == GENERIC_500
     assert SECRET_EXCEPTION not in response.text
     assert calls.count == 0

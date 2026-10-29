@@ -8,6 +8,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
+import httpx
 import pytest
 from sqlalchemy import event
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from tests.auth_support import (
     seeded_id,
 )
 from tests.bid_support import bid_rows, db_snapshot, live_lot, lot_state, run_bid
+from tests.catalog_support import FakeArtic, install, raising
 from tests.lot_support import db_now
 from tests.wallet_support import seed_users_with_wallets, set_wallet
 
@@ -96,11 +98,26 @@ def test_public_real_snapshot_is_one_pure_query_and_closes_session(
 ):
     client, factory = setup
     identifier = live_lot(factory)
+    assert isinstance(
+        run_bid(factory, identifier, seeded_id(BIDDER_EMAIL), 10000), bids.PlacedBid
+    )
+    failing = FakeArtic(
+        raising(lambda request: httpx.ConnectError("AIC unavailable", request=request))
+    )
+    install(client.app, failing)
     if email == "invalid-cookie":
         client.cookies.set(cookie_name_of(client), "invalid")
     elif email:
         assert login(client, HTTPS_ORIGIN, email).status_code == 200
     before = db_snapshot(factory)
+    detail = client.get(f"/api/lots/{identifier}")
+    rest = client.get(f"/api/lots/{identifier}/bids")
+    assert detail.status_code == rest.status_code == 200
+    assert detail.json()["lot"]["id"] == str(identifier)
+    room = rest.json()
+    assert room["phase"] == "live"
+    assert room["current_bid_cents"] == 10000
+    assert room["bid_count"] == len(room["bids"]) == 1
     statements = []
     threads = []
 
@@ -114,7 +131,10 @@ def test_public_real_snapshot_is_one_pure_query_and_closes_session(
         with client.websocket_connect(f"/ws/lots/{identifier}") as ws:
             frame = ws.receive_json()
             assert frame["type"] == "room_snapshot"
-            assert frame["room"]["bid_count"] == 0
+            assert frame["room"]["bid_count"] == 1
+            assert {k: v for k, v in frame["room"].items() if k != "as_of"} == {
+                k: v for k, v in room.items() if k != "as_of"
+            }
             assert len(statements) == 1
             for ping_id in range(1, 4):
                 ws.send_json({"type": "ping", "id": ping_id})
@@ -129,6 +149,13 @@ def test_public_real_snapshot_is_one_pure_query_and_closes_session(
     finally:
         event.remove(db_engine, "before_cursor_execute", record)
     assert_public_frame(frame, factory, identifier)
+    assert db_snapshot(factory) == before
+    assert failing.requests == []
+    # Mesmo transporte: o controle de mídia prova que a falha estava instalada.
+    image = client.get(detail.json()["lot"]["image_url"])
+    assert image.status_code == 503
+    assert image.json()["code"] == "catalog_unavailable"
+    assert len(failing.requests) == 1
     assert db_snapshot(factory) == before
 
 

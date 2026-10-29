@@ -1,7 +1,7 @@
 // Vitrine pública em navegador real (Story 2.5): anônimo, deep-link, History API,
 // "Mostrar mais" e imagem quebrada. API simulada por interceptação de rede.
 import { expect, test } from '@playwright/test'
-import { lotId, makeLots, mockApi } from './support/mockApi'
+import { lotId, makeBids, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './support/mockApi'
 
 const LOTS = makeLots({ live: 3, scheduled: 2, ended: 3 })
 
@@ -241,7 +241,7 @@ test.describe('imagem quebrada', () => {
   test('a vitrine troca pelo placeholder e o resto continua funcional', async ({
     page,
   }) => {
-    await mockApi(page, { lots: LOTS, images: 'broken' })
+    const api = await mockApi(page, { lots: LOTS, images: 'broken' })
 
     await page.goto('/')
 
@@ -249,6 +249,8 @@ test.describe('imagem quebrada', () => {
     await expect(featuredImage).toHaveAttribute('src', /\/artwork-placeholder\.svg$/)
     await expect(page.locator('.featured')).toContainText('Obra de teste 1')
     await expect(page.locator('.featured')).toContainText('Imagem indisponível')
+    await expect(page.locator('.featured')).toContainText('R$ 110,00')
+    expect(api.count(`GET ${LOTS[0].image_url}`)).toBeGreaterThan(0)
     await expect(page.locator('.featured-cta')).toBeVisible()
 
     const railImage = page.locator('.rail-live .rail-link img').first()
@@ -264,7 +266,11 @@ test.describe('imagem quebrada', () => {
   test('a página do lote mostra o placeholder e mantém ficha e valores', async ({
     page,
   }) => {
-    await mockApi(page, { lots: LOTS, images: 'broken' })
+    const api = await mockApi(page, {
+      lots: LOTS,
+      images: 'broken',
+      rooms: { [lotId(1)]: { bids: makeBids(2, LOTS[0].starting_bid_cents) } },
+    })
 
     await page.goto(`/lots/${lotId(1)}`)
 
@@ -276,5 +282,11 @@ test.describe('imagem quebrada', () => {
     await expect(page.locator('#lot-title')).toHaveText('Obra de teste 1')
     await expect(page.getByRole('heading', { name: 'Ficha da obra' })).toBeVisible()
     await expect(page.locator('.lot-money').first()).toBeVisible()
+    await expect(page.locator('.bid-current')).toHaveText('R$ 120,00')
+    await expect(page.locator('.lot-page')).toContainText('Ao vivo')
+    await expect(page.getByText(OWN_ALIAS, { exact: true })).toBeVisible()
+    await expect(page.getByText(OTHER_ALIAS, { exact: true })).toBeVisible()
+    expect(api.count(`GET ${LOTS[0].image_url}`)).toBeGreaterThan(0)
+    expect(api.count(`GET /api/lots/${lotId(1)}/bids`)).toBeGreaterThan(0)
   })
 })

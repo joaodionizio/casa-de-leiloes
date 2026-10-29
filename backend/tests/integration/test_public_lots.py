@@ -984,7 +984,9 @@ def test_public_reads_never_touch_the_catalog_client(
     for fake in (healthy, failing):
         client = client_for(monkeypatch, seeded)
         install(client.app, fake)  # type: ignore[arg-type]
-        bodies.append([client.get(path).content for path in paths])
+        responses = [client.get(path) for path in paths]
+        assert all(response.status_code == 200 for response in responses)
+        bodies.append([response.content for response in responses])
 
     assert bodies[0] == bodies[1]
     assert healthy.requests == []

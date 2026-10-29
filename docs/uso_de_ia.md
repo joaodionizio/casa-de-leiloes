@@ -1825,3 +1825,104 @@ Story/sprint 5.3 em review, SPEC in-review, Epic 5 in-progress. E2E com API simu
 Autorizei uma única sessão de revisão curta 5.3, seguida do agregado se não houvesse HIGH/MEDIUM e fechamento somente documental se ambos fossem aprovados. Modelo/raciocínio solicitados: Sol/Medium; a sessão não aferiu identificador efetivo do runtime. A IA aplicou bmad-review com foco nos riscos funcionais listados e segunda leitura independente por agente em cada etapa. Ambos os reviews: 0 HIGH / 0 MEDIUM / 0 LOW funcional, sem achados reais de integração. Descartei ampliar cobertura ou repetir gates sem suspeita concreta.
 
 Decidi concluir Story/sprint 5.3 done, SPEC final e Epic 5 done, conforme meu pedido explícito. O done do épico registra exceção documental ao processo canônico; não prova merge, deploy ou smoke público. Aprovação técnica de commits 5.2/5.3 e merge limitada aos arquivos vivos inspecionados, sem Git ou diff histórico. Nenhum código/teste foi alterado; não houve execução de testes, verify ou mutações, nem leitura de `.env*`. Preservei a evidência anterior e seus limites. Não iniciei Epic 6. Registros: `_bmad-output/implementation-artifacts/code-review-final-story-5-3.md` e `code-review-epic-5.md`.
+
+## Preparação da Story 6.1 — Revisão de segurança e de erros — 28/10/2026
+
+Solicitei exclusivamente a especificação com `bmad-spec`, sem implementação.
+A IA confrontou fontes vivas, registradores HTTP, proteções, fluxos e testes
+existentes. A extração estática dos registradores confirmou seis POST e nenhum
+PUT/PATCH/DELETE; não houve import da aplicação nem leitura de `.env*`.
+Decidi preservar as ADs e reaproveitar middleware, sessão, erros, snapshots,
+proxy e provas atuais; descartei refatoração geral e duplicação de suítes.
+
+A spec propõe completar as células de Content-Type sem evidência por rota,
+provar sala REST/WS sob falha externa explícita e ampliar os casos existentes
+de fallback no navegador. Q7 continua resolvida pelo smoke da 2.3; a 6.1
+complementa a prova de continuidade dos fluxos. Mantive separadas a produção
+histórica `3d3ea97`, a base atual informada `8a460d26bb280e5a35379254a82b73c3224813a1`
+e a futura publicação a confirmar. A inspeção pública de cookie/CORS e a
+validação final do candidato continuam pendentes, também para a 6.4.
+
+Não houve código/teste alterado, execução de pytest/Playwright/verify/smoke,
+Git/gh ou deploy. Não invoquei `bmad-build` nem promovi o sprint. Não foi
+identificada decisão humana técnica pendente; a revisão/aprovação da spec e a
+liberação de código continuam comigo. Artefatos em
+`_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/`.
+
+## Implementação da Story 6.1 — Revisão de segurança e de erros — 28/10/2026
+
+Autorizei exclusivamente a implementação da spec consolidada com `bmad-build`,
+minimum diff e revisão independente posterior. A IA trabalhou como Codex,
+com delegação de implementação exigida pelo workflow; não atribuo um modelo
+específico ao runtime sem confirmação. Autorizei runtime exclusivo da 6.1
+para preservar integralmente a baseline histórica da 4.2.
+
+Decidi centralizar as provas de Origin/Content-Type no app real, com matriz
+exata das seis escritas, controle positivo e sentinela de despacho antes das
+dependências/handler. Descartei espalhar complementos equivalentes por várias
+suítes. Preservei os testes autenticados/transacionais existentes, sessão,
+CSRF, 422 e código de produção. Ampliei as provas REST/WS sem AIC, controle de
+mídia 503, fallback de vitrine/sala/comprovante e navegação à auditoria;
+reforcei igualdade do 500 e debug falso sem criar endpoint de crash.
+
+O candidato inicial `8a460d26bb280e5a35379254a82b73c3224813a1` veio de
+confirmação externa recebida no pedido; não atribuo a confirmação ao usuário
+nem a trato como prova de deploy. A validação usou cópia isolada sem `.env*`,
+credenciais ou Git, fontes conferidas por SHA-256, valores locais fictícios e
+PostgreSQL `_test`; não alterei conftest/configuração para dotenv. A primeira
+tentativa focal parou antes do pytest por lock do cache do uv no sandbox
+(exit 2); a reexecução autorizada passou.
+
+Resultados efetivamente executados: três comandos `uv run pytest` focais
+com 477, 197 e 234 testes aprovados, todos exit 0; Playwright focal das cinco
+suítes vitrine/sala/WS/auditoria/comprovante com 115 passed, exit 0; gate
+`./verify.sh` completo exit 0, 2314 pytest e 192 Node, Ruff/formato,
+ESLint/TypeScript, Vite e Docker aprovados. Não repeti verify com E2E, pois
+executei o browser focal exigido. Preservei os avisos existentes no registro,
+sem correção oportunista. Nenhum defeito de produto foi revelado.
+
+Deixei Story/sprint 6.1 em **review**, SPEC **in-review** e Épico 6
+**in-progress**. CA2 local está comprovado; cookie emitido pelo deploy,
+borda/proxy/CORS publicado e commit efetivamente implantado seguem pendentes.
+Playwright usa API simulada, complementada por ASGI/PostgreSQL; não executei
+real-stack opt-in, deploy, Git/gh ou code review, nem aleguei auditoria completa
+dos logs. Não iniciei 6.2. Comandos completos, arquivos e limites em
+`_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md`.
+
+## Correção R6.1-01 da Story 6.1 — 28/10/2026
+
+Autorizei exclusivamente `bmad-build` para corrigir o MEDIUM apontado pelo
+review independente. A IA delegou a implementação do teste conforme o workflow;
+não executou code review. Decidi descobrir escritas pela estrutura HTTP real,
+antes da validação de políticas, e descartei alterar produto ou criar exceção
+por caminho. O mapa anterior omitia rotas sem política efetiva; a tolerância
+documental de `policy_problems` permitia que sete escritas parecessem seis.
+
+Alterei somente `backend/tests/test_csrf.py` entre os arquivos executáveis.
+O inventário bruto agora independe de `AccessPolicy`/`policy_by_route`, mantém
+todos os métodos de escrita e reprova superfícies não inspecionáveis. A
+regressão injeta POST sem política em `/api/docs`, `/api/openapi.json` e caminho
+inesperado, com/sem SPA e Route/APIRoute: exige descoberta da sétima escrita e
+falha da mesma validação CA1. Preservei os 36 negativos e controles positivos.
+
+Executei primeiro o focal de regressão: **29 passed**, exit 0; depois suítes
+CSRF/políticas/autenticação e escritas CA1: **533 passed**, exit 0. Renovei o
+`./verify.sh` completo, exit 0: **2343 pytest** (138.38s), **192 Node**, Ruff,
+formatação, ESLint, TypeScript, Vite e Docker aprovados. Usei cópia isolada sem
+dotenv/credenciais, PostgreSQL `_test` e hashes das 250 fontes reconferidos.
+Restaurei o bind mount original do PostgreSQL após o gate, exit 0/Healthy,
+preservando o volume. Playwright CA3 anterior permaneceu independente e não
+foi repetido. O único warning foi o já existente de Starlette/httpx.
+
+Atualizei SPEC, auditoria, evidência, story, adendo de correção do review e
+este registro. R6.1-01 está **corrigido pelo implementador/aguardando re-review**,
+sem aprovação pelo reviewer. Mantive Story/sprint `review`, SPEC `in-review`,
+Épico 6 `in-progress` e CA2 publicado pendente. Não alterei produto, frontend,
+configuração ou `conftest.py`, nem iniciei 6.2 ou fiz deploy.
+
+Registrei uma violação de processo: a IA executou `git status --short` antes
+de ler o anexo com o pedido. A consulta foi somente de leitura e não alterou
+arquivos; depois disso não executou Git/gh. Não houve leitura de `.env*`,
+credenciais ou exposição de segredos/cookies/tokens reais. Evidência completa:
+`_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md`.
+
