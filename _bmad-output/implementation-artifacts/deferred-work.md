@@ -120,3 +120,12 @@ Obrigações para as próximas stories (`spec-story-3-4-lance-transacional/curre
   futuros; nenhuma dessas stories foi iniciada nesta auditoria.
 - Fonte única dos gates: `docs/FECHAMENTO-DE-EPICO.md`. Não transformei a
   retrospective opcional do BMAD em obrigação do projeto.
+
+
+## Story 6.3 — decisão humana de prazo, 29/10/2026
+
+- 6.2A: implementada e gates aprovados; review independente individual DEFERIDO ao review agregado final do Épico 6. Não houve review individual e isso não bloqueou 6.3.
+- 6.3: documentação concluída para review agregado; nenhum review nesta sessão.
+- 6.1: evidência publicada pendente; 6.4 não executada, reservada a após deploy manual. Épico 6 in-progress.
+- 6.5 busca/filtro, 6.6 cancelamento com estorno, 6.7 dark mode: CORTADAS por prazo, não implementadas.
+- Próximo passo é review agregado independente; Git e deploy manuais só depois da aprovação.

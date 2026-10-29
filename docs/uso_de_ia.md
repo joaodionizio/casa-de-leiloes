@@ -2169,3 +2169,37 @@ Entrego 6.3 pronta para review agregado, com 6.2A reservada ao mesmo gate; não
 inicio 6.4 nem opcionais. Git/gh/commit/push/merge/deploy e leitura de .env* ou
 credenciais não foram executados.
 
+## Épico 6 — correções R6-AGG-01/02 — 29/10/2026
+
+Autorizei exclusivamente a correção dos dois findings confirmados no review
+agregado, com regressões versionadas e gate completo renovado. Codex preservou
+o snapshot pronto durante retry na Sala, permitindo ao `lot_closed` aplicar
+o resultado terminal e às épocas/cancelamento/arbitragem existentes impedir
+o retorno de pending por GET antigo. No cadastro, acrescentou validade explícita
+de montagem e conferência após o await, antes de qualquer efeito da resposta.
+Descartei ampliar escopo, criar polling/outro socket ou alterar backend/protocolo.
+
+As novas regressões integradas a `lot-room-ws.spec.ts` e `registration.spec.ts`
+reproduziram os dois defeitos antes da correção: **2 failed**, por apuração
+persistente e navegação antiga para `/login`. Depois, os focais passaram com
+**133 Playwright** e **61 Node**. A Sala é exercitada com GET pending retido,
+terminal durante retry, GET antigo liberado depois, falha na reconciliação e
+90 segundos virtuais sem recuperação periódica. O cadastro mantém o rascunho B
+após 201 de A desmontado e permite o sucesso normal do próprio B.
+
+O gate **`VERIFY_E2E=1 ./verify.sh` terminou com exit 0**: **2408 pytest passed**
+(um warning preexistente, 145.70 s), **197 Node pass** e **319 Playwright passed /
+7 skipped** (31.5 s); Ruff/formato (111 arquivos), lint, typecheck, Vite e Docker
+aprovados. Usei cópia sem dotenv/credenciais, ambiente filtrado, **256 hashes de
+fontes permitidas conferidos** e PostgreSQL exclusivo de teste. Uma tentativa
+inicial de Playwright foi impedida por `listen EPERM` antes dos testes; a
+reexecução local produziu a evidência real. O container isolado criado nesta
+sessão foi parado ao final, sem apagar seu volume ou manipular o banco de dev.
+
+Registrei causas, regressões, comandos, resultados e limites no §15 de
+`_bmad-output/implementation-artifacts/code-review-epic-6.md`. Não executei Git,
+gh, commit, push, merge, rebase, deploy nem leitura de `.env*`. Não iniciei 6.4
+ou 6.5–6.7, não alterei status de story/SPEC/sprint e mantive o épico in-progress.
+Os sete real-stack opt-in e a prova pública continuam pendentes. Não houve
+review independente nesta implementação: paro para re-review, sem aprovação
+agregada ou liberação de merge/deploy.
