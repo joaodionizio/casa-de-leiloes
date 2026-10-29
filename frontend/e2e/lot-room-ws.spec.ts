@@ -114,6 +114,83 @@ test('T21/T38 lot_closed keeps terminal despite later pending REST and failed fi
   await expect(page.getByRole('heading', { name: 'Este lote foi cancelado' })).toHaveCount(0)
 })
 
+test('R6-AGG-01 terminal during retry survives the older pending GET released afterwards', async ({ page }) => {
+  await page.clock.install()
+  await page.clock.pauseAt(new Date())
+  const pending = state(0, { as_of: '2026-10-25T17:00:00.000000Z', phase: 'ended', minimum_next_bid_cents: null })
+  const sockets: WebSocketRoute[] = []
+  const pings: unknown[] = []
+  let closed = false
+  await page.routeWebSocket('**/ws/lots/*', socket => {
+    sockets.push(socket)
+    socket.onClose(() => { closed = true })
+    socket.onMessage(data => {
+      const message = JSON.parse(String(data))
+      pings.push(message)
+      if (message.type === 'ping') socket.send(JSON.stringify({ type: 'pong', id: message.id }))
+    })
+    send(socket, pending, 'room_snapshot')
+  })
+  const api = await mockApi(page, { lots: LOTS })
+  let detailReads = 0
+  await page.route(`**/api/lots/${LOT}`, route => {
+    detailReads++
+    return detailReads === 1
+      ? route.fulfill({ status: 503, json: { code: 'internal_error' } })
+      : route.fallback()
+  })
+  let roomReads = 0
+  let releaseOld = () => {}
+  const oldRead = new Promise<void>(resolve => { releaseOld = resolve })
+  let oldFulfilled = false
+  await page.route(`**/api/lots/${LOT}/bids`, async route => {
+    roomReads++
+    if (roomReads === 2) {
+      // This response was captured before settlement, even though delivered later.
+      await oldRead
+      await route.fulfill({ json: pending })
+      oldFulfilled = true
+      return
+    }
+    if (roomReads > 2) {
+      // Terminal must stand on its own even if the final history read fails.
+      await route.fulfill({ status: 503, json: { code: 'internal_error' } })
+      return
+    }
+    await route.fulfill({ json: pending })
+  })
+  await page.goto(`/lots/${LOT}`)
+  await expect(page.getByRole('heading', { name: 'Não foi possível carregar o lote' })).toBeVisible()
+  await expect.poll(() => roomReads).toBe(1)
+  const detail = api.hold(`GET /api/lots/${LOT}`)
+  await page.getByRole('button', { name: 'Tentar novamente', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Carregando lote…' })).toBeVisible()
+  await expect.poll(() => roomReads).toBe(2)
+  const before = pings.length
+  const instant = '2026-10-25T17:00:00.123456Z'
+  sockets[0].send(JSON.stringify({ type: 'lot_closed', lot_id: LOT, outcome: 'unsold',
+    winner_alias: null, final_amount_cents: null, bid_count: 0, final_hash: '0'.repeat(64),
+    settled_at: instant, as_of: instant }))
+  await expect.poll(() => closed).toBe(true)
+  // Release the pre-terminal GET only after the transport accepted lot_closed.
+  releaseOld()
+  await expect.poll(() => oldFulfilled).toBe(true)
+  detail.release()
+  await expect(page.locator('.lot-page-status .lot-state')).toHaveText('Encerrado')
+  await expect(page.locator('.room-phase-note')).toHaveText('Encerrado')
+  await expect(page.getByText(/apurando resultado/)).toHaveCount(0)
+  await expect(page.getByRole('timer')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Dar lance', exact: true })).toHaveCount(0)
+  await page.clock.runFor(90_000)
+  await expect(page.locator('.lot-page-status .lot-state')).toHaveText('Encerrado')
+  await expect(page.getByText(/apurando resultado/)).toHaveCount(0)
+  expect(roomReads).toBe(3)
+  expect(pings).toHaveLength(before)
+  expect(sockets).toHaveLength(1)
+  expect(api.bidPosts).toHaveLength(0)
+  expect(api.unexpected).toEqual([])
+})
+
 test('F44-01 sold terminal reconciles missed bids with final public GET', async ({ page }) => {
   await page.clock.install()
   await page.clock.pauseAt(new Date())

@@ -588,7 +588,9 @@ function LotPage({
 
   function retry() {
     setDetail({ status: 'loading' })
-    setRoom({ status: 'loading' })
+    // Retain public authority while retrying: lot_closed needs the known snapshot,
+    // and arbitration must reject an older pending REST response after settlement.
+    setRoom((current) => current.status === 'ready' ? current : { status: 'loading' })
     void runRound({ detail: true, wallet: true, quiet: true }, false)
   }
 
