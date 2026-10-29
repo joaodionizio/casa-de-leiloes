@@ -200,6 +200,39 @@ for (const target of ['https://evil.example/', '//evil.example/', '/register?x=1
   })
 }
 
+test('R6-AGG-02 obsolete registration 201 preserves the new instance and its draft', async ({ page }) => {
+  const api = await mockApi(page)
+  const oldRegistration = api.hold('POST /api/auth/register')
+  await page.goto('/register')
+  await fill(page)
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect.poll(() => api.count('POST /api/auth/register')).toBe(1)
+  await page.locator('.site-header').getByRole('link', { name: 'Vitrine', exact: true }).click()
+  await page.locator('.site-header').getByRole('link', { name: 'Entrar', exact: true }).click()
+  await page.getByRole('link', { name: 'Criar conta', exact: true }).click()
+  await fill(page, 'AUCTIONEER', 'rascunho.b@example.com')
+  const response = page.waitForResponse('**/api/auth/register')
+  oldRegistration.release()
+  expect((await response).status()).toBe(201)
+  await (await response).finished()
+  // Flush browser rendering after the old fetch completes, before testing B.
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  await expect(page).toHaveURL(/\/register$/)
+  await expect(page.getByLabel('E-mail', { exact: true })).toHaveValue('rascunho.b@example.com')
+  await expect(page.getByLabel('Senha', { exact: true })).toHaveValue(PASSWORD)
+  await expect(page.locator('input[value=AUCTIONEER]')).toBeChecked()
+  await expect(page.getByText('Conta criada com sucesso. Entre para continuar.')).toHaveCount(0)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeEnabled()
+  expect(api.count('POST /api/auth/register')).toBe(1)
+  // The current instance still owns its normal success/navigation flow.
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByRole('status').filter({ hasText: 'Conta criada com sucesso.' })).toBeVisible()
+  expect(api.count('POST /api/auth/register')).toBe(2)
+  expect(api.unexpected).toEqual([])
+})
+
 test('usuário autenticado em /register segue destino seguro sem trocar conta', async ({ page }) => {
   const api = await mockApi(page, { session: 'BIDDER' })
   await page.goto('/register')

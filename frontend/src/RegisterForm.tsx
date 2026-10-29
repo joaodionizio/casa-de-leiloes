@@ -16,11 +16,17 @@ function RegisterForm({ onRegistered, children }: RegisterFormProps) {
   const [errors, setErrors] = useState<RegistrationErrors>({})
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
+  const mounted = useRef(false)
   const focusTarget = useRef<RegistrationField | 'summary' | null>(null)
   const roleRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const summaryRef = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     if (submitting || error === null) return
@@ -51,6 +57,9 @@ function RegisterForm({ onRegistered, children }: RegisterFormProps) {
     setError(null)
     setErrors({})
     const result = await register(email.trim(), password, role)
+    // The server may have committed even after navigation. Only this mounted
+    // instance may handle its response, including errors and success navigation.
+    if (!mounted.current) return
     if (result.ok) {
       setPassword('')
       onRegistered()
