@@ -1,5 +1,28 @@
 # Fechamento do Épico 6 — 29/10/2026
 
+**ESTADO VIGENTE FINAL: Épico 6 done; 6.5/6.6/6.7 done — 29/10/2026.**
+Decidi concluir o fechamento definitivo após a aprovação técnica agregada local
+final (R6-OPT-01 RESOLVED) e o smoke público final do candidato publicado.
+Zero novo BLOCKER/HIGH/MEDIUM; LOW externo de acesso ao link oficial da AIC
+sob Cloudflare, registrado sem bloqueio. Footer e refinamentos validados em produção.
+
+Preservo o fechamento obrigatório anterior e a reabertura posterior por decisão
+humana para opcionais. A sequência terminou em aprovação técnica agregada local,
+publicação informada/corroborada funcionalmente, smoke público final e fechamento
+definitivo. Candidato local/main: `2a6dc9394be0174a74016b3de46c276eb5ef6074`;
+SHA Render não autenticado. Reflog local registra push às 13:18:27−03:00;
+coleta publicada 13:25–13:31 America/Maceio, health 200.
+
+[Evidência completa do smoke público final](../_bmad-output/implementation-artifacts/smoke-publico-final-6-5-6-7.md).
+Somente documentação/status alterados; sem código, SQL, banco direto, secrets,
+commit, push, merge ou deploy. Os estados de reabertura/review/backlog abaixo
+são **históricos**, superados por este estado vigente final.
+
+---
+
+## Histórico preservado do fechamento e da reabertura
+
+
 **Estado vigente: reaberto / `in-progress` para os opcionais.**
 Decidi reabrir o Épico 6 em 29/10/2026, depois do fechamento obrigatório abaixo.
 6.5–6.7 foram inicialmente cortadas por prazo após a entrega obrigatória e posteriormente reativadas por decisão humana para implementar os opcionais.

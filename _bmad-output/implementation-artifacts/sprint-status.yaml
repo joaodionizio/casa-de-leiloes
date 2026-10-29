@@ -106,7 +106,8 @@ development_status:
   # API/UI novas comprovadas; SHA Render não autenticado. docs/FECHAMENTO-EPICO-6.md.
   # Reaberto em 29/10 por decisão humana posterior ao fechamento obrigatório.
   # 6.5–6.7 foram inicialmente cortadas por prazo; histórico de produção preservado.
-  epic-6: in-progress
+  # Fechamento definitivo após opcionais e smoke público final; footer/refinamentos validados.
+  epic-6: done
   6-1-revisão-de-segurança-e-de-erros: done
   # 29/10: aceite humano técnico/visual; R6.2-01 LOW aceito, sem correção.
   6-2-identidade-visual-e-responsividade: done
@@ -115,10 +116,12 @@ development_status:
   6-2a-cadastro-de-usuarios: done
   6-3-readme-completo-e-registro-de-uso-de-ia: done
   6-4-validação-final-no-ambiente-publicado: done
-  # Reativadas pelo usuário após entrega obrigatória; implementação concluída localmente.
-  # Gate combinado exit 0, real-stack 7 passed; aguardam único review agregado independente.
-  # Evidências: docs/FECHAMENTO-EPICO-6.md. Sem nova publicação.
-  6-5-busca-e-filtro-de-lotes: review
-  6-6-cancelamento-com-estorno-automático: review
-  6-7-dark-mode: review
+  # Reativadas por decisão humana após fechamento obrigatório; histórico preservado.
+  # Aprovação agregada local final: R6-OPT-01 RESOLVED; candidato main 2a6dc939.
+  # Smoke público 29/10 13:25–13:31 America/Maceio aprovado; zero novo BLOCKER/HIGH/MEDIUM.
+  # LOW externo: link oficial AIC sob Cloudflare; SHA Render não autenticado.
+  # Evidência: smoke-publico-final-6-5-6-7.md; fechamento definitivo autorizado.
+  6-5-busca-e-filtro-de-lotes: done
+  6-6-cancelamento-com-estorno-automático: done
+  6-7-dark-mode: done
   epic-6-retrospective: optional

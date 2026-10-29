@@ -2,7 +2,7 @@
 title: 'Story 6.7 — Dark mode, footer e refinamentos pós-entrega'
 type: feature
 created: '2026-10-29'
-status: review
+status: done
 route: dispatch
 context:
   - CLAUDE.md
@@ -170,3 +170,22 @@ separadamente com 7 passed. Docker aprovado. Smoke real de cancelamento com
 estorno/WS/auditoria aprovado. Inspeção visual em 35 capturas temporárias.
 Detalhes, arquivos e limites em [FECHAMENTO-EPICO-6.md](../../docs/FECHAMENTO-EPICO-6.md).
 6.5/6.6/6.7 review, Épico 6 in-progress, sem review independente ou deploy.
+
+
+## Fechamento vigente — smoke público final, 29/10/2026
+
+**Estado: done.** Decidi concluir esta story após a aprovação técnica agregada
+local vigente (R6-OPT-01 RESOLVED) e o smoke real do candidato publicado em
+29/10/2026, America/Maceio. Descartei reabrir implementação ou repetir toda 6.4.
+Candidato Git local/main: `2a6dc9394be0174a74016b3de46c276eb5ef6074`; SHA do
+Render não autenticado. Zero novo BLOCKER/HIGH/MEDIUM; ressalva LOW externa
+no acesso ao link oficial AIC por Cloudflare, sem bloqueio do fechamento.
+
+Resultados, limites e fluxo financeiro: [smoke público final](smoke-publico-final-6-5-6-7.md).
+6.5: busca/filtros/combinação sem requests extras; 6.6: cancelamento com lance e
+refund exato de R$90, total R$100 preservado e auditoria íntegra; 6.7: tema
+persistente, footer/cadastro/ajudas/contexto do líder validados em produção.
+Preservo o fechamento obrigatório anterior e a reabertura humana posterior para
+os opcionais; **Épico 6 done novamente, fechamento definitivo**. Blocos anteriores
+que aguardam review/publicação são registros históricos, superados por este.
+Nenhuma mudança de código, banco direto, commit, push, merge ou deploy nesta sessão.

@@ -2,7 +2,7 @@
 title: 'Story 6.6 — Cancelamento com estorno automático'
 type: feature
 created: '2026-10-29'
-status: review
+status: done
 route: dispatch
 context:
   - CLAUDE.md
@@ -124,3 +124,22 @@ Gate conjunto final: VERIFY_E2E=1 ./verify.sh exit 0; 2446 backend, 206 Node,
 355 Playwright, Docker aprovado. Real-stack separado 7 passed e smoke financeiro
 real aprovado. Resultado e limites em [FECHAMENTO-EPICO-6.md](../../docs/FECHAMENTO-EPICO-6.md).
 Estado review; review agregado independente dos opcionais pendente.
+
+
+## Fechamento vigente — smoke público final, 29/10/2026
+
+**Estado: done.** Decidi concluir esta story após a aprovação técnica agregada
+local vigente (R6-OPT-01 RESOLVED) e o smoke real do candidato publicado em
+29/10/2026, America/Maceio. Descartei reabrir implementação ou repetir toda 6.4.
+Candidato Git local/main: `2a6dc9394be0174a74016b3de46c276eb5ef6074`; SHA do
+Render não autenticado. Zero novo BLOCKER/HIGH/MEDIUM; ressalva LOW externa
+no acesso ao link oficial AIC por Cloudflare, sem bloqueio do fechamento.
+
+Resultados, limites e fluxo financeiro: [smoke público final](smoke-publico-final-6-5-6-7.md).
+6.5: busca/filtros/combinação sem requests extras; 6.6: cancelamento com lance e
+refund exato de R$90, total R$100 preservado e auditoria íntegra; 6.7: tema
+persistente, footer/cadastro/ajudas/contexto do líder validados em produção.
+Preservo o fechamento obrigatório anterior e a reabertura humana posterior para
+os opcionais; **Épico 6 done novamente, fechamento definitivo**. Blocos anteriores
+que aguardam review/publicação são registros históricos, superados por este.
+Nenhuma mudança de código, banco direto, commit, push, merge ou deploy nesta sessão.
