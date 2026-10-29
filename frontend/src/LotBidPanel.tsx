@@ -1,3 +1,5 @@
+import ContextHelp from './ContextHelp'
+import { HELP } from './contextHelpText'
 import type { RefObject } from 'react'
 import type { BidRoom } from './api/bids'
 import type { WalletResponse } from './api/wallet'
@@ -60,6 +62,13 @@ const POSITION_TEXT: Record<Exclude<BidPosition, 'hidden' | 'neutral'>, string> 
 function LotBidPanel(props: LotBidPanelProps) {
   const { room, viewer, overlay } = props
   const live = room.phase === 'live' && room.settlement_status === 'pending'
+  const leaderLowBalance = viewer === 'bidder' && props.position === 'winning' && live
+    && props.wallet.status === 'ready' && !props.walletStale && !overlay
+    && !props.networkOffline && (props.connection === 'connected' || props.manualFresh)
+    && !props.syncFailed && !props.zeroConfirming && !props.zeroFailed
+    && !props.participationUnavailable && !props.acceptedSyncFailed && !props.refreshing
+    && room.minimum_next_bid_cents !== null
+    && props.wallet.data.available_balance_cents < room.minimum_next_bid_cents
   const minimumText = overlay
     ? props.syncFailed
       ? 'Mínimo indisponível'
@@ -103,13 +112,14 @@ function LotBidPanel(props: LotBidPanelProps) {
       {viewer === 'bidder' && props.position === 'winning' && (
         <p className="bid-position bid-position-winning">{POSITION_TEXT.winning}</p>
       )}
-      {viewer === 'bidder' && props.position === 'outbid' && (
+      {leaderLowBalance && <p className="bid-leader-context muted">Seu saldo disponível no momento também é menor que o próximo lance mínimo.</p>}
+      {viewer === 'bidder' && props.position === 'outbid'  && (
         <p className="bid-position bid-position-outbid">{POSITION_TEXT.outbid}</p>
       )}
       <dl className="bid-figures">
         {room.phase !== 'ended' && (
           <div>
-            <dt>Próximo lance mínimo</dt>
+            <dt>Próximo lance mínimo <ContextHelp label="Próximo lance mínimo" text={HELP.minimum} /></dt>
             <dd className="bid-minimum">{minimumText}</dd>
           </div>
         )}
@@ -119,7 +129,8 @@ function LotBidPanel(props: LotBidPanelProps) {
       )}
       {viewer === 'bidder' && props.ownAlias !== null && (
         <p className="muted bid-own-alias">
-          Seu pseudônimo neste lote: <strong>{props.ownAlias}</strong>
+          <span>Seu pseudônimo neste lote: <strong>{props.ownAlias}</strong></span>{' '}
+          <ContextHelp label="Pseudônimo" text={HELP.alias} />
         </p>
       )}
       {viewer === 'bidder' && room.phase === 'ended' && props.lastOwnBidCents !== null && (
@@ -132,8 +143,8 @@ function LotBidPanel(props: LotBidPanelProps) {
         <div className="bid-wallet">
           {props.wallet.status === 'ready' && (
             <p>
-              Saldo disponível:{' '}
-              <strong>{formatCents(props.wallet.data.available_balance_cents)}</strong>
+              <span>Saldo disponível: <strong>{formatCents(props.wallet.data.available_balance_cents)}</strong></span>{' '}
+              <ContextHelp label="Saldo disponível" text={HELP.available} />
             </p>
           )}
           {(props.walletStale || props.wallet.status === 'failed') && (

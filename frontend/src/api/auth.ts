@@ -1,6 +1,8 @@
 // Contrato HTTP de autenticação (Story 2.2). O token vive só no cookie HttpOnly:
 // este módulo nunca o lê, e nada de sessão vai para localStorage/sessionStorage.
 
+import { PASSWORD_RULE, passwordStrength } from '../passwordStrength.ts'
+
 export type UserRole = 'AUCTIONEER' | 'BIDDER'
 
 export interface CurrentUser {
@@ -51,8 +53,7 @@ export function registrationErrors(email: string, password: string, role: UserRo
   if (Array.from(normalized).length > 254 || parts.length !== 2 || !parts[0] || !parts[1] || /\s/u.test(normalized)) {
     errors.email = 'Informe um e-mail válido com até 254 caracteres.'
   }
-  const length = Array.from(password).length
-  if (length < 8 || length > 1024) errors.password = 'Use uma senha de 8 a 1024 caracteres.'
+  if (!passwordStrength(password).valid) errors.password = PASSWORD_RULE
   return errors
 }
 

@@ -12,12 +12,21 @@ Decidi manter API, WebSocket e SPA na mesma origem e um único processo de aplic
 Descartei serviços distribuídos na escala do desafio. O nome ÁTRIO substituiu
 “Casa de Leilões” em 25/10/2026; repositório, bancos e módulos mantêm os nomes técnicos.
 
-**Candidato local em 29/10/2026:** inclui WebSocket, liquidação, auditoria,
+**Entrega concluída em 29/10/2026:** WebSocket, liquidação, auditoria,
 comprovante, Meus arremates, refinamento visual e cadastro dos dois papéis.
-**Publicado:** a última evidência pública registrada é a recuperação dos Epics
-2+3, `main`, commit `3d3ea97`, em <https://casa-de-leiloes-i1xr.onrender.com>.
-Isso não comprova publicação das funcionalidades posteriores. A validação final
-no ambiente publicado (6.4) e o review agregado do Epic 6 estão pendentes.
+**Publicado:** <https://casa-de-leiloes-i1xr.onrender.com>, validado na Story 6.4
+e revalidado focalmente após a correção de R6.4-01. Review agregado e re-review
+aprovados para a entrega obrigatória; o Épico 6 recebeu `done` naquele fechamento.
+Git local/main então registrado: `7c285c3`; SHA do Render não
+autenticado. Evidências, horários e limites em
+[fechamento do Épico 6](docs/FECHAMENTO-EPICO-6.md).
+
+**Reabertura posterior, 29/10/2026:** 6.5–6.7 foram inicialmente cortadas por prazo após a entrega obrigatória e posteriormente reativadas por decisão humana para implementar os opcionais.
+O novo candidato local reúne busca/filtros, cancelamento com estorno, tema escuro,
+footer institucional e refinamentos pós-entrega derivados de feedback humano
+externo. Épico 6 `in-progress`, aguardando review agregado dos opcionais e os gates
+posteriores. As evidências públicas acima pertencem à entrega obrigatória; não
+comprovam publicação deste novo candidato.
 
 Navegação: [Instalação](#instalacao) · [Execução](#execucao) ·
 [Verificação](#verificacao) · [Avaliação](#avaliacao) · [Cadastro](#cadastro) ·
@@ -28,12 +37,19 @@ Navegação: [Instalação](#instalacao) · [Execução](#execucao) ·
 
 React + TypeScript/Vite no frontend, FastAPI/Python no backend e PostgreSQL.
 Implementei cadastro de BIDDER/AUCTIONEER, login/logout e contas demo; busca de
-obras públicas da AIC, criação e cancelamento de lote próprio sem lances;
+obras públicas da AIC, criação e cancelamento de lote próprio;
 Vitrine, Sala ao vivo com WebSocket/reconexão, carteira e depósitos simulados,
 lances transacionais e anti-sniping; settlement, resultado no painel, auditoria
 pública, comprovante compartilhável e Meus arremates (participações e vitórias).
-A identidade ÁTRIO e a responsividade acompanham esses fluxos. Busca/filtro de
-lotes, cancelamento com estorno e dark mode não fazem parte desta entrega.
+A identidade ÁTRIO e a responsividade acompanham esses fluxos. No candidato dos
+opcionais, busco título/artista/data e combino filtros de estado sobre o snapshot
+da Vitrine, sem nova consulta à AIC. Cancelar lote próprio agendado/ao vivo com
+lances libera o compromisso do líder atual na mesma transação; preservo todo o
+histórico e a auditoria. Tema claro/escuro segue o sistema na primeira visita e
+persiste escolha manual em `atrio-theme`, sem informação de sessão. Incluí ajuda
+contextual, cadastro com senha forte/confirmada e informação complementar ao líder
+somente com dados atuais confiáveis. Esses refinamentos vieram de feedback humano
+externo posterior à entrega obrigatória, não de novas exigências da Verzel.
 
 <a id="instalacao"></a>
 ## Instalação e ambiente
@@ -231,9 +247,12 @@ publicar e validar o candidato; a evidência antiga 2+3 não cobre o fluxo intei
    duração mínima; deixe margem para preencher e operar o roteiro. A criação
    depende da AIC; o demo usa fixture e funciona sem a busca externa.
 3. **Meus lotes:** em `/auctioneer/lots`, confira o novo lote, abra sua sala e
-   copie o link. Para demonstrar cancelamento, crie outro lote sem lances e
-   cancele-o antes do fim: continua no painel, some do público. Lote com lances
-   não pode ser cancelado nesta entrega.
+   copie o link. No candidato dos opcionais, posso cancelar outro lote próprio
+   agendado/ao vivo antes do fim, com ou sem lances: continua cancelado no painel e
+   some da Vitrine. Com lances, confirmo o aviso de liberação automática do saldo
+   comprometido do líder; seu total não muda e o histórico permanece auditável.
+   Lote encerrado/liquidado não pode ser cancelado. O deploy obrigatório anterior
+   permitia apenas cancelamento sem lances.
 4. **Dois licitantes:** entre separadamente com bidder1 e bidder2. Em
    `/bidder/wallet`, deposite saldo simulado suficiente para os lances (por
    exemplo R$ 1.000,00 em cada, conforme o lote). Carteiras novas começam em zero.
@@ -270,14 +289,18 @@ Rotas REST correspondentes: `POST /api/lots`, `GET /api/lots/mine`,
 ## Cadastro e autenticação
 
 Em `/register`, escolha explicitamente Licitante (`BIDDER`) ou Leiloeiro
-(`AUCTIONEER`), preencha e-mail e senha. Não há campo Nome. O cadastro público
+(`AUCTIONEER`), preencha e-mail, senha e confirmação idêntica da senha. Não há campo Nome. O cadastro público
 `POST /api/auth/register` aceita apenas `email`, `password`, `role`; cria usuário
 e carteira zero na mesma transação, para ambos os papéis. Carteira do leiloeiro
 não libera acesso a depósito ou lances; ela recebe o produto dos seus lotes vendidos.
 
 E-mail é normalizado com trim/lowercase, até 254 caracteres e formato mínimo;
-não há confirmação de e-mail. Senha tem 8–1024 caracteres, sem regra de composição,
-e hash Argon2id. Duplicidade retorna `409 email_already_registered`; aceitei
+não há confirmação de e-mail. No candidato pós-entrega, novos cadastros exigem
+senha de 8–1024 caracteres com pelo menos três dos quatro tipos: minúsculas,
+maiúsculas, números e símbolos. Preservo literalmente caixa e espaços, sem trim
+ou normalização. A confirmação compara igualdade exata somente na interface e
+não é enviada à API. Login, contas existentes/demos e hash Argon2id permanecem
+inalterados. Duplicidade retorna `409 email_already_registered`; aceitei
 explicitamente essa enumeração na demonstração. Cadastro retorna `201 {email, role}`,
 sem cookie/token, e leva ao login com confirmação. Não autentica automaticamente.
 Não há troca/recuperação de senha, verificação de titularidade ou controle administrativo.
@@ -394,7 +417,9 @@ Erros usam envelope `{status, code, message}`; validação pode incluir
 `details: [{loc, type}]`. 500 é genérico, sem stack/SQL/segredos para o cliente.
 A revisão de segurança local está documentada na
 [evidência da 6.1](_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md);
-a conferência no ambiente publicado continua pendente, sem alegação de aprovação pública.
+CA2 publicado (cookie HTTPS, Origin/CORS, login/logout) foi comprovado na
+[Story 6.4](_bmad-output/implementation-artifacts/6-4-validação-final-no-ambiente-publicado.md),
+com os limites de atribuição do [fechamento](docs/FECHAMENTO-EPICO-6.md).
 
 Cadeia SHA-256 encadeia os lances; âncora HMAC autentica contagem/hash final com
 segredo fora do banco. Auditoria pública verifica o histórico completo em snapshot
@@ -449,10 +474,12 @@ prometo proteção contra controle total do sistema nem rotação de integridade
   desconhecido, exibindo página não encontrada; `/api/*` nunca deve servir HTML.
 - **Render:** cold start sem duração inventada e vigência de banco/plano dependem
   da conta; `/health` verde não prova banco, autenticação ou WS.
-- **Escopo final:** 6.5 busca/filtro de lotes, 6.6 cancelamento com estorno e 6.7
-  dark mode foram cortadas da entrega; não são controles prometidos na interface.
-  6.1 mantém pendência publicada, 6.2A e 6.3 aguardam agregado, Epic 6 segue
-  in-progress e 6.4 não foi executada.
+- **Escopo e publicação:** 6.5–6.7 foram inicialmente cortadas por prazo após a
+  entrega obrigatória e posteriormente reativadas por decisão humana para
+  implementar os opcionais. 6.1/6.2/6.2A/6.3/6.4 continuam `done`, com R6.4-01
+  resolvido em produção e R6.2-01 LOW aceito. O épico foi reaberto para o candidato
+  local dos opcionais, sem apagar aquele fechamento. Review agregado independente
+  e nova publicação dos opcionais ainda dependem dos gates posteriores.
 
 Registrei decisões, intervenções humanas, correções, gates e limites em
 [uso_de_ia](docs/uso_de_ia.md). Pendências históricas e sua vigência estão em

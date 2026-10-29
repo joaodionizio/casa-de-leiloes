@@ -1,3 +1,5 @@
+import ContextHelp from './ContextHelp'
+import { HELP } from './contextHelpText'
 import { useEffect, useRef, useState } from 'react'
 import { fetchAudit, type AuditResult } from './api/audit'
 import AppLink from './AppLink'
@@ -28,7 +30,7 @@ export default function AuditPage({ lotId, navigated }: { lotId: string; navigat
       : <div role="alert"><p>Não foi possível carregar a auditoria.</p><button className="button button-secondary" onClick={() => { setResult(null); setAttempt(value => value + 1) }}>Tentar novamente</button></div>)}
     {data && <>
       <p className="muted">Consulta em <time dateTime={data.as_of}>{formatDateTime(data.as_of)}</time></p>
-      <h2>{data.integrity === 'verified' ? 'Integridade verificada' : 'Integridade adulterada'}</h2>
+      <h2>{data.integrity === 'verified' ? 'Integridade verificada' : 'Integridade adulterada'} {data.integrity === 'verified' && <ContextHelp label="Integridade verificada" text={HELP.integrity} />}</h2>
       {data.integrity === 'adulterated'
         ? <p role="alert">Foram encontradas inconsistências. O estado, o resultado e o histórico foram retidos porque os dados não são confiáveis.</p>
         : <>
@@ -38,6 +40,7 @@ export default function AuditPage({ lotId, navigated }: { lotId: string; navigat
           {data.settlement?.outcome === 'unsold' && <p>Encerrado sem vencedor.</p>}
           <p>{data.bid_count} {data.bid_count === 1 ? 'lance registrado' : 'lances registrados'}.</p>
           <h2>Histórico completo</h2>
+          <p className="muted">Pseudônimo <ContextHelp label="Pseudônimo" text={HELP.alias} /></p>
           {data.bids.length === 0 ? <p>Nenhum lance registrado.</p> : <ol className="audit-events">
             {data.bids.map(bid => <li key={bid.sequence}>
               <div className="audit-event-summary"><strong>Lance {bid.sequence}</strong><span>{bid.bidder_alias}</span><strong>{formatCents(bid.amount_cents)}</strong></div>

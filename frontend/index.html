@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Executado antes do CSS/mount para evitar o flash do tema claro.
+      (() => {
+        let preferred
+        try { preferred = localStorage.getItem('atrio-theme') } catch { /* storage indisponível */ }
+        const theme = preferred === 'light' || preferred === 'dark'
+          ? preferred : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = theme
+      })()
+    </script>
     <title>ÁTRIO — Leilões de Arte</title>
   </head>
   <body>

@@ -10,6 +10,7 @@ import {
   CANCELLED_AT,
   LONG_TITLE,
   lotId,
+  makeLot,
   mockApi,
   type CancelMode,
   type MockMyLot,
@@ -71,7 +72,7 @@ async function startCancel(page: Page, n = 1) {
 }
 
 async function confirm(page: Page) {
-  await page.getByRole('button', { name: 'Confirmar cancelamento' }).click()
+  await page.getByRole('button', { name: 'Cancelar lote', exact: true }).click()
 }
 
 test.describe('elegibilidade e selo', () => {
@@ -91,10 +92,10 @@ test.describe('elegibilidade e selo', () => {
     })
     await openList(page)
 
-    await expect(page.getByRole('button', { name: /Cancelar lote/ })).toHaveCount(2)
+    await expect(page.getByRole('button', { name: /Cancelar lote/ })).toHaveCount(3)
     await expect(row(page, 1).getByRole('button', { name: /Cancelar lote/ })).toBeVisible()
     await expect(row(page, 2).getByRole('button', { name: /Cancelar lote/ })).toBeVisible()
-    for (const n of [3, 4, 5, 6]) {
+    for (const n of [4, 5, 6]) {
       await expect(row(page, n).getByRole('button')).toHaveCount(0)
     }
     // O cancelamento prevalece sobre a fase, inclusive sobre "Encerrado".
@@ -341,9 +342,9 @@ test.describe('confirmação inline', () => {
 
     const confirmation = row(page, 1).getByRole('group')
     await expect(confirmation).toContainText('O lote sai da vitrine e não pode ser reaberto.')
-    await expect(page.getByRole('button', { name: 'Confirmar cancelamento' })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'Cancelar lote', exact: true })).toBeFocused()
     // Só uma confirmação por vez e nenhum pedido ainda.
-    await expect(page.getByRole('button', { name: 'Confirmar cancelamento' })).toHaveCount(1)
+    await expect(page.getByRole('button', { name: 'Cancelar lote', exact: true })).toHaveCount(1)
     expect(api.cancelPosts).toHaveLength(0)
 
     await page.getByRole('button', { name: 'Voltar' }).click()
@@ -360,7 +361,7 @@ test.describe('confirmação inline', () => {
     const cta = row(page, 1).getByRole('button', { name: /Cancelar lote/ })
     await cta.focus()
     await page.keyboard.press('Enter')
-    await expect(page.getByRole('button', { name: 'Confirmar cancelamento' })).toBeFocused()
+    await expect(page.getByRole('button', { name: 'Cancelar lote', exact: true })).toBeFocused()
     await page.keyboard.press('Enter')
 
     await expect(page.getByText('Lote cancelado.', { exact: true })).toBeVisible()
@@ -395,7 +396,7 @@ test.describe('envio e sucesso', () => {
     await openList(page)
     await startCancel(page)
 
-    const button = page.getByRole('button', { name: 'Confirmar cancelamento' })
+    const button = page.getByRole('button', { name: 'Cancelar lote', exact: true })
     await button.click()
     const pending = page.getByRole('button', { name: 'Cancelando…' })
     await expect(pending).toBeDisabled()
@@ -426,7 +427,6 @@ test.describe('envio e sucesso', () => {
 
 test.describe('falhas de negócio, pelo code', () => {
   const cases: Array<[CancelMode, string, boolean]> = [
-    ['has_bids', 'Este lote não pode ser cancelado porque já recebeu lances.', true],
     ['ended', 'Este lote já foi encerrado.', true],
     ['integrity', NEUTRAL_409, false],
     ['forbidden', 'Você não pode cancelar este lote.', false],
@@ -540,8 +540,8 @@ test.describe('layout e toque', () => {
     const box = await cta.boundingBox()
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(43.5)
     await cta.click()
-    for (const name of ['Confirmar cancelamento', 'Voltar']) {
-      const target = await page.getByRole('button', { name }).boundingBox()
+    for (const name of ['Cancelar lote', 'Voltar']) {
+      const target = await page.getByRole('button', { name, exact: true }).boundingBox()
       expect(target?.height ?? 0).toBeGreaterThanOrEqual(43.5)
     }
     const overflow = await page.evaluate(
@@ -550,3 +550,22 @@ test.describe('layout e toque', () => {
     expect(overflow).toBeLessThanOrEqual(0)
   })
 })
+
+for (const phase of ['live', 'scheduled'] as const) {
+  test(`cancelar ${phase} com lances explica estorno, impede duplo envio e retira da Vitrine`, async ({ page }) => {
+    const api = await mockApi(page, owner('ok', { cancelDelayMs: 500, lots: [makeLot(1, phase)], myLots: [myLot(1, phase, { bid_count: 3 })] }))
+    await openList(page)
+    await startCancel(page)
+    const group = row(page, 1).getByRole('group')
+    await expect(group).toContainText('Este lote possui lances. Ao cancelar, o saldo comprometido do licitante líder será liberado automaticamente.')
+    await expect(group).not.toContainText(/Licitante-|@/)
+    await group.getByRole('button', { name: 'Cancelar lote', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Cancelando…' })).toBeDisabled()
+    await page.keyboard.press('Enter')
+    await expect(row(page, 1).getByText('Cancelado', { exact: true })).toBeVisible()
+    await expect(row(page, 1).getByText('3 lances')).toBeVisible()
+    expect(api.cancelPosts).toEqual([TARGET])
+    await page.getByRole('link', { name: 'Vitrine', exact: true }).click()
+    await expect(page.getByText('Obra de teste 1', { exact: true })).toHaveCount(0)
+  })
+}

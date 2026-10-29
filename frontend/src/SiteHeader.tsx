@@ -1,6 +1,7 @@
 import { roleLabel, type CurrentUser } from './api/auth'
 import AppLink from './AppLink'
 import AtrioMark from './AtrioMark'
+import ThemeToggle from './ThemeToggle'
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from './brand'
 import { routePath, type Route } from './route'
 
@@ -91,6 +92,7 @@ function SiteHeader({
             </>
           )}
         </nav>
+        <ThemeToggle />
         {user === null && !checking && route.kind !== 'login' && route.kind !== 'register' && (
           <AppLink
             to="/login"

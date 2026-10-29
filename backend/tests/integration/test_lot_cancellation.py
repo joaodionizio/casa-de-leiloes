@@ -321,26 +321,71 @@ def test_missing_lot_is_404_and_a_malformed_id_is_422_for_the_auctioneer(
 # --- lances e fim (I03, I04) ---
 
 
-def test_a_lot_with_a_bid_is_422_lot_has_bids_and_the_leader_keeps_the_commitment(
-    auctioneer: TestClient, seeded: sessionmaker[Session]
+@pytest.mark.parametrize("scheduled", [False, True], ids=["live", "scheduled-history"])
+def test_cancelling_bids_releases_only_current_reservation_and_preserves_audit(
+    auctioneer: TestClient,
+    anonymous: TestClient,
+    bidder: TestClient,
+    seeded: sessionmaker[Session],
+    db_engine: Engine,
+    scheduled: bool,
 ) -> None:
+    from tests.bid_support import add_bidder
+    from tests.wallet_support import wallet_row
+
+    other = live_lot(seeded, starting_bid_cents=7_000)
+    assert isinstance(run_bid(seeded, other, ALICE, 7_000), PlacedBid)
     lot_id = lot_with_bid(seeded)
-    before = db_snapshot(seeded)
-
-    response = cancel(auctioneer, lot_id)
-
-    assert response.status_code == 422
-    assert response.json() == {
-        "status": 422,
-        "code": "lot_has_bids",
-        "message": "Este lote não pode ser cancelado porque já recebeu lances.",
-    }
-    assert db_snapshot(seeded) == before
-    assert lot_state(seeded, lot_id)["cancelled_at"] is None
+    bob = add_bidder(seeded, 100_000)
+    assert isinstance(run_bid(seeded, lot_id, bob, 11_000), PlacedBid)
+    assert isinstance(run_bid(seeded, lot_id, ALICE, 12_000), PlacedBid)
+    if scheduled:
+        now = db_now(seeded)
+        tamper(
+            seeded,
+            "UPDATE lots SET starts_at=:s, ends_at=:e WHERE id=:id",
+            s=now + timedelta(hours=1),
+            e=now + timedelta(hours=2),
+            id=lot_id,
+        )
+    before = lot_state(seeded, lot_id)
+    history = bid_rows(seeded, lot_id)
+    total, committed = wallet_row(seeded, ALICE)
+    with statement_log(db_engine) as log:
+        response = cancel(auctioneer, lot_id)
+    assert response.status_code == 200
+    assert locked_wallet_ids(log) == [ALICE]
+    after = lot_state(seeded, lot_id)
+    assert after.pop("cancelled_at") is not None
+    before.pop("cancelled_at")
+    assert after == before
+    assert bid_rows(seeded, lot_id) == history
+    assert wallet_row(seeded, ALICE) == (total, committed - 12_000)
+    assert wallet_row(seeded, ALICE) == (1_000_000, 7_000)
+    assert wallet_row(seeded, bob) == (100_000, 0)
+    wallet = bidder.get("/api/wallet").json()
+    assert wallet["available_balance_cents"] == total - 7_000
+    audit = anonymous.get(f"/api/lots/{lot_id}/audit").json()
+    assert audit["integrity"] == "verified" and audit["phase"] == "cancelled"
+    assert audit["bid_count"] == 3 and len(audit["bids"]) == 3
+    assert (
+        audit["settlement_status"] == "not_applicable" and audit["settlement"] is None
+    )
+    assert str(lot_id) not in anonymous.get("/api/lots").text
+    first_snapshot = db_snapshot(seeded)
+    with statement_recorder(db_engine) as recorder:
+        repeat = cancel(auctioneer, lot_id)
+    assert repeat.json() == response.json()
+    assert db_snapshot(seeded) == first_snapshot
+    assert not any(
+        s.lstrip().upper().startswith(("UPDATE", "INSERT", "DELETE"))
+        for s in recorder.statements
+    )
+    assert_authenticated(seeded, lot_id)
     assert_invariants(seeded)
 
 
-def test_a_lot_with_a_bid_that_also_ended_is_lot_has_bids(
+def test_a_lot_with_a_bid_that_also_ended_is_lot_ended(
     auctioneer: TestClient, seeded: sessionmaker[Session]
 ) -> None:
     lot_id = lot_with_bid(seeded)
@@ -353,7 +398,7 @@ def test_a_lot_with_a_bid_that_also_ended_is_lot_has_bids(
         id=lot_id,
     )
 
-    assert cancel(auctioneer, lot_id).json()["code"] == "lot_has_bids"
+    assert cancel(auctioneer, lot_id).json()["code"] == "lot_ended"
 
 
 def test_an_ended_lot_without_bids_is_422_lot_ended_with_no_effect(
@@ -431,6 +476,14 @@ def test_re_cancelling_after_the_end_is_still_the_original_200(
 # --- o gate vem antes de tudo (I08, I09, I12) ---
 
 TAMPERINGS = {
+    "operational-amount": (
+        "UPDATE lots SET current_bid_cents=current_bid_cents+1 WHERE id=:id",
+        {},
+    ),
+    "operational-leader": (
+        "UPDATE lots SET current_leader_id=auctioneer_id WHERE id=:id",
+        {},
+    ),
     "anchor-swapped": (
         "UPDATE lots SET anchor_hmac = :other WHERE id = :id",
         {"other": "b" * 64},
@@ -538,7 +591,7 @@ def test_the_gate_runs_before_the_already_cancelled_shortcut(
     assert gate_calls == [1]
 
 
-@pytest.mark.parametrize("case", ["other-owner", "tampered", "has-bids", "ended"])
+@pytest.mark.parametrize("case", ["other-owner", "tampered", "ended"])
 def test_every_refusal_releases_the_lot_lock(
     monkeypatch: pytest.MonkeyPatch,
     auctioneer: TestClient,
@@ -784,3 +837,141 @@ def test_cancelled_at_is_never_written_by_the_bid_path(
     assert post_bid(bidder, lot_id).status_code == 201
     assert lot_state(seeded, lot_id)["cancelled_at"] is None
     assert integrity()  # segredos de teste vêm de `integrity()`, nunca de `.env*`
+
+
+@pytest.mark.parametrize(
+    "case", ["insufficient", "missing", "negative", "above-total", "above-limit"]
+)
+def test_inconsistent_wallet_returns_generic_500_without_partial_cancellation(
+    monkeypatch, seeded, case
+):
+    from app.money import MAX_CENTS
+    from tests.wallet_support import delete_wallet
+
+    lot_id = lot_with_bid(seeded)
+    if case == "insufficient":
+        set_wallet(seeded, ALICE, 1_000_000, 9_999)
+    elif case == "missing":
+        delete_wallet(seeded, ALICE)
+    else:
+        original_lock = lot_cancellation.lock_wallet
+
+        def corrupt(session, user_id):
+            wallet = original_lock(session, user_id)
+            if case == "negative":
+                wallet.committed_balance_cents = -1
+            elif case == "above-total":
+                wallet.committed_balance_cents = wallet.total_balance_cents + 1
+            else:
+                wallet.total_balance_cents = MAX_CENTS + 1
+            return wallet
+
+        monkeypatch.setattr(lot_cancellation, "lock_wallet", corrupt)
+    before = db_snapshot(seeded)
+    client = client_as(
+        monkeypatch, seeded, AUCTIONEER_EMAIL, raise_server_exceptions=False
+    )
+    response = cancel(client, lot_id)
+    assert response.status_code == 500
+    assert response.json() == {
+        "status": 500,
+        "code": "internal_error",
+        "message": "Erro interno. Tente novamente mais tarde.",
+    }
+    assert db_snapshot(seeded) == before
+
+
+@pytest.mark.parametrize("stage", ["wallet-update", "lot-update", "precommit"])
+def test_failure_during_refund_rolls_back_wallet_lot_and_history(
+    monkeypatch, seeded, db_engine, stage
+):
+    from sqlalchemy import event
+
+    lot_id = lot_with_bid(seeded)
+    before = db_snapshot(seeded)
+    client = client_as(
+        monkeypatch, seeded, AUCTIONEER_EMAIL, raise_server_exceptions=False
+    )
+    hits = []
+
+    def fail_after_update(conn, cursor, statement, params, context, many):
+        sql = statement.lstrip().upper()
+        if (stage == "wallet-update" and sql.startswith("UPDATE WALLETS")) or (
+            stage == "lot-update" and sql.startswith("UPDATE LOTS")
+        ):
+            hits.append(stage)
+            raise RuntimeError("injected cancellation failure")
+
+    def fail_commit(session):
+        hits.append(stage)
+        raise RuntimeError("injected cancellation failure")
+
+    event.listen(db_engine, "after_cursor_execute", fail_after_update)
+    try:
+        if stage == "precommit":
+            monkeypatch.setattr(Session, "commit", fail_commit)
+        response = cancel(client, lot_id)
+    finally:
+        event.remove(db_engine, "after_cursor_execute", fail_after_update)
+    assert response.status_code == 500 and response.json()["code"] == "internal_error"
+    assert hits == [stage]
+    assert db_snapshot(seeded) == before
+
+
+def test_cancelled_history_still_detects_tampering_before_idempotence(
+    auctioneer, anonymous, seeded
+):
+    lot_id = lot_with_bid(seeded)
+    assert cancel(auctioneer, lot_id).status_code == 200
+    tamper(
+        seeded,
+        "UPDATE bids SET amount_cents=amount_cents+1 WHERE lot_id=:id",
+        id=lot_id,
+    )
+    before = db_snapshot(seeded)
+    assert_integrity_conflict(cancel(auctioneer, lot_id))
+    audit = anonymous.get(f"/api/lots/{lot_id}/audit").json()
+    assert audit["integrity"] == "adulterated" and audit["bids"] == []
+    assert db_snapshot(seeded) == before
+
+
+def test_settled_lot_is_never_refunded_and_cancelled_settlement_is_corrupt(
+    auctioneer, anonymous, seeded
+):
+    from tests.settlement_support import expire, run_settle
+
+    lot_id = lot_with_bid(seeded)
+    expire(seeded, lot_id)
+    assert run_settle(seeded, lot_id).transitioned
+    before = db_snapshot(seeded)
+    assert cancel(auctioneer, lot_id).json()["code"] == "lot_ended"
+    assert db_snapshot(seeded) == before
+    tamper(
+        seeded,
+        "UPDATE lots SET cancelled_at=:now WHERE id=:id",
+        now=db_now(seeded),
+        id=lot_id,
+    )
+    before = db_snapshot(seeded)
+    assert_integrity_conflict(cancel(auctioneer, lot_id))
+    assert (
+        anonymous.get(f"/api/lots/{lot_id}/audit").json()["integrity"] == "adulterated"
+    )
+    assert db_snapshot(seeded) == before
+
+
+def test_idempotent_refund_does_not_revisit_missing_wallet(
+    auctioneer, seeded, db_engine
+):
+    from tests.wallet_support import delete_wallet
+
+    lot_id = lot_with_bid(seeded)
+    first = cancel(auctioneer, lot_id)
+    assert first.status_code == 200
+    delete_wallet(seeded, ALICE)
+    before = db_snapshot(seeded)
+    with statement_log(db_engine) as log:
+        second = cancel(auctioneer, lot_id)
+    assert second.status_code == 200 and second.json() == first.json()
+    assert not log.saw("wallets")
+    assert db_snapshot(seeded) == before

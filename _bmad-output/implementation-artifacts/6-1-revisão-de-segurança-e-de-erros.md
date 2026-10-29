@@ -1,11 +1,18 @@
 ---
 title: 'Story 6.1 — Revisão de segurança e de erros'
-status: review
+status: done
 created: '2026-10-28'
 story_key: 6-1-revisão-de-segurança-e-de-erros
 ---
 
 # Story 6.1 — Revisão de segurança e de erros
+
+> Estado vigente em 29/10/2026: **done**. R6.1-01 resolvido pelo re-review
+> independente; CA2 publicado já comprovado na execução anterior da 6.4
+> (cookie HTTPS/Origin/CORS/login/logout). Fechamento autorizado após a
+> revalidação focal de R6.4-01, sem repetir CA2. SHA Render não autenticado.
+> [Fechamento e limites](../../docs/FECHAMENTO-EPICO-6.md).
+> As pendências de review/publicação abaixo são históricas.
 
 Decidi completar as provas dos contratos existentes com minimum diff;
 descartei reimplementar segurança ou refatorar configuração sem defeito
@@ -17,7 +24,7 @@ concreto. Nenhum código de produto foi alterado.
 - [x] CA4: envelope 500 completo, debug falso e ausência de rotas sintéticas no app real.
 - [x] Focais originais: 477 + 197 + 234 backend; 115 Playwright. Todos exit 0; evidência CA1 renovada abaixo após R6.1-01.
 - [x] Gate original `./verify.sh`: exit 0; 2314 pytest, 192 Node; substituído pelo novo gate da correção abaixo.
-- [ ] CA2 publicado: inspecionar cookie realmente emitido, borda/proxy/CORS e candidato implantado.
+- [x] CA2 publicado: cookie realmente emitido e aceito/enviado/removido, borda/proxy/CORS e fluxo HTTPS comprovados na 6.4; identidade do SHA Render não autenticada, conforme limite registrado no fechamento.
 
 [SPEC](../specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/SPEC.md) ·
 [Evidência](../specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md)
@@ -32,7 +39,7 @@ review. Esse estado não declara CA2 publicado aprovado nem aceite integral.
 
 ## Review Findings — revisão independente de 28/10/2026
 
-- [ ] **R6.1-01 — MEDIUM:** o inventário CA1 deixa passar nova escrita sem
+- [x] **R6.1-01 — MEDIUM (RESOLVIDO pelo re-review; relato original abaixo):** o inventário CA1 deixa passar nova escrita sem
   política em `/api/docs` ou `/api/openapi.json`, pois a exceção do framework
   é só por caminho. Reprodução com o factory real: sete POSTs, mas os 36
   casos permanecem verdes. Local: `backend/tests/test_csrf.py:572`;

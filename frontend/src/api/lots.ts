@@ -85,11 +85,10 @@ export type MyLotsResult =
   | { ok: true; asOf: string; items: MyLotResponse[]; totalReceivedCents: number }
   | { ok: false; failure: MyLotsFailure }
 
-// Falhas do POST de cancelamento. As de negócio (`has_bids`, `ended`, `integrity`,
+// Falhas do POST de cancelamento. As de negócio (`ended`, `integrity`,
 // `forbidden`, `not_found`, `unauthorized`) o servidor decidiu; `ambiguous` é rede, 5xx,
 // corpo fora do contrato ou código desconhecido: o resultado é incerto.
 export type CancelLotFailure =
-  | 'has_bids'
   | 'ended'
   | 'integrity'
   | 'forbidden'
@@ -301,7 +300,6 @@ export function classifyCancelResponse(
     return { ok: true, cancelledAt: data.cancelled_at }
   }
   const code = errorCode(body)
-  if (status === 422 && code === 'lot_has_bids') return { ok: false, failure: 'has_bids' }
   if (status === 422 && code === 'lot_ended') return { ok: false, failure: 'ended' }
   if (status === 409 && code === 'lot_integrity_conflict') {
     return { ok: false, failure: 'integrity' }

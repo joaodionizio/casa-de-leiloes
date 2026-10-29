@@ -8,6 +8,7 @@ import {
   cancelFailureNotice,
   CANCEL_AMBIGUOUS_REFRESH_FAILED_TEXT,
   CANCEL_CONFIRM_TEXT,
+  CANCEL_WITH_BIDS_CONFIRM_TEXT,
   CANCEL_LIST_REFRESH_FAILED,
   CANCEL_SUCCESS_TEXT,
   shouldRefetch,
@@ -360,7 +361,7 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
                     <div className="lot-row-actions">
                       {confirmingId === lot.id ? (
                         <div className="lot-cancel-confirm" role="group" aria-label={`Cancelar ${title}`}>
-                          <p>{CANCEL_CONFIRM_TEXT}</p>
+                          <p>{lot.bid_count > 0 ? CANCEL_WITH_BIDS_CONFIRM_TEXT : CANCEL_CONFIRM_TEXT}</p>
                           <button
                             type="button"
                             className="button button-primary"
@@ -368,7 +369,7 @@ function MyLots({ onSessionExpired, onCreateLot }: MyLotsProps) {
                             autoFocus
                             onClick={() => void confirmCancellation(lot.id)}
                           >
-                            {submitting ? 'Cancelando…' : 'Confirmar cancelamento'}
+                            {submitting ? 'Cancelando…' : 'Cancelar lote'}
                           </button>
                           <button
                             type="button"

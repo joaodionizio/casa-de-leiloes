@@ -123,7 +123,7 @@ test('total é obrigatório, inteiro seguro e não é substituído por soma do n
 test('POST: as falhas de negócio vêm do status e do code, nunca da mensagem', () => {
   const failure = (status: number, code: string) =>
     classifyCancelResponse(status, { status, code, message: 'qualquer <b>coisa</b>' }, LOT_ID)
-  assert.deepEqual(failure(422, 'lot_has_bids'), { ok: false, failure: 'has_bids' })
+  assert.deepEqual(failure(422, 'lot_has_bids'), { ok: false, failure: 'ambiguous' })
   assert.deepEqual(failure(422, 'lot_ended'), { ok: false, failure: 'ended' })
   assert.deepEqual(failure(409, 'lot_integrity_conflict'), { ok: false, failure: 'integrity' })
   assert.deepEqual(failure(403, 'forbidden'), { ok: false, failure: 'forbidden' })

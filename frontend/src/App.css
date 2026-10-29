@@ -54,7 +54,7 @@
 /* Marca ÁTRIO: símbolo + palavra (texto real, em fonte de UI e espaçada, como na
    referência). O descritor "Leilões de Arte" só aparece onde há folga (≥ 64rem); no
    celular ficam símbolo e nome, para não apertar Vitrine/Criar lote/Meus lotes/Entrar. */
-.site-brand {
+.site-brand, .site-footer-brand {
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -70,7 +70,7 @@
   gap: 0.125rem;
 }
 
-.site-brand-name {
+.site-brand-name, .site-footer-name {
   font-family: var(--font-ui);
   font-size: 1.25rem;
   font-weight: 300;
@@ -201,16 +201,18 @@
 }
 
 .button-primary {
-  background: var(--color-brand);
-  color: var(--color-surface);
+  background: var(--color-action);
+  color: var(--color-on-action);
 }
 
 .button-primary:hover:not(:disabled) {
-  background: var(--color-brand-strong);
+  background: var(--color-action-hover);
 }
 
 .button-primary:disabled {
-  background: var(--color-muted);
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  border-color: var(--color-border);
 }
 
 .button-secondary {
@@ -231,6 +233,7 @@
 
 /* Foco visível em todo controle (DESIGN.md §14). */
 input:focus-visible,
+select:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--color-brand-strong);
   outline-offset: 2px;
@@ -1056,7 +1059,7 @@ a:focus-visible {
    --------------------------------------------------------------------------- */
 
 /* Links do cabeçalho: marca, navegação e "Entrar". */
-.site-brand {
+.site-brand, .site-footer-brand {
   color: inherit;
   text-decoration: none;
 }
@@ -1141,6 +1144,39 @@ h2[tabindex='-1']:focus-visible {
   min-width: 0;
 }
 
+/* Busca no snapshot: controles discretos antes da obra, sem faixa de chips. */
+.vitrine-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .5rem 2rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.vitrine-search { flex: 1 1 20rem; min-width: 0; }
+.vitrine-search input { min-height: 2.75rem; }
+.vitrine-phase-select { display: none; }
+.vitrine-phase-filters { min-width: 0; border: 0; padding: 0; margin: 0; }
+.vitrine-phase-filters legend { padding: 0; font-size: .875rem; font-weight: 600; color: var(--color-ink); }
+.vitrine-phase-options { display: flex; flex-wrap: wrap; gap: 0 .75rem; }
+.vitrine-phase-option { display: flex; align-items: center; gap: .375rem; min-height: 2.75rem; cursor: pointer; font-size: .875rem; }
+.vitrine-phase-option input { margin: 0; accent-color: var(--color-brand-strong); }
+.vitrine-phase-option:has(input:checked) span { font-weight: 600; text-decoration: underline; text-underline-offset: .25em; }
+.vitrine-filter-summary { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 0 1rem; min-height: 2.75rem; font-size: .8125rem; }
+.vitrine-filter-summary p { margin: 0; }
+.vitrine-clear { min-height: 2.75rem; padding: .5rem 0; border: 0; background: transparent; color: var(--color-brand-strong); font: inherit; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+
+@media (max-width: 63.99rem) {
+  .app-main:has(.vitrine) { padding-block: 1rem; }
+  .vitrine { gap: 1rem; }
+  .vitrine-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7.5rem, .6fr); gap: .25rem .75rem; padding-bottom: .5rem; }
+  .vitrine-phase-filters { display: none; }
+  .vitrine-phase-select { display: flex; }
+  .vitrine-phase-select select { width: 100%; min-height: 2.75rem; padding: .625rem .375rem; border: 1px solid var(--color-border); border-radius: 2px; background: var(--color-surface); color: var(--color-ink); font: inherit; }
+  .vitrine-filter-summary { grid-column: 1 / -1; min-height: 1.125rem; }
+}
+
 .vitrine > .as-of {
   margin-top: -1.25rem;
 }
@@ -1184,6 +1220,9 @@ h2[tabindex='-1']:focus-visible {
   background: var(--color-surface);
 }
 .featured-info { padding: 0 1rem 1.25rem; }
+@media (max-width: 63.99rem) {
+  .featured-art .artwork-image-large { height: clamp(12rem, 50vw, 17rem); }
+}
 .featured-kicker {
   margin: 0;
   color: var(--color-muted);
@@ -2332,3 +2371,34 @@ h2[tabindex='-1']:focus-visible {
 .auth-switch a { display: inline-block; min-height: 2.75rem; padding-block: .75rem; color: var(--color-brand-strong); text-decoration: underline; text-underline-offset: .15em; }
 .registration-confirmation { margin: 0 0 1.25rem; color: var(--color-success); }
 .register-form .form-error, .registration-confirmation { overflow-wrap: anywhere; }
+
+/* Tema e rodapé institucional: tokens compartilhados, sem cores por componente. */
+.theme-toggle { flex: none; min-width: 2.75rem; min-height: 2.75rem; font-size: 1.25rem; line-height: 1; padding: .5rem; }
+@media (max-width: 30rem) {
+  .site-brand { order: 0; }
+  .theme-toggle { order: 1; margin-left: auto; }
+  .site-login-link { order: 2; }
+  .site-nav { order: 3; flex-basis: 100%; }
+  .account { order: 4; }
+}
+.site-footer { border-top: 1px solid var(--color-border); padding-block: 2.5rem 1.5rem; color: var(--color-muted); font-size: .875rem; }
+.site-footer-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; }
+.site-footer-about { max-width: 36rem; }
+.site-footer-brand { display: flex; align-items: center; gap: .625rem; }
+.site-footer-name { font-size: 1.25rem; font-weight: 300; letter-spacing: .18em; color: var(--color-ink); }
+.site-footer-resources { min-width: 0; }
+.site-footer h2 { margin-top: 0; font-size: .9375rem; color: var(--color-ink); }
+.site-footer a { display: block; min-height: 2.75rem; padding-block: .625rem; color: var(--color-brand-strong); overflow-wrap: anywhere; }
+.site-footer-disclaimer { border-block: 1px solid var(--color-border); padding-block: 1.25rem; margin-block: 1.5rem; color: var(--color-text); }
+.site-footer-bottom p { margin-block: .375rem; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--color-brand-strong); outline-offset: 3px; }
+.context-help { font-family: var(--font-ui); font-size: .875rem; font-weight: 400; letter-spacing: normal; }
+.context-help-trigger { display: inline-flex; justify-content: center; align-items: center; min-width: 2.75rem; min-height: 2.75rem; padding: .25rem; border: 0; background: transparent; color: var(--color-brand-strong); font: inherit; text-decoration: underline; cursor: pointer; vertical-align: middle; }
+.context-help-text:not([hidden]) { display: block; max-width: 34rem; padding: .75rem; margin-block: .25rem .5rem; border-left: 2px solid var(--color-border); color: var(--color-text); background: var(--color-surface-subtle); line-height: 1.5; overflow-wrap: anywhere; }
+.password-requirements { margin: 0; font-size: .8125rem; color: var(--color-muted); }
+.password-requirements p { margin: .25rem 0; }
+@media (max-width: 40rem) { .site-footer-top { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; } }
+@media print {
+  :root, [data-theme="dark"] { color-scheme: light; --color-canvas: #fff; --color-surface: #fff; --color-surface-subtle: #f4f1f8; --color-ink: #18131f; --color-text: #29242f; --color-muted: #514659; --color-border: #ddd7e2; --color-brand: #7330da; --color-brand-strong: #6021c0; --color-success: #2d7552; --color-danger: #9b2c2c; --color-warning: #8b6418; }
+  .site-header, .site-footer, .context-help-trigger { display: none; }
+}

@@ -35,6 +35,7 @@ test('Tab chega aos controles principais, na ordem, e o foco é visível', async
   const wanted = [
     /^ÁTRIO — Leilões de Arte — ir para a vitrine$/,
     /^Vitrine$/,
+    /^Ativar modo escuro$/,
     /^Entrar$/,
     /^Ver lote: /,
     /^Obra de teste 2\. Ao vivo\./,

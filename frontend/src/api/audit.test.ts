@@ -11,6 +11,8 @@ function filled(): Audit {
 test('audit validates public chain and trusted states', () => {
   for (const phase of ['scheduled', 'live', 'ended'] as const) assert.equal(isAudit({ ...empty(), phase }, ID), true)
   assert.equal(isAudit({ ...empty(), phase: 'cancelled', settlement_status: 'not_applicable' }, ID), true)
+  assert.equal(isAudit({ ...filled(), phase: 'cancelled', settlement_status: 'not_applicable' }, ID), true)
+  assert.equal(isAudit({ ...filled(), phase: 'cancelled', settlement_status: 'settled', settlement: { outcome: 'sold' } }, ID), false)
   for (const outcome of ['sold', 'unsold'] as const) {
     const data = outcome === 'sold' ? filled() : empty()
     data.phase = 'ended'; data.settlement_status = 'settled'
@@ -19,7 +21,7 @@ test('audit validates public chain and trusted states', () => {
   }
 })
 test('audit rejects private fields, malformed states and sequences', () => {
-  for (const mutation of [{ lot_id: 'other' }, { bid_count: -1 }, { final_hash: 'a' }, { phase: null }, { winner_user_id: ID }, { integrity: 'unknown' }, { settlement_status: 'settled' }, { phase: 'cancelled', settlement_status: 'not_applicable' }]) {
+  for (const mutation of [{ lot_id: 'other' }, { bid_count: -1 }, { final_hash: 'a' }, { phase: null }, { winner_user_id: ID }, { integrity: 'unknown' }, { settlement_status: 'settled' }]) {
     assert.equal(isAudit({ ...filled(), ...mutation }, ID), false, JSON.stringify(mutation))
   }
   for (const mutation of [{ sequence: 2 }, { bidder_alias: 'private@example.com' }, { amount_cents: 1.5 }, { canonical_version: 2 }, { previous_hash: 'a'.repeat(64) }, { placed_at: '2026-02-30T00:00:00Z' }, { placed_at: '2027-01-01T00:00:00Z' }, { bidder_id: ID }]) {

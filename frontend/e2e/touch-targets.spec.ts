@@ -54,6 +54,7 @@ for (const viewport of VIEWPORTS) {
         'Criar lote': nav.getByRole('link', { name: 'Criar lote' }),
         'Meus lotes': nav.getByRole('link', { name: 'Meus lotes' }),
         Sair: page.getByRole('button', { name: 'Sair' }),
+        Tema: page.getByRole('button', { name: 'Ativar modo escuro' }),
       }
       for (const [name, locator] of Object.entries(targets)) {
         expect(await hitHeight(page, locator), name).toBeGreaterThanOrEqual(MIN_HIT_HEIGHT)
@@ -72,6 +73,7 @@ for (const viewport of VIEWPORTS) {
         Carteira: nav.getByRole('link', { name: 'Carteira' }),
         'Meus arremates': nav.getByRole('link', { name: 'Meus arremates' }),
         Sair: page.getByRole('button', { name: 'Sair' }),
+        Tema: page.getByRole('button', { name: 'Ativar modo escuro' }),
       }
       for (const [name, locator] of Object.entries(targets)) {
         expect(await hitHeight(page, locator), name).toBeGreaterThanOrEqual(MIN_HIT_HEIGHT)

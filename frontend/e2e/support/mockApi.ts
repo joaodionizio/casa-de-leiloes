@@ -196,7 +196,6 @@ export interface MockMyLot {
 
 export type CancelMode =
   | 'ok'
-  | 'has_bids'
   | 'ended'
   | 'integrity'
   | 'forbidden'
@@ -536,7 +535,6 @@ export async function mockApi(
       const target = myLots.find((lot) => lot.id === cancelPath[1])
       const mode = options.cancel ?? 'ok'
       const refusals: Partial<Record<CancelMode, [number, string]>> = {
-        has_bids: [422, 'lot_has_bids'],
         ended: [422, 'lot_ended'],
         integrity: [409, 'lot_integrity_conflict'],
         forbidden: [403, 'forbidden'],
@@ -567,9 +565,9 @@ export async function mockApi(
     if (pathname === '/api/lots' && method === 'GET') {
       return json(route, 200, {
         as_of: AS_OF,
-        live: lots.filter((lot) => lot.phase === 'live').map(summary),
-        scheduled: lots.filter((lot) => lot.phase === 'scheduled').map(summary),
-        ended: lots.filter((lot) => lot.phase === 'ended').map(summary),
+        live: lots.filter((lot) => lot.phase === 'live' && !myLots.some(item => item.id === lot.id && item.cancelled_at !== null)).map(summary),
+        scheduled: lots.filter((lot) => lot.phase === 'scheduled' && !myLots.some(item => item.id === lot.id && item.cancelled_at !== null)).map(summary),
+        ended: lots.filter((lot) => lot.phase === 'ended' && !myLots.some(item => item.id === lot.id && item.cancelled_at !== null)).map(summary),
       })
     }
     const bidsPath = pathname.match(/^\/api\/lots\/([0-9a-f-]{36})\/bids(\/mine)?$/)

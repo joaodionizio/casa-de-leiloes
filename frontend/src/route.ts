@@ -133,6 +133,8 @@ export interface NavState {
   fromVitrine?: boolean // entrada /lots/{id} aberta a partir da vitrine
   restoreLotId?: string // entrada /: lote a focar no Back
   endedVisible?: number // entrada /: quantos encerrados estavam visíveis
+  vitrineTerm?: string // entrada /: busca ao abrir o lote, para restaurar no Back
+  vitrinePhase?: 'all' | 'live' | 'scheduled' | 'ended'
 }
 
 // Lê `history.state` desconhecido; campo inválido vira ausente.
@@ -140,6 +142,11 @@ export function readNavState(value: unknown): NavState {
   if (typeof value !== 'object' || value === null) return {}
   const raw = value as Record<string, unknown>
   const state: NavState = {}
+  if (typeof raw.vitrineTerm === 'string') state.vitrineTerm = raw.vitrineTerm
+  if (raw.vitrinePhase === 'all' || raw.vitrinePhase === 'live' ||
+    raw.vitrinePhase === 'scheduled' || raw.vitrinePhase === 'ended') {
+    state.vitrinePhase = raw.vitrinePhase
+  }
   if (typeof raw.returnTo === 'string') state.returnTo = raw.returnTo
   if (raw.notice === 'expired' || raw.notice === 'registered') state.notice = raw.notice
   if (raw.fromVitrine === true) state.fromVitrine = true

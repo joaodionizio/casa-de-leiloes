@@ -29,6 +29,7 @@ import {
   safeReturnPath,
 } from './route'
 import SiteHeader from './SiteHeader'
+import SiteFooter from './SiteFooter'
 import VitrinePage from './VitrinePage'
 import WalletPage from './WalletPage'
 
@@ -354,10 +355,7 @@ function App() {
           </div>
         )}
       </main>
-      <footer className="app-footnote page-container">
-        <p>Leilões ao vivo de obras de arte em domínio público.</p>
-        <p role="status">{healthText(health)}</p>
-      </footer>
+      <SiteFooter healthText={healthText(health)} />
     </div>
   )
 }

@@ -234,6 +234,7 @@ def assert_invariants(factory: sessionmaker[Session]) -> None:
                 text(
                     "SELECT current_leader_id, sum(current_bid_cents)::bigint "
                     "FROM lots WHERE current_leader_id IS NOT NULL "
+                    "AND cancelled_at IS NULL "
                     "AND NOT EXISTS (SELECT 1 FROM lot_settlements "
                     "WHERE lot_settlements.lot_id = lots.id) "
                     "GROUP BY current_leader_id"

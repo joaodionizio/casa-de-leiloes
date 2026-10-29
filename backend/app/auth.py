@@ -6,6 +6,7 @@ O JWT vive só no cookie HttpOnly: nunca no corpo, na URL nem no cabeçalho
 """
 
 import logging
+import unicodedata
 import uuid
 from typing import Literal
 
@@ -53,6 +54,24 @@ class RegisterRequest(BaseModel):
         local, domain = value.split("@")
         if not local or not domain:
             raise ValueError("invalid email")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, value: str) -> str:
+        # Same categories as the UI: Ll/Lu/Nd and P/S. Whitespace counts in
+        # Python's code-point length but is not a composition group.
+        categories = {unicodedata.category(char) for char in value}
+        groups = sum(
+            (
+                "Ll" in categories,
+                "Lu" in categories,
+                "Nd" in categories,
+                any(category.startswith(("P", "S")) for category in categories),
+            )
+        )
+        if groups < 3:
+            raise ValueError("password composition requirements not met")
         return value
 
 

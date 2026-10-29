@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.bid_rules import BidRefusal
 from app.bids import PlacedBid
-from app.lot_cancellation import CancellationRefusal, CancelledLot, cancel_lot
+from app.lot_cancellation import CancelledLot, cancel_lot
 from app.lots import Lot
 from tests.auth_support import (
     AUCTIONEER_EMAIL,
@@ -106,21 +106,21 @@ def wallets_after_accepted_bid(
     ]
 
 
-def assert_not_cancelled_with_one_bid(
+def assert_cancelled_with_one_bid(
     factory: sessionmaker[Session],
     lot_id: uuid.UUID,
     wallets_before: list[tuple],
     bidder: uuid.UUID = ALICE,
 ) -> None:
     lot = lot_state(factory, lot_id)
-    assert lot["cancelled_at"] is None
+    assert lot["cancelled_at"] is not None
     (row,) = bid_rows(factory, lot_id)
     assert row["sequence"] == 1 and row["bidder_id"] == bidder
     assert (lot["bid_count"], lot["current_bid_cents"]) == (1, START)
     assert lot["current_leader_id"] == bidder
     assert lot["final_hash"] == row["current_hash"]
-    assert wallet_rows(factory) == wallets_after_accepted_bid(wallets_before, bidder)
-    assert wallet_row(factory, bidder) == (FUNDS, START)  # comprometido pelo lance
+    assert wallet_rows(factory) == wallets_before
+    assert wallet_row(factory, bidder) == (FUNDS, 0)  # reserva liberada
     assert_authenticated(factory, lot_id)
     assert_invariants(factory)
 
@@ -170,7 +170,7 @@ def test_c1_cancel_first_makes_the_waiting_bid_lot_cancelled(
 
 
 @pytest.mark.parametrize("via_http", [False, True], ids=["service", "http"])
-def test_c2_bid_first_makes_the_waiting_cancel_lot_has_bids(
+def test_c2_bid_first_makes_the_waiting_cancel_refund_authenticated_leader(
     monkeypatch: pytest.MonkeyPatch,
     seeded: sessionmaker[Session],
     db_engine: Engine,
@@ -202,7 +202,7 @@ def test_c2_bid_first_makes_the_waiting_cancel_lot_has_bids(
                     auctioneer_id=preloaded.auctioneer_id,
                     integrity=integrity(),
                 )
-                session.rollback()
+                session.commit()
                 return result
 
     first = overlapped(
@@ -216,10 +216,10 @@ def test_c2_bid_first_makes_the_waiting_cancel_lot_has_bids(
     assert isinstance(first, PlacedBid)
     (second,) = outcome
     if via_http:
-        assert (second.status_code, second.json()["code"]) == (422, "lot_has_bids")
+        assert second.status_code == 200
     else:
-        assert second is CancellationRefusal.LOT_HAS_BIDS
-    assert_not_cancelled_with_one_bid(seeded, lot_id, wallets_before)
+        assert isinstance(second, CancelledLot)
+    assert_cancelled_with_one_bid(seeded, lot_id, wallets_before)
 
 
 # --- C3: corrida livre, nunca um estado híbrido ---
@@ -267,13 +267,73 @@ def test_c3_free_race_ends_in_exactly_one_of_the_two_valid_states(
 
         cancelled, bid = race_once(seeded, lot_id, bidder)
 
-        # Nunca cancelado com lance, nem lance aceito sem efeito, nem erro de banco.
-        if isinstance(cancelled, CancelledLot):
-            assert bid is BidRefusal.LOT_CANCELLED
+        assert isinstance(cancelled, CancelledLot)
+        if bid is BidRefusal.LOT_CANCELLED:
             assert_cancelled_with_no_bids(
                 seeded, lot_id, original_anchor, wallets_before, bidder
             )
         else:
-            assert cancelled is CancellationRefusal.LOT_HAS_BIDS
             assert isinstance(bid, PlacedBid)
-            assert_not_cancelled_with_one_bid(seeded, lot_id, wallets_before, bidder)
+            assert_cancelled_with_one_bid(seeded, lot_id, wallets_before, bidder)
+
+
+@pytest.mark.parametrize(
+    "cancel_first", [False, True], ids=["new-leader-first", "cancel-first"]
+)
+def test_outbid_and_cancel_refund_only_the_serial_current_leader(
+    seeded, db_engine, cancel_first
+):
+    from tests.integration.test_lot_settlement_concurrency import overlap
+
+    bob = add_bidder(seeded, FUNDS)
+    other = new_lot(seeded)
+    assert isinstance(run_bid(seeded, other, ALICE, START), PlacedBid)
+    lot_id = new_lot(seeded)
+    assert isinstance(run_bid(seeded, lot_id, ALICE, START), PlacedBid)
+    if cancel_first:
+        first, second = overlap(
+            seeded,
+            db_engine,
+            lambda s: hold_cancel(s, lot_id),
+            lambda: run_bid(seeded, lot_id, bob, START + 1000),
+        )
+        assert isinstance(first, CancelledLot) and second is BidRefusal.LOT_CANCELLED
+        assert lot_state(seeded, lot_id)["current_leader_id"] == ALICE
+        assert len(bid_rows(seeded, lot_id)) == 1
+    else:
+        first, second = overlap(
+            seeded,
+            db_engine,
+            lambda s: hold_bid(s, lot_id, bob, START + 1000),
+            lambda: run_cancel(seeded, lot_id),
+        )
+        assert isinstance(first, PlacedBid) and isinstance(second, CancelledLot)
+        assert lot_state(seeded, lot_id)["current_leader_id"] == bob
+        assert len(bid_rows(seeded, lot_id)) == 2
+    assert lot_state(seeded, lot_id)["cancelled_at"] is not None
+    assert wallet_row(seeded, ALICE) == (FUNDS, START)
+    assert wallet_row(seeded, bob) == (FUNDS, 0)
+    assert_authenticated(seeded, lot_id)
+    assert_invariants(seeded)
+
+
+def test_two_cancellations_serialize_and_release_reservation_exactly_once(
+    seeded, db_engine
+):
+    from tests.integration.test_lot_settlement_concurrency import overlap
+
+    lot_id = new_lot(seeded)
+    assert isinstance(run_bid(seeded, lot_id, ALICE, START), PlacedBid)
+    before = lot_state(seeded, lot_id)
+    first, second = overlap(
+        seeded,
+        db_engine,
+        lambda s: hold_cancel(s, lot_id),
+        lambda: run_cancel(seeded, lot_id),
+    )
+    assert isinstance(first, CancelledLot) and first.transitioned
+    assert isinstance(second, CancelledLot) and not second.transitioned
+    assert first.cancelled_at == second.cancelled_at
+    assert wallet_row(seeded, ALICE) == (FUNDS, 0)
+    assert lot_state(seeded, lot_id)["anchor_hmac"] == before["anchor_hmac"]
+    assert_invariants(seeded)

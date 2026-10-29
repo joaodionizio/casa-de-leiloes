@@ -6,6 +6,7 @@ async function fill(page: Page, role: Role = 'BIDDER', email = 'nova.conta+arte@
   await page.locator(`input[type=radio][value=${role}]`).check()
   await page.getByLabel('E-mail', { exact: true }).fill(email)
   await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
+  await page.getByLabel('Confirmar senha', { exact: true }).fill(PASSWORD)
 }
 
 for (const role of ['BIDDER', 'AUCTIONEER'] as const) {
@@ -49,7 +50,8 @@ for (const role of ['BIDDER', 'AUCTIONEER'] as const) {
 test('validação local anuncia erro e move foco para primeiro campo; toggle conserva valor e foco', async ({ page }) => {
   const api = await mockApi(page)
   await page.goto('/register')
-  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeDisabled()
+  await page.locator('form').dispatchEvent('submit')
   await expect(page.locator('input[value=BIDDER]')).toBeFocused()
   await expect(page.getByRole('alert')).toContainText('Confira os campos')
   await expect(page.getByRole('group', { name: 'Como você quer participar?' })).toHaveAttribute('aria-invalid', 'true')
@@ -60,17 +62,19 @@ test('validação local anuncia erro e move foco para primeiro campo; toggle con
   await expect(page.locator('input[value=BIDDER]')).toBeChecked()
   await page.keyboard.press('Tab')
   await expect(page.getByLabel('E-mail', { exact: true })).toBeFocused()
-  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeDisabled()
+  await page.locator('form').dispatchEvent('submit')
   await expect(page.getByLabel('E-mail', { exact: true })).toBeFocused()
   await page.getByLabel('E-mail', { exact: true }).fill('a@b')
-  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeDisabled()
+  await page.locator('form').dispatchEvent('submit')
   await expect(page.getByLabel('Senha', { exact: true })).toBeFocused()
   await page.getByLabel('Senha', { exact: true }).fill('  senha com espaços  ')
   await page.keyboard.press('Tab')
-  const toggle = page.getByRole('button', { name: 'Mostrar senha', exact: true })
+  const toggle = page.getByRole('button', { name: 'Mostrar senhas', exact: true })
   await expect(toggle).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('button', { name: 'Ocultar senha' })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Ocultar senhas' })).toBeFocused()
   await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('type', 'text')
   await expect(page.getByLabel('Senha', { exact: true })).toHaveValue('  senha com espaços  ')
   await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('autocomplete', 'new-password')
@@ -116,7 +120,7 @@ for (const first of ['submit', 'click'] as const) {
     }, first)
     await expect.poll(() => api.count('POST /api/auth/register')).toBe(1)
     await expect(page.getByRole('button', { name: 'Criando conta…' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Mostrar senha' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Mostrar senhas' })).toBeDisabled()
     await expect(page.locator('input[type=radio]').first()).toBeDisabled()
     await expect(page.getByLabel('E-mail', { exact: true })).toHaveAttribute('readonly')
     await page.locator('form').dispatchEvent('submit')
@@ -144,7 +148,7 @@ for (const width of [1440, 375, 320]) {
     })
     expect(metrics.width).toBeLessThanOrEqual(metrics.viewport)
     expect(metrics.outside).toEqual([])
-    for (const locator of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senha' }), page.getByRole('button', { name: 'Criar conta', exact: true })]) {
+    for (const locator of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senhas' }), page.getByRole('button', { name: 'Criar conta', exact: true })]) {
       const box = await locator.boundingBox()
       expect(box?.height).toBeGreaterThanOrEqual(44)
     }
@@ -265,11 +269,11 @@ test('toque real em 320px seleciona papéis e alterna senha sem sobreposição o
   await page.locator('.register-role').first().tap()
   await expect(page.locator('input[value=BIDDER]')).toBeChecked()
   await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Mostrar senha' }).tap()
+  await page.getByRole('button', { name: 'Mostrar senhas' }).tap()
   await expect(page.getByLabel('Senha', { exact: true })).toHaveValue(PASSWORD)
   await expect(page.getByLabel('Senha', { exact: true })).toHaveAttribute('type', 'text')
-  await page.getByRole('button', { name: 'Ocultar senha' }).tap()
-  for (const target of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senha' }), page.getByRole('button', { name: 'Criar conta', exact: true }), page.locator('.auth-switch a')]) {
+  await page.getByRole('button', { name: 'Ocultar senhas' }).tap()
+  for (const target of [page.locator('.register-role').first(), page.locator('.register-role').last(), page.getByRole('button', { name: 'Mostrar senhas' }), page.getByRole('button', { name: 'Criar conta', exact: true }), page.locator('.auth-switch a')]) {
     await target.scrollIntoViewIfNeeded()
     expect(await target.evaluate(element => {
       const box = element.getBoundingClientRect()
@@ -279,4 +283,61 @@ test('toque real em 320px seleciona papéis e alterna senha sem sobreposição o
   }
   expect(api.count('POST /api/auth/register')).toBe(0)
   await context.close()
+})
+
+for (const confirmation of ['', 'nova senha 123!', 'Nova senha 123! ']) {
+  test(`confirmação literal ${JSON.stringify(confirmation)} impede POST e corrige erro/foco`, async ({ page }) => {
+    const api = await mockApi(page)
+    await page.goto('/register')
+    await fill(page)
+    const password = page.getByLabel('Senha', { exact: true })
+    const confirm = page.getByLabel('Confirmar senha', { exact: true })
+    for (const input of [password, confirm]) {
+      await expect(input).toHaveAttribute('type', 'password')
+      await expect(input).toHaveAttribute('autocomplete', 'new-password')
+    }
+    await confirm.fill(confirmation)
+    await confirm.blur()
+    await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeDisabled()
+    await page.locator('form').dispatchEvent('submit')
+    await expect(confirm).toBeFocused()
+    await expect(confirm).toHaveAttribute('aria-invalid', 'true')
+    await expect(confirm).toHaveAttribute('aria-describedby', 'register-confirmation-error')
+    await expect(page.locator('#register-confirmation-error')).toHaveText(confirmation === '' ? 'Confirme sua senha.' : 'As senhas não coincidem.')
+    expect(api.count('POST /api/auth/register')).toBe(0)
+    await confirm.fill(PASSWORD)
+    await expect(page.locator('#register-confirmation-error')).toHaveCount(0)
+    await expect(confirm).toHaveAttribute('aria-invalid', 'false')
+    await page.getByRole('button', { name: 'Mostrar senhas', exact: true }).click()
+    for (const input of [password, confirm]) {
+      await expect(input).toHaveAttribute('type', 'text')
+      await expect(input).toHaveValue(PASSWORD)
+    }
+    await page.getByRole('button', { name: 'Ocultar senhas', exact: true }).click()
+    for (const input of [password, confirm]) await expect(input).toHaveValue(PASSWORD)
+    const sent = page.waitForRequest('**/api/auth/register')
+    await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+    expect((await sent).postDataJSON()).toEqual({ email: 'nova.conta+arte@example.com', password: PASSWORD, role: 'BIDDER' })
+    await expect(page).toHaveURL(/\/login$/)
+    expect(api.count('POST /api/auth/register')).toBe(1)
+  })
+}
+
+test('força só sobre Senha; confirmação idêntica fraca não habilita e espaços são preservados', async ({ page }) => {
+  const api = await mockApi(page)
+  await page.goto('/register'); await fill(page)
+  const password = page.getByLabel('Senha', { exact: true })
+  const confirmation = page.getByLabel('Confirmar senha', { exact: true })
+  await password.fill('abcdefgh'); await confirmation.fill('abcdefgh')
+  await expect(page.locator('.password-requirements')).toContainText('Grupos atendidos: 1 de 4; mínimo de 3.')
+  await expect(page.getByRole('button', { name: 'Criar conta', exact: true })).toBeDisabled()
+  await page.locator('form').dispatchEvent('submit')
+  await expect(password).toBeFocused()
+  expect(api.count('POST /api/auth/register')).toBe(0)
+  const exact = ' Arte@123 '
+  await password.fill(exact); await confirmation.fill(exact)
+  await expect(page.locator('.password-requirements')).toContainText('Grupos atendidos: 4 de 4; mínimo de 3.')
+  const sent = page.waitForRequest('**/api/auth/register')
+  await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
+  expect((await sent).postDataJSON()).toEqual({ email: 'nova.conta+arte@example.com', password: exact, role: 'BIDDER' })
 })

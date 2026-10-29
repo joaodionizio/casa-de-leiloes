@@ -2,13 +2,18 @@
 title: 'Story 6.4 — Validação final no ambiente publicado'
 type: chore
 created: '2026-10-29'
-status: in-progress
+status: done
 route: dispatch
 story_key: 6-4-validação-final-no-ambiente-publicado
 context: []
 ---
 
 # Story 6.4 — Validação final no ambiente publicado
+
+> **Estado vigente em 29/10/2026: done. R6.4-01 — RESOLVED EM PRODUÇÃO.**
+> Revalidação focal final às 11:47 America/Maceio, registrada ao final desta
+> story e em [FECHAMENTO-EPICO-6.md](../../docs/FECHAMENTO-EPICO-6.md).
+> Os bloqueios e status anteriores abaixo são históricos, preservados.
 
 <frozen-after-approval reason="escopo e execução autorizados no pedido explícito da Story 6.4">
 
@@ -81,7 +86,7 @@ fluxo dividido. Não alegar um E2E único sem observá-lo.
 - [x] Este artefato: executar matriz e registrar resultado de cada etapa, horários
   America/Maceio, HTTP, limitações, dados sintéticos anonimizados e findings.
 - [x] `../../docs/uso_de_ia.md`: acrescentar métodos, resultados e limites reais.
-- [ ] Stories 6.1/6.2A/6.3 e `sprint-status.yaml`: sincronizar apenas se aprovado;
+- [x] Stories 6.1/6.2A/6.3 e `sprint-status.yaml`: sincronizar apenas se aprovado;
   6.2 mantém done, 6.5–6.7 backlog explicitamente cortadas.
 
 **Critérios de aceite:** Dado o candidato publicado, quando o roteiro é
@@ -438,3 +443,85 @@ esses são os dois arquivos ausentes da baseline capturada na retomada. Os
 demais já tinham cópia anterior à edição. Não detectei nomes de arquivos de
 segredo alterados na conferência do marcador; nenhum conteúdo secreto foi lido.
 README permaneceu intacto, pois não descreve JSON exato que exigisse propagação.
+
+## Revalidação publicada final e focal — 29/10/2026
+
+**R6.4-01 — RESOLVED EM PRODUÇÃO. Story 6.4 e Épico 6: done.**
+Autorização humana explícita para esta revalidação e o fechamento condicionado
+à ausência de novo BLOCKER/HIGH/MEDIUM; condição satisfeita no recorte observado.
+O veredito substitui a pendência de publicação da seção anterior. Não repeti o
+E2E completo nem alterei código. Relatório final e gates rastreáveis:
+[FECHAMENTO-EPICO-6.md](../../docs/FECHAMENTO-EPICO-6.md).
+
+### Identidade do novo candidato
+
+Alvo único: `https://casa-de-leiloes-i1xr.onrender.com`. Início da sessão
+**29/10/2026 11:44:31 America/Maceio (UTC−03:00)**; coleta conclusiva
+**11:47:10–11:47:57**, mesmo fuso. Git somente leitura confirmou `HEAD`, `main`
+e referência local `origin/main` em
+`7c285c38b5115198e5eac8da746edc764e28df9e`, commit da correção de 11:40:14.
+Reflog registra fast-forward da main às 11:42:07 e `origin/main` atualizado
+**by push às 11:42:16**. Não houve fetch: a referência remota viva não foi consultada.
+Redeploy informado pelo usuário neste pedido; API nova e asset
+`index-C6fGFWZt.js` corroboram publicação funcional da correção, diferente do
+`index-D-J4lFeo.js` anterior. **Não autentiquei SHA, ID ou logs do deploy Render.**
+
+### Matriz focal executada
+
+| Prova / horário America/Maceio | Resultado observado |
+| --- | --- |
+| Health, 11:47:10 | GET `/health` **200**, `{"status":"ok"}` |
+| Contrato público, 11:47:10 | GET `/api/lots` **200**, quatro lotes com campo obrigatório presente e valores apenas `pending`/`settled`; dez chaves públicas exatas. Dois live+pending, dois ended+settled; scheduled vazio. Nenhum campo privado novo |
+| Detalhe, 11:47:10 | GET `/api/lots/98497701-51da-47ff-a6f2-8e3ece875511` **200**, 18 chaves previstas, resumo idêntico ao da listagem; `phase=ended`, `settlement_status=settled` |
+| Vitrine, 11:47:12 | **Water Lilies** e **Judith** mostram **Encerrado**, sem “Encerrado, apurando resultado”; nomes acessíveis **Water Lilies. Encerrado.** e **Judith. Encerrado.**, conferidos por asserção de acessibilidade |
+| Regressão visual desktop, 11:47:12 | 1440×1000, screenshot aberto e inspecionado, sem overflow; Fragments e Seurat **Ao vivo**; Próximos lotes **Nenhum lote agendado.**, coerente com API; raiz, JS e CSS **200**, tipos corretos |
+| Sala, 11:47:13–19 | HTML e GET `/api/lots/{id}/bids` **200**; contrato rico próprio `ended+settled`, settlement preservado; QH-01 terminal **Encerrado**. Um bloco de status, zero timers, um GET bids da UI; um WS abriu e fechou após terminal, sem duplicação/reconexão durante 6 s |
+| Comprovante, 11:47:20 | API e página pública **200**; **Arrematado**, Water Lilies, 11000 centavos, dois lances, mesmo hash final |
+| Auditoria, 11:47:21 | API e página pública **200**, `integrity=verified`, UI **Integridade verificada**, `ended+settled`, mesmo hash do comprovante |
+| JS/rede, 11:47:46–57 | Observação focal de 4 s por Vitrine/Sala: zero exceção JavaScript, falha de transporte ou escrita; HTTP >=400 somente `/api/me` **401 esperado para visitante**. Uma leitura de lotes e uma de bids por respectiva montagem, sem repetição evidente |
+| OpenAPI público, 11:52:12 | GET `/api/openapi.json` **200**; `PublicLotSummary` e `PublicLotDetail` exigem `settlement_status` em **required**, enum exato `pending` / `settled` |
+
+O lote principal é **o mesmo Water Lilies do E2E anterior**, ID
+`98497701-51da-47ff-a6f2-8e3ece875511`; hash preservado
+`5930c83674d431416dbef132e05c90d37cd853f70b99ac7f774c064c1cd4ba2e`.
+Não repeti adulteração ou recálculo da cadeia. Sala mantém seu contrato próprio;
+a corrida terminal-durante-retry de R6-AGG-01 não foi reinduzida em produção.
+
+**Branch pending:** nenhum lote naturalmente `ended+pending` no momento da
+coleta. Não criei condição artificial no banco nem aguardei transição. O branch
+foi comprovado localmente pelos testes versionados e pelo gate final acima,
+incluindo `frontend/e2e/vitrine.spec.ts` (pending/settled e nomes acessíveis em
+1440/375/320), `frontend/src/lotLabels.test.ts` e
+`backend/tests/integration/test_public_lots.py`. Ausência natural não é falha.
+Sem lote agendado disponível, confirmei o estado vazio publicado; o rótulo de
+um item Agendado permanece coberto localmente, sem alegar sua observação pública.
+
+### Método, limites e fechamento
+
+Skill de controle do navegador usada; ponte integrada indisponível. Fallback
+Chromium real via Playwright instalado, contexto público, sem login/mock ou
+interceptação; rede/navegador escalados aprovados automaticamente. Scripts e
+evidências públicas sanitizadas em `/private/tmp/atrio64-final-*`, incluindo
+JSON de resultados e screenshots Vitrine/Sala, inspecionados nesta sessão.
+O relatório final preserva o essencial desses arquivos temporários.
+
+O runner focal terminou **exit 1 somente na asserção genérica final de console**,
+após todas as provas funcionais: contava os 401 esperados de `/api/me` como erro.
+A observação específica posterior correlacionou os HTTP com os endpoints e
+terminou **exit 0 / OBSERVATION_PASS**, sem exceções JS ou HTTP inesperado.
+Tentativas prévias tiveram timeout de `networkidle` e seletor incorreto do CTA
+do destaque; ajustei apenas o runner temporário. Nenhum finding de produto
+derivou desses limites instrumentais; não apresento o runner inicial como verde.
+
+**Findings novos: 0 BLOCKER / 0 HIGH / 0 MEDIUM.** Preservo **R6.2-01 LOW
+aceito**, **R6-AGG-01/02 RESOLVED** e R6.1-01 resolvido. Promovo 6.1 a done
+pela prova CA2 publicada anterior; 6.2 permanece done; 6.2A/6.3 done pelo agregado
+aprovado e provas existentes; 6.4 done; Épico 6 done. 6.5–6.7 continuam cortadas,
+não implementadas, backlog. Retrospective opcional. Status, uso de IA, README
+e artefato final sincronizados apenas documentalmente, com histórico preservado.
+Não executei novo verify local, commit, push ou deploy. Chromium encerrado.
+
+Conferência documental final: `git diff --check` sem erros; onze arquivos
+documentais/status alterados ou criados, sem fonte executável. Estados das
+stories/sprint e opcionais conferidos; links do fechamento válidos; bloco
+congelado desta story preservado; HEAD permanece no mesmo SHA local.

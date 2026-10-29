@@ -157,7 +157,7 @@ test.describe('leitura', () => {
     await mockApi(page, bidder({ wallet: { total: 125000, committed: 40000 } }))
     await page.goto(WALLET)
 
-    const labels = page.locator('.wallet-balances dt')
+    const labels = page.locator('.wallet-balances dt > .balance-label')
     await expect(labels).toHaveText([
       'Disponível para lances',
       'Saldo total',
@@ -197,7 +197,7 @@ test.describe('leitura', () => {
       { tag: 'DIV', children: ['DT', 'DD'] },
       { tag: 'DIV', children: ['DT', 'DD', 'DD'] },
     ])
-    await expect(page.getByRole('term')).toHaveText([
+    await expect(page.getByRole('term').locator('> .balance-label')).toHaveText([
       'Disponível para lances',
       'Saldo total',
       'Comprometido em lances',
@@ -211,7 +211,11 @@ test.describe('leitura', () => {
     await page.goto(WALLET)
 
     await expect(page.locator('.wallet-available dd')).toHaveText('R$ 0,00')
-    await expect(page.getByRole('button')).toHaveText(['Sair', 'Depositar'])
+    await expect(page.getByRole('button', { name: 'Sair', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Depositar', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Ativar modo escuro', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Ajuda:/ })).toHaveCount(3)
+    await expect(page.getByRole('button')).toHaveCount(6)
     await expect(page.locator('canvas, svg[role="img"]')).toHaveCount(0) // sem gráfico
   })
 })

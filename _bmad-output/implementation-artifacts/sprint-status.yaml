@@ -102,16 +102,23 @@ development_status:
   5-3-meus-arremates: done
   epic-5-retrospective: optional
 
+  # 29/10: fechamento autorizado após revalidação publicada focal de R6.4-01.
+  # API/UI novas comprovadas; SHA Render não autenticado. docs/FECHAMENTO-EPICO-6.md.
+  # Reaberto em 29/10 por decisão humana posterior ao fechamento obrigatório.
+  # 6.5–6.7 foram inicialmente cortadas por prazo; histórico de produção preservado.
   epic-6: in-progress
-  6-1-revisão-de-segurança-e-de-erros: review
+  6-1-revisão-de-segurança-e-de-erros: done
   # 29/10: aceite humano técnico/visual; R6.2-01 LOW aceito, sem correção.
   6-2-identidade-visual-e-responsividade: done
-  # 6.2A: gates aprovados; review individual DEFERIDO ao agregado final por prazo.
-  6-2a-cadastro-de-usuarios: review
-  6-3-readme-completo-e-registro-de-uso-de-ia: review
-  6-4-validação-final-no-ambiente-publicado: in-progress
-  # 6.5–6.7 CORTADAS por prazo em 29/10; backlog preservado pelo schema, não planejadas.
-  6-5-busca-e-filtro-de-lotes: backlog
-  6-6-cancelamento-com-estorno-automático: backlog
-  6-7-dark-mode: backlog
+  # 6.2A/6.3: agregado independente e re-review aprovados; CA2 público já comprovado.
+  # R6-AGG-01/02 RESOLVED; R6.4-01 RESOLVED EM PRODUÇÃO às 11:47 America/Maceio.
+  6-2a-cadastro-de-usuarios: done
+  6-3-readme-completo-e-registro-de-uso-de-ia: done
+  6-4-validação-final-no-ambiente-publicado: done
+  # Reativadas pelo usuário após entrega obrigatória; implementação concluída localmente.
+  # Gate combinado exit 0, real-stack 7 passed; aguardam único review agregado independente.
+  # Evidências: docs/FECHAMENTO-EPICO-6.md. Sem nova publicação.
+  6-5-busca-e-filtro-de-lotes: review
+  6-6-cancelamento-com-estorno-automático: review
+  6-7-dark-mode: review
   epic-6-retrospective: optional

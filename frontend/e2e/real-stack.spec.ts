@@ -60,6 +60,7 @@ test.describe('pilha real (FastAPI + build + PostgreSQL)', () => {
       await page.locator(`input[type=radio][value=${role}]`).check()
       await page.getByLabel('E-mail', { exact: true }).fill(email)
       await page.getByLabel('Senha', { exact: true }).fill(password)
+      await page.getByLabel('Confirmar senha', { exact: true }).fill(password)
       const result = page.waitForResponse(response => response.url().endsWith('/api/auth/register') && response.request().method() === 'POST')
       await page.getByRole('button', { name: 'Criar conta', exact: true }).click()
       const response = await result

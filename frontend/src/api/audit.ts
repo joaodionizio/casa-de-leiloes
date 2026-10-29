@@ -67,7 +67,7 @@ export function isAudit(value: unknown, lotId: string): value is Audit {
     previous = bid.current_hash
   }
   if (value.final_hash !== previous) return false
-  if (value.phase === 'cancelled') return value.bid_count === 0 && value.settlement_status === 'not_applicable' && value.settlement === null
+  if (value.phase === 'cancelled') return value.settlement_status === 'not_applicable' && value.settlement === null
   if (!['scheduled', 'live', 'ended'].includes(String(value.phase))) return false
   if (value.settlement_status === 'pending') return value.settlement === null
   if (value.settlement_status !== 'settled' || value.phase !== 'ended' || !object(value.settlement)) return false

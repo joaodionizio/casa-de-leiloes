@@ -4,6 +4,16 @@
 
 ## Goal
 
+**Atualização vigente, 29/10/2026:** reabri o épico após o fechamento obrigatório
+validado em produção, preservando 6.1–6.4 (incluindo 6.2A) done e as evidências
+anteriores. 6.5–6.7 foram inicialmente cortadas por prazo após a entrega obrigatória e posteriormente reativadas por decisão humana para implementar os opcionais.
+O pedido atual autoriza implementação sequencial dos três opcionais, footer junto
+da 6.7 e refinamentos pós-entrega derivados de feedback externo (senha forte e
+confirmação local, ajuda contextual, contexto financeiro do líder). Não executar
+review independente nesta sessão, Git, gh ou deploy. Focais por bloco e um único
+gate integral final. Opcionais terminam em review e épico in-progress aguardando
+review agregado. As instruções antigas de sessão abaixo permanecem como histórico.
+
 Consolidar uma entrega documentada, revisada e validada no ambiente público para que um avaliador consiga percorrer o fluxo completo de leilão sem adivinhar configuração, credenciais demo ou limitações. O planejamento não tem PRD separado: o enunciado é a especificação. Na sessão de 29/10/2026, executo somente a documentação da Story 6.3; o Épico 6 permanece `in-progress` até os gates posteriores.
 
 ## Stories

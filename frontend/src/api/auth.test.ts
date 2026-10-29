@@ -55,11 +55,12 @@ test('falhas usam code e campos sanitizados; nenhuma mensagem remota é exibida 
   assert.deepEqual(await register('u@e', '12345678', 'BIDDER'), { ok: false, failure: 'server', fields: [] })
 })
 
-test('validação local não exige composição nem normaliza a senha e mantém os limites do contrato', () => {
-  assert.deepEqual(registrationErrors(' U.ser+tag@Example.com ', '        ', 'BIDDER'), {})
-  assert.deepEqual(registrationErrors('a'.repeat(252) + '@b', '😀'.repeat(1024), 'AUCTIONEER'), {})
+test('validação local exige composição por caracteres sem normalizar a senha', () => {
+  assert.deepEqual(registrationErrors(' U.ser+tag@Example.com ', ' Aa1    ', 'BIDDER'), {})
+  assert.deepEqual(registrationErrors('a'.repeat(252) + '@b', 'Aa1' + '😀'.repeat(1021), 'AUCTIONEER'), {})
   assert.ok(registrationErrors('a'.repeat(253) + '@b', '1234567', '').email)
-  assert.ok(registrationErrors('a@b', '😀'.repeat(1025), '').password)
-  for (const email of ['', '@b', 'a@', 'a@@b', 'a b@c', 'a@b\nc']) assert.ok(registrationErrors(email, '12345678', 'BIDDER').email)
-  assert.ok(registrationErrors('a@b', '12345678', '').role)
+  assert.ok(registrationErrors('a@b', 'Aa1' + '😀'.repeat(1022), '').password)
+  for (const password of ['        ', 'abcdefgh', 'Abcdefgh', 'abcd1234']) assert.ok(registrationErrors('a@b', password, 'BIDDER').password)
+  for (const email of ['', '@b', 'a@', 'a@@b', 'a b@c', 'a@b\nc']) assert.ok(registrationErrors(email, 'Abcdefg1', 'BIDDER').email)
+  assert.ok(registrationErrors('a@b', 'Abcdefg1', '').role)
 })

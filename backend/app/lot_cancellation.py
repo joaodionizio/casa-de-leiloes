@@ -4,12 +4,10 @@ Um módulo próprio: `bids.py` já importa `lots.py`, então o serviço não pod
 `lots.py`. Importa a trava, a hora e o gate que já existem (`lock_lot`, `database_now`,
 `read_history`, `authenticate_previous_state`); não copia nem move nada da 3.4.
 
-Ordem (`transaction-contract.md`): trava do lote → `clock_timestamp()` → dono → gate →
-já cancelado → lances → fim → `UPDATE`. O dono vem antes do gate para não expor a
-integridade de um lote alheio; o gate vem antes de decidir "sem lances" (a contagem é a
-autenticada, nunca `lot.bid_count` cru) e antes da idempotência (um lote cancelado e
-adulterado responde 409, não 200). O cancelamento trava **só o lote**: nenhuma carteira,
-nenhum lance, nenhuma âncora muda. O serviço não faz commit nem rollback; a rota decide.
+Ordem: trava do lote → hora → dono → histórico autenticado → terminal →
+idempotência → fim → carteira do líder → invariantes → liberação → cancelamento.
+O total e o histórico permanecem intactos. O serviço não confirma a transação;
+a rota publica somente depois do commit e de uma transição nova.
 
 Este módulo não importa `app.main`.
 """
@@ -36,13 +34,14 @@ from app.config import IntegrityConfig
 from app.db import get_session
 from app.errors import (
     LOT_ENDED,
-    LOT_HAS_BIDS,
     LOT_INTEGRITY_CONFLICT,
     error_response,
     error_responses,
 )
 from app.lots import database_now, get_integrity_config, lock_lot
+from app.money import MAX_CENTS
 from app.users import User
+from app.wallet import lock_wallet
 
 # Mesmo logger do uvicorn, para a mensagem aparecer no log do contêiner.
 logger = logging.getLogger("uvicorn.error")
@@ -50,7 +49,6 @@ logger = logging.getLogger("uvicorn.error")
 
 class CancellationRefusal(StrEnum):
     FORBIDDEN = "forbidden"
-    LOT_HAS_BIDS = LOT_HAS_BIDS
     LOT_ENDED = LOT_ENDED
 
 
@@ -68,9 +66,12 @@ def cancel_lot(
     auctioneer_id: uuid.UUID,
     integrity: IntegrityConfig,
 ) -> CancelledLot | CancellationRefusal | IntegrityConflict | None:
-    """Cancela um lote sem lances. `None` = lote inexistente. Recusa e conflito de
-    integridade acontecem antes de qualquer escrita; o chamador faz o rollback."""
-    lot = lock_lot(session, lot_id)  # 1: lote primeiro, e só ele
+    """Libera a reserva vigente do líder e cancela o lote.
+
+    `None` indica lote inexistente. Recusa e conflito de integridade acontecem
+    antes de qualquer escrita; o chamador faz o rollback.
+    """
+    lot = lock_lot(session, lot_id)  # 1: lote antes de qualquer carteira
     if lot is None:
         return None
     now = database_now(session)  # 2: um único instante, depois da trava
@@ -85,7 +86,11 @@ def cancel_lot(
     if isinstance(authenticated, IntegrityConflict):
         return authenticated
 
-    from app.lot_settlement import LotSettlement
+    from app.lot_settlement import (
+        LotSettlement,
+        SettlementFinancialConflict,
+        SettlementFinancialFailure,
+    )
 
     terminal = session.scalar(
         select(LotSettlement.id).where(LotSettlement.lot_id == lot_id)
@@ -99,12 +104,28 @@ def cancel_lot(
         return CancelledLot(
             id=lot.id, cancelled_at=lot.cancelled_at.astimezone(UTC), transitioned=False
         )
-    if authenticated.bid_count > 0:  # 6: a contagem autenticada decide
-        return CancellationRefusal.LOT_HAS_BIDS
     if now >= lot.ends_at:  # 7: a igualdade já é encerrado
         return CancellationRefusal.LOT_ENDED
 
-    lot.cancelled_at = now  # 8: o mesmo instante do passo 2; um UPDATE de uma coluna
+    current = authenticated.current
+    if current is not None:
+        wallet = lock_wallet(session, current.leader_id)
+        if (
+            not 0
+            <= wallet.committed_balance_cents
+            <= wallet.total_balance_cents
+            <= MAX_CENTS
+        ):
+            raise SettlementFinancialConflict(
+                SettlementFinancialFailure.WALLET_INVARIANT_CONFLICT
+            )
+        if wallet.committed_balance_cents < current.amount_cents:
+            raise SettlementFinancialConflict(
+                SettlementFinancialFailure.INSUFFICIENT_COMMITMENT
+            )
+        wallet.committed_balance_cents -= current.amount_cents
+
+    lot.cancelled_at = now  # O mesmo instante, sem alterar os lances ou a âncora.
     session.flush()
     return CancelledLot(id=lot.id, cancelled_at=now)
 

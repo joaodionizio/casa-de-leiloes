@@ -138,10 +138,10 @@ test.describe('símbolo ÁTRIO', () => {
     await expect(page.locator('.featured')).toBeVisible()
 
     // Silhueta alta e fina, não uma ferradura larga (estrutura, não pixel).
-    const box = await rect(page.locator('.site-brand svg'))
+    const box = await rect(page.locator('.site-header .site-brand svg'))
     expect((box.bottom - box.y) / (box.right - box.x)).toBeGreaterThan(1.2)
 
-    const faces = page.locator('.site-brand svg path')
+    const faces = page.locator('.site-header .site-brand svg path')
     await expect(faces).toHaveCount(2)
     const fills = await faces.evaluateAll((paths) => paths.map((p) => p.getAttribute('fill') ?? ''))
     const geometry = await faces.evaluateAll((paths) => paths.map((p) => p.getAttribute('d') ?? ''))
@@ -150,7 +150,7 @@ test.describe('símbolo ÁTRIO', () => {
     expect(fills[0]).not.toBe(fills[1])
     // Duas faces, não um gradiente contínuo: a esquerda é mais clara que a direita.
     expect(luminance(fills[0])).toBeGreaterThan(luminance(fills[1]))
-    await expect(page.locator('.site-brand svg linearGradient, .site-brand svg radialGradient')).toHaveCount(0)
+    await expect(page.locator('.site-header .site-brand svg linearGradient, .site-brand svg radialGradient')).toHaveCount(0)
 
     // O favicon desenha exatamente os mesmos caminhos e as mesmas cores.
     const favicon = await (await page.request.get('/favicon.svg')).text()
@@ -164,11 +164,11 @@ test.describe('símbolo ÁTRIO', () => {
     await mockApi(page, { lots: LOTS })
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/')
-    const name = await page.locator('.site-brand-name').evaluate((el) => {
+    const name = await page.locator('.site-header .site-brand-name').evaluate((el) => {
       const style = getComputedStyle(el)
       return { weight: Number(style.fontWeight), size: parseFloat(style.fontSize) }
     })
-    const tagline = await page.locator('.site-brand-tagline').evaluate((el) => {
+    const tagline = await page.locator('.site-header .site-brand-tagline').evaluate((el) => {
       const style = getComputedStyle(el)
       return { weight: Number(style.fontWeight), size: parseFloat(style.fontSize) }
     })
@@ -215,14 +215,14 @@ for (const viewport of VIEWPORTS) {
       await page.goto('/')
       await expect(page.locator('.featured')).toBeVisible()
 
-      await expect(page.locator('.site-brand svg')).toBeVisible()
-      await expect(page.locator('.site-brand-name')).toBeVisible()
-      await expect(page.locator('.site-brand-name')).toHaveText('ÁTRIO')
+      await expect(page.locator('.site-header .site-brand svg')).toBeVisible()
+      await expect(page.locator('.site-header .site-brand-name')).toBeVisible()
+      await expect(page.locator('.site-header .site-brand-name')).toHaveText('ÁTRIO')
       if (viewport.tagline) {
-        await expect(page.locator('.site-brand-tagline')).toBeVisible()
-        await expect(page.locator('.site-brand-tagline')).toHaveText('Leilões de Arte')
+        await expect(page.locator('.site-header .site-brand-tagline')).toBeVisible()
+        await expect(page.locator('.site-header .site-brand-tagline')).toHaveText('Leilões de Arte')
       } else {
-        await expect(page.locator('.site-brand-tagline')).toBeHidden()
+        await expect(page.locator('.site-header .site-brand-tagline')).toBeHidden()
       }
     })
 
@@ -233,7 +233,7 @@ for (const viewport of VIEWPORTS) {
       await page.goto('/')
       await expect(page.locator('.featured')).toBeVisible()
 
-      const brand = await rect(page.locator('.site-brand'))
+      const brand = await rect(page.locator('.site-header .site-brand'))
       const nav = await rect(page.getByRole('navigation', { name: 'Principal' }))
       const login = await rect(page.getByRole('link', { name: 'Entrar', exact: true }))
       for (const part of [brand, nav, login]) {
@@ -257,7 +257,7 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
 
       const nav = page.getByRole('navigation', { name: 'Principal' })
-      const brand = await rect(page.locator('.site-brand'))
+      const brand = await rect(page.locator('.site-header .site-brand'))
       for (const name of ['Vitrine', 'Criar lote', 'Meus lotes']) {
         const link = nav.getByRole('link', { name })
         await expect(link).toBeVisible()
@@ -281,7 +281,7 @@ for (const viewport of VIEWPORTS) {
       await page.goto('/')
       await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
 
-      const brand = await rect(page.locator('.site-brand'))
+      const brand = await rect(page.locator('.site-header .site-brand'))
       const account = await rect(page.locator('.account'))
       expect(account.right).toBeLessThanOrEqual(viewport.width + TOLERANCE)
       expect(sideBySideOrBelow(brand, account)).toBe(true)

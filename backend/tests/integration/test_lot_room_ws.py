@@ -343,10 +343,17 @@ def test_publication_failure_preserves_201(setup, monkeypatch):
     assert len(bid_rows(factory, identifier)) == 1
 
 
-def test_cancel_post_commit_terminal_idempotent_and_hidden(setup, monkeypatch):
+@pytest.mark.parametrize("with_bid", [False, True])
+def test_cancel_post_commit_terminal_idempotent_and_hidden(
+    setup, monkeypatch, with_bid
+):
     client, factory = setup
     identifier = live_lot(factory)
     assert login(client, HTTPS_ORIGIN, AUCTIONEER_EMAIL).status_code == 200
+    if with_bid:
+        assert isinstance(
+            run_bid(factory, identifier, seeded_id(BIDDER_EMAIL), 10000), bids.PlacedBid
+        )
     published = []
     signals = []
     original = lot_room.read_cancellation
@@ -468,14 +475,22 @@ def test_post_can_publish_with_one_default_worker(setup):
 
 
 @pytest.mark.parametrize("rollback", [False, True])
+@pytest.mark.parametrize("with_bid", [False, True])
 def test_cancellation_commit_barrier_or_rollback_never_publishes_early(
-    setup, monkeypatch, rollback
+    setup, monkeypatch, rollback, with_bid
 ):
     from app import lot_cancellation
 
     client, factory = setup
     identifier = live_lot(factory)
     assert login(client, HTTPS_ORIGIN, AUCTIONEER_EMAIL).status_code == 200
+    if with_bid:
+        assert isinstance(
+            run_bid(factory, identifier, seeded_id(BIDDER_EMAIL), 10000), bids.PlacedBid
+        )
+    from tests.wallet_support import wallet_row
+
+    before_wallet = wallet_row(factory, seeded_id(BIDDER_EMAIL))
     entered, release = threading.Event(), threading.Event()
     original_service, original_commit = lot_cancellation.cancel_lot, Session.commit
     signals = []
@@ -512,6 +527,7 @@ def test_cancellation_commit_barrier_or_rollback_never_publishes_early(
             try:
                 assert entered.wait(5)
                 assert signals == []
+                assert wallet_row(factory, seeded_id(BIDDER_EMAIL)) == before_wallet
                 assert lot_state(factory, identifier)["cancelled_at"] is None
             finally:
                 release.set()
@@ -519,11 +535,16 @@ def test_cancellation_commit_barrier_or_rollback_never_publishes_early(
                 with pytest.raises(RuntimeError):
                     future.result(5)
                 assert signals == []
+                assert wallet_row(factory, seeded_id(BIDDER_EMAIL)) == before_wallet
                 assert lot_state(factory, identifier)["cancelled_at"] is None
             else:
                 assert future.result(5).status_code == 200
                 assert ws.receive_json()["type"] == "lot_cancelled"
                 assert signals == [1]
+                assert wallet_row(factory, seeded_id(BIDDER_EMAIL)) == (
+                    before_wallet[0],
+                    0,
+                )
 
 
 @pytest.mark.parametrize("cancel_first", [False, True])
@@ -565,17 +586,18 @@ def test_bid_cancel_lock_orders_publish_only_winning_transition(
             waiting = pool.submit(run_cancel, factory, identifier)
         assert outcome is not None
         first.commit()
-        client.portal.call(
-            manager.publish_cancellation if cancel_first else manager.publish_bid,
-            identifier,
-        )
         rejected = waiting.result(5)
+        # Publicação atrasada do lance lê o estado já cancelado e não reabre a sala.
+        if not cancel_first:
+            client.portal.call(manager.publish_bid, identifier)
+            assert subscriber.queue.empty()
+        client.portal.call(manager.publish_cancellation, identifier)
         if cancel_first:
             assert rejected is bids.BidRefusal.LOT_CANCELLED
         else:
-            assert rejected is lot_cancellation.CancellationRefusal.LOT_HAS_BIDS
+            assert isinstance(rejected, lot_cancellation.CancelledLot)
         frame = subscriber.queue.get_nowait()
-        assert frame.type == ("lot_cancelled" if cancel_first else "bid_accepted")
+        assert frame.type == "lot_cancelled"
         assert subscriber.queue.empty()
         client.portal.call(manager.remove, identifier, subscriber)
 
@@ -656,9 +678,7 @@ def test_full_queue_evicts_only_the_slow_client_through_real_posts(
     assert not any(email in evictions[0] for email in emails)
 
 
-@pytest.mark.parametrize(
-    "refusal", ["forbidden", "has_bids", "ended", "integrity", "missing"]
-)
+@pytest.mark.parametrize("refusal", ["forbidden", "ended", "integrity", "missing"])
 def test_cancellation_refusals_never_signal(setup, monkeypatch, refusal):
     client, factory = setup
     assert login(client, HTTPS_ORIGIN, AUCTIONEER_EMAIL).status_code == 200

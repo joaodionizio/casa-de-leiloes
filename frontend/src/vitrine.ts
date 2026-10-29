@@ -7,6 +7,36 @@ import type { PublicLotSummary, PublicLotsResponse } from './api/publicLots.ts'
 // "Mostrar mais encerrados" revela de 6 em 6, só localmente, sem nova chamada.
 export const ENDED_STEP = 6
 
+export type VitrinePhaseFilter = 'all' | PublicLotSummary['phase']
+
+function searchText(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR')
+}
+
+// Filtra somente os metadados da fotografia pública. Preserva grupos, ordem e
+// estados recebidos; UUID e horários operacionais não entram na busca.
+export function filterPublicLots(
+  data: PublicLotsResponse,
+  term: string,
+  phase: VitrinePhaseFilter,
+): PublicLotsResponse {
+  const query = searchText(term.trim())
+  function matching(group: PublicLotSummary[], kind: PublicLotSummary['phase']) {
+    if (phase !== 'all' && phase !== kind) return []
+    return group.filter((lot) => query === '' ||
+      [lot.title, lot.artist_display, lot.date_display].some(
+        (value) => value !== null && searchText(value).includes(query),
+      ),
+    )
+  }
+  return {
+    as_of: data.as_of,
+    live: matching(data.live, 'live'),
+    scheduled: matching(data.scheduled, 'scheduled'),
+    ended: matching(data.ended, 'ended'),
+  }
+}
+
 export type Featured =
   | { kind: 'live'; lot: PublicLotSummary }
   | { kind: 'scheduled'; lot: PublicLotSummary }

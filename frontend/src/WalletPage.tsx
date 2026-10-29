@@ -1,3 +1,5 @@
+import ContextHelp from './ContextHelp'
+import { HELP } from './contextHelpText'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { fetchWallet } from './api/wallet'
 import type { WalletReadFailure, WalletResponse } from './api/wallet'
@@ -211,15 +213,15 @@ function WalletPage({ owner, focusHeading, onSessionExpired }: WalletPageProps) 
         <>
           <dl className="wallet-balances">
             <div className="wallet-available">
-              <dt>Disponível para lances</dt>
+              <dt><span className="balance-label">Disponível para lances</span> <ContextHelp label="Saldo disponível" text={HELP.available} /></dt>
               <dd>{formatCents(read.wallet.available_balance_cents)}</dd>
             </div>
             <div className="wallet-balance">
-              <dt>Saldo total</dt>
+              <dt><span className="balance-label">Saldo total</span> <ContextHelp label="Saldo total" text={HELP.total} /></dt>
               <dd>{formatCents(read.wallet.total_balance_cents)}</dd>
             </div>
             <div className="wallet-balance">
-              <dt>Comprometido em lances</dt>
+              <dt><span className="balance-label">Comprometido em lances</span> <ContextHelp label="Saldo comprometido" text={HELP.committed} /></dt>
               <dd>{formatCents(read.wallet.committed_balance_cents)}</dd>
               <dd className="wallet-note muted">Reservado nos lotes em que você lidera.</dd>
             </div>

@@ -12,18 +12,19 @@ export interface CancelNotice {
   text: string
 }
 
-// Aparentemente elegível: não cancelado, sem lances e ainda não encerrado. A fase vem do
+// Aparentemente elegível: não cancelado e ainda não encerrado. A fase vem do
 // servidor (`as_of`), o navegador não calcula nada.
 export function canCancelLot(lot: Pick<MyLotResponse, 'cancelled_at' | 'bid_count' | 'phase'>): boolean {
-  return lot.cancelled_at === null && lot.bid_count === 0 && lot.phase !== 'ended'
+  return lot.cancelled_at === null && lot.phase !== 'ended'
 }
 
 export const CANCEL_CONFIRM_TEXT = 'O lote sai da vitrine e não pode ser reaberto.'
+export const CANCEL_WITH_BIDS_CONFIRM_TEXT =
+  'Este lote possui lances. Ao cancelar, o saldo comprometido do licitante líder será liberado automaticamente.'
 export const CANCEL_SUCCESS_TEXT = 'Lote cancelado.'
 export const CANCEL_LIST_REFRESH_FAILED = 'Não foi possível atualizar a lista.'
 
 const FAILURE_TEXT: Record<Exclude<CancelLotFailure, 'unauthorized' | 'ambiguous'>, string> = {
-  has_bids: 'Este lote não pode ser cancelado porque já recebeu lances.',
   ended: 'Este lote já foi encerrado.',
   integrity:
     'Não foi possível concluir a operação porque a integridade do lote não pôde ser confirmada.',
@@ -44,9 +45,9 @@ export function cancelFailureNotice(failure: Exclude<CancelLotFailure, 'unauthor
 
 // Depois de qualquer resposta que não seja a 401, a lista é relida uma vez. Só a recusa
 // por papel/dono, a inexistência e o conflito de integridade não mudam a lista; todas as
-// demais (sucesso, lances, encerrado, ambíguo) podem ter mudado.
+// demais (sucesso, encerrado, ambíguo) podem ter mudado.
 export function shouldRefetch(failure: CancelLotFailure | null): boolean {
-  return failure === null || failure === 'has_bids' || failure === 'ended' || failure === 'ambiguous'
+  return failure === null || failure === 'ended' || failure === 'ambiguous'
 }
 
 export function bidCountText(count: number): string {

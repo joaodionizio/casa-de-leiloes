@@ -1,6 +1,35 @@
 # Uso de IA no desenvolvimento — ÁTRIO (antes Casa de Leilões)
 
-## Síntese atual e rastreabilidade — Story 6.3, 29/10/2026
+## Reabertura dos opcionais e feedback pós-entrega — 29/10/2026
+
+6.5–6.7 foram inicialmente cortadas por prazo após a entrega obrigatória e posteriormente reativadas por decisão humana para implementar os opcionais.
+Decidi preservar o fechamento obrigatório e suas provas publicadas. Autorizei
+Codex com `bmad-build` a implementar busca/filtros locais (6.5), cancelamento com
+liberação transacional do compromisso (6.6), tema por tokens (6.7) e footer
+institucional complementar, sem nova story numerada. O usuário forneceu o escopo
+detalhado e aprovou expressamente a autoria “Desenvolvido por João Luís Dionízio —
+Desafio Elite Dev — Verzel”, sem abreviação, contatos ou redes sociais. RockHub é
+somente inspiração estrutural.
+
+Incluí como **refinamentos pós-entrega derivados de feedback humano externo**:
+senha forte exclusivamente em novos cadastros, ajuda contextual acessível e
+contexto financeiro complementar para o líder quando os dados são confiáveis.
+Na mesma sessão acrescentei por instrução humana a confirmação exata da senha
+somente na interface; o payload de cadastro continua email/password/role. Não
+atribuo esses refinamentos ao enunciado ou às exigências da Verzel. Descartei
+alterar login/contas demo, regras de lance AD-7, criar ledger, migration ou nova
+rota de escrita, normalizar senha ou duplicá-la na rede.
+
+A skill dirigiu investigação e implementação por agentes, com execução das
+stories em sequência. Não houve review independente nesta sessão. Capturei
+baseline de arquivos sem Git e uso PostgreSQL 18 descartável na porta local
+55436, isolado do banco habitual, para testes financeiros reais. Não li arquivos
+.env*, credenciais privadas ou segredos. Focais por bloco; somente um gate
+integral no candidato combinado. Resultados e limites desta rodada serão
+registrados abaixo após execução, sem confundir skips com testes executados ou
+implementação local com publicação.
+
+## Síntese do fechamento obrigatório anterior — 29/10/2026
 
 Decidi usar IA (Claude Code e Codex, conforme os registros abaixo) para auxiliar
 planejamento, arquitetura, especificação, implementação backend/frontend, testes,
@@ -16,10 +45,11 @@ humana. Descartei aceitar código ou alegações apenas por confiança na IA.
 | 3.1–3.6 | Carteira, regras, integridade, transações/travas, Sala e cancelamento; relatos abaixo, specs e [review agregado/correção/re-review](../_bmad-output/implementation-artifacts/code-review-epic-3.md). |
 | 4.1–4.5 | WS, heartbeat/reconexão, liquidação, scheduler/catch-up e resultado; relatos abaixo e specs/evidências em [specs](../_bmad-output/specs). |
 | 5.1–5.3 | Auditoria, comprovante e participações/vitórias; relatos abaixo e [review agregado independente](../_bmad-output/implementation-artifacts/code-review-epic-5.md), com limites estáticos declarados. |
-| 6.1 | Inventário de escritas, Origin/JSON, indisponibilidade externa e erros; [evidência](../_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md) e [re-review](../_bmad-output/implementation-artifacts/code-review-story-6-1.md). CA2 publicado permanece pendente. |
+| 6.1 | Inventário de escritas, Origin/JSON, indisponibilidade externa e erros; [evidência](../_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md) e [re-review](../_bmad-output/implementation-artifacts/code-review-story-6-1.md). CA2 publicado comprovado na 6.4; done. |
 | 6.2 | Refinamento visual, aceite visual humano final, gates e [review independente](../_bmad-output/implementation-artifacts/code-review-story-6-2.md); LOW R6.2-01 aceito conscientemente sem correção. |
-| 6.2A | Cadastro público adicionado por decisão humana, implementação e [gates/smoke](../_bmad-output/specs/spec-story-6-2a-cadastro-de-usuarios/implementation-evidence.md); review individual deferido ao agregado final por prazo. |
-| 6.3 | Auditoria documental, README completo, esta síntese e [validação focal](../_bmad-output/specs/spec-story-6-3-readme-e-uso-de-ia/implementation-evidence.md). Sem novo code review ou publicação. |
+| 6.2A | Cadastro público adicionado por decisão humana, implementação e [gates/smoke](../_bmad-output/specs/spec-story-6-2a-cadastro-de-usuarios/implementation-evidence.md); review individual deferido atendido pelo agregado aprovado; cadastro publicado comprovado; done. |
+| 6.3 | Auditoria documental, README completo, esta síntese e [validação focal](../_bmad-output/specs/spec-story-6-3-readme-e-uso-de-ia/implementation-evidence.md); agregado aprovado e documentação final sincronizada; done. |
+| 6.4 | [Validação pública completa anterior e revalidação focal final](../_bmad-output/implementation-artifacts/6-4-validação-final-no-ambiente-publicado.md); R6.4-01 resolvido em produção; [fechamento do Épico 6](FECHAMENTO-EPICO-6.md); done. |
 
 Corrigi com auxílio da IA problemas demonstrados por evidência: imagens hotlink
 com 403 detectadas no teste humano levaram ao proxy (2.3); tela branca por
@@ -37,17 +67,19 @@ reviews existentes permanecem nos respectivos relatórios.
 composição, e-mail trim/lower com formato mínimo, sem confirmação, duplicidade
 explícita aceita. Cadastro leva ao login e cria carteira zero para ambos sem
 conceder lance/depósito ao leiloeiro. Os gates passaram; não houve review
-independente individual da 6.2A. Adiei esse review para o agregado final por prazo.
+independente individual da 6.2A. O adiamento por prazo foi atendido pelo agregado
+independente e re-review aprovados, com R6-AGG-01/02 resolvidos.
 
 A AD-5 vigente soma 2 minutos ao término atual, cumulativa e sem teto, em
 0 < restante <= 2 minutos; “now + 2 min” permanece apenas no relato intermediário.
 Também preservei propostas antigas de catch-up/POST como história: hoje migrations
 → seed → catch-up → scheduler → tráfego; GET e POST vencido não liquidam.
 
-6.2A e 6.3 aguardam review agregado independente; 6.1 conserva evidência pública
-pendente, Épico 6 in-progress e 6.4 não executada. Cortei 6.5–6.7 por prazo.
-O deploy antigo 2+3 não comprova o candidato atual. Os registros cronológicos
-abaixo ficam preservados integralmente e descrevem o estado de cada sessão.
+6.1/6.2/6.2A/6.3/6.4 e Épico 6 estão **done** após as provas públicas e a
+revalidação focal de R6.4-01. Cortei 6.5–6.7 por prazo: continuam backlog,
+não implementadas. R6.2-01 LOW aceito preservado. Git local/main `7c285c3`,
+sem autenticar SHA do Render. Os registros cronológicos abaixo ficam
+preservados integralmente e descrevem o estado de cada sessão.
 
 
 ## Fechamento oficial do Epic 3 — registro em 27/10/2026
@@ -2321,3 +2353,113 @@ coordenado ainda necessário. 6.4/Épico 6 seguem in-progress; 6.1 review apesar
 CA2 público evidenciado; 6.2 done; 6.2A/6.3 tecnicamente revisadas; 6.5–6.7
 cortadas. Os sete real-stack opt-in e novo aceite humano/produção não foram
 executados. Não fiz commit, push, merge ou deploy nem iniciei outra funcionalidade.
+
+## Story 6.4 — revalidação publicada final e fechamento — 29/10/2026
+
+Autorizei expressamente apenas a revalidação focal após o redeploy de R6.4-01
+e o fechamento documental se não houvesse novo BLOCKER/HIGH/MEDIUM. Codex usou
+Git somente leitura e Chromium real com REST/DOM/acessibilidade/WS públicos,
+sem repetir cadastro, depósitos, lances, logout ou o E2E completo anterior.
+A skill de controle do navegador foi lida e tentada; ponte nativa indisponível,
+fallback para Playwright já instalado. Rede/navegador escalados foram aprovados
+automaticamente. Não houve leitura de `.env*`, credenciais ou banco.
+
+Sessão iniciada às **11:44:31 America/Maceio (UTC−03:00)**; provas conclusivas
+às **11:47:10–11:47:57**, 29/10/2026. HEAD/main e referência local origin/main:
+`7c285c38b5115198e5eac8da746edc764e28df9e`. Reflog registra fast-forward da
+main às 11:42:07 e atualização de origin/main **by push às 11:42:16**. O redeploy
+foi informado no pedido humano; o novo campo REST e asset JS `index-C6fGFWZt.js`
+corroboram a publicação funcional. Não consultei o remoto vivo nem autentiquei
+SHA/ID/logs do Render. Nenhuma operação Git de escrita foi feita pelo agente.
+
+`/health`, raiz, JS/CSS e APIs responderam 200. Os quatro lotes da listagem têm
+`settlement_status` com valores apenas pending/settled e chaves públicas exatas;
+o detalhe Water Lilies tem 18 campos previstos e resumo consistente. Não houve
+dado privado novo. **Water Lilies**, o mesmo lote anterior
+`98497701-51da-47ff-a6f2-8e3ece875511`, e Judith são ended+settled; na Vitrine
+ambos aparecem **Encerrado**, sem “apurando resultado”. Os nomes acessíveis são
+**Water Lilies. Encerrado.** e **Judith. Encerrado.**. Desktop 1440×1000 sem
+overflow; screenshots Vitrine/Sala abertos e inspecionados, sem alegar novo
+aceite humano. Dois lotes continuam **Ao vivo**. Sem agendados, o estado vazio
+**Nenhum lote agendado.** está coerente.
+
+Não havia ended+pending naturalmente; não criei condição no banco nem aguardei
+transição. O branch pending e o item Agendado continuam comprovados pelos testes
+versionados/gate local final anterior; não alego prova pública desses itens
+ausentes. Sala e seu contrato próprio rico seguem ended+settled/**Encerrado**:
+zero timers, um GET de bids pela UI e um WS encerrado após leitura terminal,
+sem duplicação em 6 s. Não reproduzi corrida de retry. Receipt e audit API/UI
+200; **Arrematado**, 11000 centavos, dois lances, `integrity=verified` e UI
+**Integridade verificada**, mesmo hash final anterior. Não repeti adulteração.
+
+O runner focal `/private/tmp/atrio64-final-revalidation.cjs` fez todas as provas
+funcionais, mas terminou exit 1 na asserção genérica de console: o 401 esperado
+de `/api/me` para visitante foi contado como erro. A observação específica
+`/private/tmp/atrio64-final-observation.cjs` terminou **exit 0 / OBSERVATION_PASS**,
+correlacionando os 401 apenas a `/api/me`; zero exceção JS, falha de transporte,
+HTTP inesperado ou escrita; sem requisição repetitiva evidente. Tentativas
+prévias exigiram trocar espera networkidle por DOM e corrigir seletor do CTA
+de destaque no runner temporário. Esses eventos não foram convertidos em
+findings do produto nem em alegação de runner integral verde. Resultados
+sanitizados e capturas temporárias ficam em `/private/tmp/atrio64-final-*`.
+
+**R6.4-01 — RESOLVED EM PRODUÇÃO.** Nenhum novo BLOCKER/HIGH/MEDIUM no recorte.
+Preservei R6.2-01 LOW aceito e R6-AGG-01/02 resolvidos. Conforme autorização
+condicional satisfeita, 6.1 done pela prova CA2 pública anterior, 6.2 permanece
+done, 6.2A/6.3/6.4 done e Épico 6 done. 6.5–6.7 continuam cortadas/backlog,
+não implementadas. Os documentos finais registram os limites históricos,
+inclusive SHA Render e ausência de nova confirmação individual de estudo humano.
+
+Atualizei stories/status, README, síntese e histórico de IA, referências do
+processo/review/deferred-work e criei [FECHAMENTO-EPICO-6.md](FECHAMENTO-EPICO-6.md).
+Não alterei código nem executei novo verify local, commit, push ou deploy.
+Chromium encerrado. Nenhuma próxima story iniciada.
+
+Complemento às **11:52:12 America/Maceio**: OpenAPI público `/api/openapi.json`
+**200**, schemas `PublicLotSummary` e `PublicLotDetail` com `settlement_status`
+em **required** e enum exato pending/settled. Conferência documental final
+aprovada: `git diff --check`, onze arquivos exclusivamente documentais/status,
+estados coerentes, opcionais backlog, links de fechamento válidos, bloco
+congelado preservado e HEAD inalterado. Não foi necessário novo gate executável.
+
+
+## Conclusão local dos opcionais e refinamentos — 29/10/2026
+
+Concluí com auxílio do Codex/bmad-build as Stories 6.5, 6.6 e 6.7 e deixei todas
+em review, com Épico 6 in-progress. Mantive 6.1–6.4 (incluindo 6.2A) done e o
+fechamento obrigatório como histórico. O implementador do último bloco foi
+interrompido por limite da ferramenta; a coordenação retomou os arquivos e
+terminou implementação, focais e verificações, sem review independente.
+
+Registrei o footer como polimento da 6.7, com a autoria humana exata João Luís
+Dionízio. Senha forte, confirmação local, ajuda contextual e informação ao líder
+são refinamentos pós-entrega derivados de feedback humano externo, não novas
+exigências atribuídas à Verzel. Descartei duplicar senha no payload, alterar
+recusas AD-7, fazer chamadas extras para contexto financeiro, consultar AIC nos
+filtros ou criar ledger/migration/rota de escrita.
+
+Corrigi problemas demonstrados nos focais: soma de reservas de cancelados no
+helper, seletores ambíguos após novos controles e densidade que tirava o CTA do
+primeiro viewport. Preservei os critérios existentes e compactei o filtro em
+select nativo mobile/tablet e o toggle de tema. Cadastro forte foi validado no
+backend sem alterar login ou demos; confirmação exige igualdade literal só na
+interface, com disabled + handler e payload email/password/role.
+
+Executei um único `VERIFY_E2E=1 ./verify.sh`: exit 0, 2446 testes backend com PG
+real, 206 Node, 355 Playwright e 7 skips opt-in, lint/tipos/build/Docker aprovados.
+Os sete real-stack foram depois executados separadamente: 7 passed, zero skips.
+Smoke complementar real de cancelamento confirmou refund, total/histórico/auditoria,
+idempotência, participação cancelada, Vitrine e terminal WS. Não confundo os
+skips do gate com execução: a prova real está no comando separado. Produção não
+foi alterada. Inspecionei 35 screenshots temporárias light/dark/mobile, sem
+pixel-perfect; a ponte do navegador integrado falhou e usei Chromium local.
+
+Configuração dos focais finais/gate/servidor isolada, com fonte dotenv desativada
+por wrapper temporário e segredos efêmeros em memória. Sem arquivos de segredo
+alterados por nome, sem conteúdo de .env* ou credenciais copiado para evidências.
+Depois do gate, código e testes conservam os hashes do manifesto; somente estes
+registros foram consolidados. Resultado, comandos, arquivos e limites completos:
+[fechamento reaberto e candidato local](FECHAMENTO-EPICO-6.md).
+
+Não houve review independente, commit, push ou deploy nesta rodada. Aguardo o
+único review agregado dos opcionais; não promovo stories ou épico para done.

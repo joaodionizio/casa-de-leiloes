@@ -111,3 +111,13 @@ test('unavailable or cancelled room retains a functional public audit link', asy
   await page.getByRole('link', { name: 'Consultar auditoria pública' }).click()
   await expect(page.locator('.audit-state')).toHaveText('Cancelado')
 })
+
+test('cancelado com lances conserva a cadeia pública e a integridade verificada', async ({ page }) => {
+  await mockApi(page)
+  const data = audit(3)
+  data.phase = 'cancelled'; data.settlement_status = 'not_applicable'
+  await respond(page, data); await page.goto(`/lots/${ID}/audit`)
+  await expect(page.getByRole('heading', { name: 'Integridade verificada' })).toBeVisible()
+  await expect(page.locator('.audit-state')).toHaveText('Cancelado')
+  await expect(page.locator('.audit-events > li')).toHaveCount(3)
+})

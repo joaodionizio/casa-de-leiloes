@@ -1,6 +1,13 @@
 # Review agregado independente — Épico 6
 
-Data: **29/10/2026, America/Maceio**. Status vigente: **APROVAÇÃO TÉCNICA AGREGADA LOCAL DO ÉPICO 6**, após re-review focal independente (§16). O bloqueio original abaixo é histórico; produção e Story 6.4 continuam pendentes.
+Data: **29/10/2026, America/Maceio**. Veredito técnico preservado: **APROVAÇÃO TÉCNICA AGREGADA LOCAL DO ÉPICO 6**, após re-review focal independente (§16).
+
+> Atualização documental posterior ao review: Story 6.4 e Épico 6 **done** após
+> validação publicada anterior e revalidação focal de R6.4-01 em 29/10 às 11:47
+> America/Maceio: **RESOLVED EM PRODUÇÃO**. R6-AGG-01/02 **RESOLVED** e
+> R6.2-01 LOW aceito preservados. [Fechamento](../../docs/FECHAMENTO-EPICO-6.md)
+> registra candidato, provas e limites de SHA Render. Não é novo review;
+> bloqueios e pendências de produção nos relatos abaixo são históricos.
 
 > Atualização da implementação, 29/10/2026: R6-AGG-01 e R6-AGG-02 foram corrigidos
 > no candidato, com regressões versionadas (§15). O review original abaixo permanece

@@ -19,7 +19,7 @@ from tests.auth_support import HTTPS_ORIGIN, build_client, login
 
 PATH = "/api/auth/register"
 # Only a transient test value; never persist request bodies in test evidence.
-PASSWORD = " registration test "
+PASSWORD = " Registration test 3! "
 PAYLOAD = {"email": "new@example.com", "password": PASSWORD, "role": "BIDDER"}
 DUPLICATE = {
     "status": 409,
@@ -169,7 +169,7 @@ def test_invalid_email_is_422_without_persistence(client, db_session_factory, em
     "password_length,status", [(7, 422), (8, 201), (1024, 201), (1025, 422)]
 )
 def test_password_boundaries(client, db_session_factory, password_length, status):
-    response = register(client, password="x" * password_length)
+    response = register(client, password="Aa1" + "x" * (password_length - 3))
     assert response.status_code == status
     expected = (1, 1) if status == 201 else (0, 0)
     assert counts(db_session_factory) == expected
@@ -225,7 +225,7 @@ def test_duplicate_normalized_email_never_updates_account(client, db_session_fac
         client,
         email=" NEW@EXAMPLE.COM ",
         role="AUCTIONEER",
-        password="different-account-input",
+        password="Different-account-input1",
     )
     assert response.status_code == 409
     assert response.json() == DUPLICATE
@@ -427,3 +427,39 @@ def test_other_real_integrity_violation_is_500_not_email_conflict(
     assert counts(db_session_factory) == (0, 0)
     for sensitive in (PASSWORD, "private-hash", "INSERT INTO", "DETAIL:"):
         assert sensitive not in response.text + caplog.text
+
+
+@pytest.mark.parametrize(
+    "password,accepted",
+    [
+        ("abcdefgh", False),
+        ("Abcdefgh", False),
+        ("abcd1234", False),
+        ("ABCD1234", False),
+        ("        ", False),
+        ("aA      ", False),
+        ("Abcdefg1", True),
+        ("abcdef1!", True),
+        ("ABCDEF1!", True),
+        ("Abcdefg!", True),
+        ("Abcdef1!", True),
+        (" áÉ١    ", True),
+        (" aaAA😀  ", True),
+        (" aA1    ", True),
+    ],
+)
+def test_password_composition_is_sanitized_and_preserves_characters(
+    client, db_session_factory, caplog, password, accepted
+):
+    response = register(client, password=password)
+    assert response.status_code == (201 if accepted else 422)
+    assert password not in response.text + caplog.text
+    if accepted:
+        assert (
+            login(client, HTTPS_ORIGIN, PAYLOAD["email"], password).status_code == 200
+        )
+    else:
+        assert counts(db_session_factory) == (0, 0)
+        assert all(
+            set(detail) == {"loc", "type"} for detail in response.json()["details"]
+        )

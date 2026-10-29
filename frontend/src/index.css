@@ -1,4 +1,8 @@
 :root {
+  color-scheme: light;
+  --color-action: #7330da;
+  --color-action-hover: #6021c0;
+  --color-on-action: #ffffff;
   /* Marca (DESIGN.md §2 e §3). O roxo é assinatura, não massa de fundo. */
   --color-brand: #863bff;
   --color-brand-strong: #7e14ff;
@@ -23,6 +27,27 @@
   --font-display: Georgia, 'Times New Roman', serif;
 
   line-height: 1.5;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-brand: #bca0ef;
+  --color-brand-strong: #c9adff;
+  --color-brand-soft: #30243f;
+  --color-brand-blue: #78cafa;
+  --color-ink: #f0ebf4;
+  --color-text: #ddd6e4;
+  --color-muted: #b2a8bd;
+  --color-canvas: #18151c;
+  --color-surface: #211d26;
+  --color-surface-subtle: #2b2532;
+  --color-border: #514659;
+  --color-success: #90cbaa;
+  --color-warning: #e3c078;
+  --color-danger: #f0a3a3;
+  --color-action: #bca0ef;
+  --color-action-hover: #c9adff;
+  --color-on-action: #21132f;
 }
 
 * {

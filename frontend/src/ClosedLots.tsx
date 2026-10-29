@@ -8,11 +8,12 @@ interface ClosedLotsProps {
   visible: number
   onVisibleChange: (visible: number) => void
   onOpen: (lotId: string) => void
+  announceCount?: boolean
 }
 
 // "Encerrados" (D13): lista densa com os primeiros itens; "Mostrar mais encerrados"
 // revela mais 6, só localmente — a resposta já trouxe todos, então nenhuma chamada nova.
-function ClosedLots({ lots, visible, onVisibleChange, onOpen }: ClosedLotsProps) {
+function ClosedLots({ lots, visible, onVisibleChange, onOpen, announceCount = true }: ClosedLotsProps) {
   const listRef = useRef<HTMLUListElement>(null)
   // Índice do primeiro item revelado, para devolver o foco a ele depois do clique.
   const focusIndexRef = useRef<number | null>(null)
@@ -49,7 +50,7 @@ function ClosedLots({ lots, visible, onVisibleChange, onOpen }: ClosedLotsProps)
             ))}
           </ul>
           <div className="closed-more">
-            <p className="muted" role="status">
+            <p className="muted" role={announceCount ? 'status' : undefined}>
               Mostrando {Math.min(visible, total)} de {total}{' '}
               {total === 1 ? 'encerrado' : 'encerrados'}.
             </p>

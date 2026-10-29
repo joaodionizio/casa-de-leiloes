@@ -5,6 +5,126 @@ import { lotId, makeBids, makeLot, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } f
 
 const LOTS = makeLots({ live: 3, scheduled: 2, ended: 3 })
 
+test.describe('busca e filtro locais (6.5)', () => {
+  const searchableLots = [
+    makeLot(1, 'live', { title: 'Átrio ao sol', artist_display: 'Édouard Manet', date_display: 'Século XIX' }),
+    makeLot(2, 'live', { title: 'Átrio à noite', artist_display: null, date_display: null }),
+    makeLot(101, 'scheduled', { title: 'Jardim', artist_display: 'Édouard Manet', date_display: '1901' }),
+    makeLot(201, 'ended', { title: 'Mar', artist_display: 'Outra artista', date_display: 'Século XIX' }),
+  ]
+
+  test('combina título/artista/data e estado; limpar restaura o snapshot sem consulta ou mutação', async ({ page }) => {
+    const externalRequests: string[] = []
+    page.on('request', request => {
+      if (/artic\.edu/.test(request.url())) externalRequests.push(request.url())
+    })
+    const cancelled = makeLot(99, 'scheduled', { title: 'Obra cancelada' })
+    const api = await mockApi(page, {
+      lots: searchableLots,
+      myLots: [{ ...cancelled, bid_count: 0, cancelled_at: '2026-10-25T14:00:00Z' }],
+    })
+    await page.goto('/')
+    const search = page.getByRole('searchbox', { name: 'Buscar obras' })
+    await expect(page.locator('[data-lot-id]')).toHaveCount(4)
+    const initialReads = api.requests.filter(request => !request.includes('/api/catalog/images/'))
+    await search.fill('  aTRIo  ')
+    await expect(page.locator('[data-lot-id]')).toHaveCount(2)
+    await expect(page.locator('.featured')).toContainText('Átrio ao sol')
+    await expect(page.locator('.rail-live')).toContainText('Átrio à noite')
+    await search.fill('edouard MANET')
+    await expect(page.locator('[data-lot-id]')).toHaveCount(2)
+    await page.getByRole('radio', { name: 'Próximos', exact: true }).check()
+    await expect(search).toHaveValue('edouard MANET')
+    await expect(page.locator('[data-lot-id]')).toHaveCount(1)
+    await expect(page.locator('.featured')).toContainText('Jardim')
+    await expect(page.getByRole('heading', { name: 'Ao vivo', exact: true })).toHaveCount(0)
+    await page.getByRole('radio', { name: 'Encerrados', exact: true }).check()
+    await expect(page.getByRole('heading', { name: 'Nenhum lote encontrado com esses filtros.', exact: true })).toBeVisible()
+    await search.fill('seculo XIX')
+    await expect(page.locator('[data-lot-id]')).toHaveCount(1)
+    await expect(page.locator('.closed-row')).toContainText('Mar')
+    await expect(page.locator('.closed-row')).toContainText('Encerrado, apurando resultado')
+    await page.getByRole('radio', { name: 'Todos', exact: true }).check()
+    await expect(page.locator('[data-lot-id]')).toHaveCount(2)
+    await search.fill(searchableLots[0].id)
+    await expect(page.locator('[data-lot-id]')).toHaveCount(0)
+    await search.fill('cancelada')
+    await expect(page.locator('[data-lot-id]')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Limpar filtros' }).click()
+    await expect(search).toHaveValue('')
+    await expect(search).toBeFocused()
+    await expect(page.getByRole('radio', { name: 'Todos', exact: true })).toBeChecked()
+    await expect(page.locator('[data-lot-id]')).toHaveCount(4)
+    await expect(page.getByRole('button', { name: 'Limpar filtros' })).toHaveCount(0)
+    await expect(page.locator(`[data-lot-id="${cancelled.id}"]`)).toHaveCount(0)
+    expect(api.count('GET /api/lots')).toBe(1)
+    expect(api.requests.filter(request => !request.includes('/api/catalog/images/'))).toEqual(initialReads)
+    expect(externalRequests).toEqual([])
+    expect(api.unexpected).toEqual([])
+  })
+
+  test('Back restaura termo, estado, paginação e foco do lote filtrado', async ({ page }) => {
+    await mockApi(page, { lots: makeLots({ live: 1, ended: 30 }) })
+    await page.goto('/')
+    await page.getByRole('searchbox').fill('Obra de teste 2')
+    await page.getByRole('radio', { name: 'Encerrados', exact: true }).check()
+    await page.getByRole('button', { name: 'Mostrar mais encerrados' }).click()
+    await page.locator(`[data-lot-id="${lotId(211)}"]`).click()
+    await expect(page.locator('#lot-title')).toBeVisible()
+    await page.goBack()
+    await expect(page.getByRole('searchbox')).toHaveValue('Obra de teste 2')
+    await expect(page.getByRole('radio', { name: 'Encerrados', exact: true })).toBeChecked()
+    await expect(page.locator('.closed-row')).toHaveCount(12)
+    await expect(page.locator(`[data-lot-id="${lotId(211)}"]`)).toBeFocused()
+    await page.getByRole('searchbox').fill('Obra de teste 230')
+    await expect(page.locator('.closed-row')).toHaveCount(1)
+    await page.getByRole('searchbox').fill('Obra de teste 2')
+    await expect(page.locator('.closed-row')).toHaveCount(6)
+  })
+
+  for (const width of [1440, 375, 320]) {
+    test(`controles por teclado/toque, seleção além da cor e sem overflow em ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      const api = await mockApi(page, { lots: searchableLots })
+      await page.goto('/')
+      const search = page.getByRole('searchbox', { name: 'Buscar obras' })
+      await search.focus()
+      await search.pressSequentially('seculo')
+      await expect(page.locator('.vitrine-filters [role="status"]')).toBeEmpty()
+      await search.press('Tab')
+      if (width >= 1024) {
+        const all = page.getByRole('radio', { name: 'Todos', exact: true })
+        await expect(all).toBeFocused()
+        expect(await all.evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe('none')
+        await all.press('ArrowRight')
+        await expect(page.getByRole('radio', { name: 'Ao vivo', exact: true })).toBeChecked()
+        const selected = page.locator('.vitrine-phase-option').filter({ has: page.getByRole('radio', { name: 'Ao vivo', exact: true }) })
+        expect(await selected.locator('span').evaluate(node => getComputedStyle(node).textDecorationLine)).toContain('underline')
+        for (const control of await page.locator('.vitrine-phase-option, .vitrine-clear, .vitrine-search input').all()) {
+          expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+        }
+        await page.getByRole('radio', { name: 'Próximos', exact: true }).check()
+      } else {
+        const select = page.getByRole('combobox', { name: 'Estado do lote', exact: true })
+        await expect(select).toBeFocused()
+        await expect(page.locator('.vitrine-filters [role="status"]')).toHaveText('2 lotes encontrados.')
+        expect(await select.evaluate(node => getComputedStyle(node).outlineStyle)).not.toBe('none')
+        expect((await select.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+        await select.selectOption('live')
+        await expect(select).toHaveValue('live')
+        await select.selectOption('scheduled')
+      }
+      await expect(page.getByRole('heading', { name: 'Nenhum lote encontrado com esses filtros.', exact: true })).toBeVisible()
+      await page.getByRole('button', { name: 'Limpar filtros' }).click()
+      await expect(search).toBeFocused()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      expect(api.count('GET /api/lots')).toBe(1)
+      expect(api.requests.some(request => !request.startsWith('GET '))).toBe(false)
+      expect(api.unexpected).toEqual([])
+    })
+  }
+})
+
 test('indicadores decorativos: Ao vivo em toda a Vitrine, Encerrados mais lento e movimento reduzido estático', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' })
   await mockApi(page, { lots: LOTS })
@@ -148,7 +268,7 @@ test.describe('deep-link', () => {
     await expect(
       page.locator('.lot-page-block').getByText('Lance inicial', { exact: true }),
     ).toBeVisible()
-    await expect(page.getByText('Incremento mínimo')).toBeVisible()
+    await expect(page.getByText('Incremento mínimo', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /dar lance/i })).toHaveCount(0)
 
     await page.reload()

@@ -141,7 +141,7 @@ def _verified(lot, bids, settlement, receipt, as_of, integrity):
         return False
     if _structural_conflict(settlement, receipt):
         return False
-    if lot.cancelled_at is not None and (bids or settlement):
+    if lot.cancelled_at is not None and settlement is not None:
         return False
     if settlement:
         if (

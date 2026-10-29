@@ -181,3 +181,19 @@ Após 6.3 paro: agregado em sessão independente; somente depois da aprovação 
 Git/commit/push/merge/deploy manualmente. Após deploy executo 6.4 e concluo
 evidência publicada pendente da 6.1. Épico 6 permanece in-progress. 6.5–6.7
 estão cortadas por prazo. Esta exceção não aprova o agregado nem o ambiente público.
+
+## Fechamento vigente do Épico 6 — 29/10/2026
+
+A exceção acima e suas pendências descrevem a etapa pré-agregado. O agregado
+independente e o re-review foram aprovados; R6-AGG-01/02 resolvidos. A 6.4
+executou o roteiro público anterior e, após redeploy informado pelo usuário,
+revalidou focalmente R6.4-01: **RESOLVED EM PRODUÇÃO**, 11:47 America/Maceio.
+CA2 publicado da 6.1 já comprovado; nenhum novo BLOCKER/HIGH/MEDIUM no recorte.
+
+Por autorização humana explícita condicionada a essa revalidação, 6.1/6.2/6.2A/
+6.3/6.4 e Épico 6 ficam **done**. R6.2-01 LOW aceito preservado. 6.5–6.7
+continuam **cortadas / backlog / não implementadas**. Retrospective opcional.
+Identidade local/main `7c285c3`, reflog de push e publicação funcional observados;
+SHA Render não autenticado e estudo humano individual não confirmado nesta sessão.
+Gates, limites e evidências em [FECHAMENTO-EPICO-6.md](FECHAMENTO-EPICO-6.md).
+Nenhum commit/push/deploy foi executado pelo agente; o registro é documental.

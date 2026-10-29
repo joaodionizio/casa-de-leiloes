@@ -129,3 +129,18 @@ Obrigações para as próximas stories (`spec-story-3-4-lance-transacional/curre
 - 6.1: evidência publicada pendente; 6.4 não executada, reservada a após deploy manual. Épico 6 in-progress.
 - 6.5 busca/filtro, 6.6 cancelamento com estorno, 6.7 dark mode: CORTADAS por prazo, não implementadas.
 - Próximo passo é review agregado independente; Git e deploy manuais só depois da aprovação.
+
+## Épico 6 — fechamento vigente em 29/10/2026
+
+- O registro da 6.3 acima é histórico: agregado e re-review foram aprovados;
+  R6-AGG-01/02 **RESOLVED**. CA2 publicado da 6.1 foi comprovado na 6.4 anterior.
+- R6.4-01, único bloqueio da execução pública anterior: **RESOLVED EM PRODUÇÃO**
+  após revalidação focal às 11:47 America/Maceio. Nenhum novo BLOCKER/HIGH/MEDIUM.
+- 6.1/6.2/6.2A/6.3/6.4 e Épico 6 **done**, por autorização humana condicionada
+  satisfeita. R6.2-01 LOW continua **aceito**, sem correção ou reclassificação.
+- **6.5 busca/filtro, 6.6 cancelamento com estorno e 6.7 dark mode continuam
+  CORTADAS, não implementadas e backlog; nunca done.** Nenhuma dívida nova
+  foi criada pela ausência natural de ended+pending/agendado na revalidação.
+- [Fechamento e limites](../../docs/FECHAMENTO-EPICO-6.md), incluindo identidade
+  Git local/main, relato de redeploy e SHA Render não autenticado. Não houve
+  commit/push/deploy pelo agente nesta sessão.

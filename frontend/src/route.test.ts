@@ -244,6 +244,15 @@ test('readNavState aceita qualquer coisa que não seja objeto', () => {
   }
 })
 
+test('readNavState restaura filtros da Vitrine e descarta tipos/estados inválidos', () => {
+  for (const phase of ['all', 'live', 'scheduled', 'ended']) {
+    assert.deepEqual(readNavState({ vitrineTerm: '  Óleo  ', vitrinePhase: phase }), {
+      vitrineTerm: '  Óleo  ', vitrinePhase: phase,
+    })
+  }
+  assert.deepEqual(readNavState({ vitrineTerm: 12, vitrinePhase: 'cancelled' }), {})
+})
+
 test('auditoria pública tem rota e retorno seguro próprios', () => {
   const route: AppRoute = { kind: 'audit', lotId: LOT_ID }
   assert.deepEqual(parseRoute(`/lots/${LOT_ID}/audit?x=1#top`), route)

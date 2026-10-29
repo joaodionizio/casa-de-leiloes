@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import type { PublicLotSummary, PublicLotsResponse } from './api/publicLots.ts'
 import {
   ENDED_STEP,
+  filterPublicLots,
   initialEndedVisible,
   nextEndedVisible,
   railItems,
@@ -33,6 +34,46 @@ function response(
 ): PublicLotsResponse {
   return { as_of: '2026-10-25T14:00:00Z', live, scheduled, ended }
 }
+
+test('busca título, artista e data textual com trim, sem depender de caixa ou acentos', () => {
+  const data = response([
+    { ...lot('a', 'live'), title: 'Óleo sobre o átrio' },
+    { ...lot('b', 'live'), title: null, artist_display: 'Édouard Manet' },
+  ], [{ ...lot('c', 'scheduled'), date_display: 'Século XIX' }], [])
+  assert.deepEqual(filterPublicLots(data, '  OLEO  ', 'all').live.map((item) => item.id), ['a'])
+  assert.deepEqual(filterPublicLots(data, 'edouard MANET', 'all').live.map((item) => item.id), ['b'])
+  assert.equal(filterPublicLots(data, 'seculo xix', 'all').scheduled[0].id, 'c')
+  assert.deepEqual(filterPublicLots(data, '\t  ', 'all'), data)
+})
+
+test('UUID e datas operacionais não são pesquisáveis; metadados nulos são seguros', () => {
+  const data = response([{ ...lot('uuid-nao-pesquisavel', 'live'), title: null }], [], [])
+  assert.deepEqual(filterPublicLots(data, 'uuid-nao-pesquisavel', 'all').live, [])
+  assert.deepEqual(filterPublicLots(data, '2026-10-25', 'all').live, [])
+})
+
+test('estado e termo fazem interseção sem reclassificar, reordenar ou alterar o snapshot', () => {
+  const data = response(
+    [lot('a', 'live'), lot('b', 'live')],
+    [lot('c', 'scheduled')],
+    [lot('d', 'ended')],
+  )
+  const original = structuredClone(data)
+  const all = filterPublicLots(data, 'obra', 'all')
+  assert.deepEqual(all.live.map((item) => item.id), ['a', 'b'])
+  assert.equal(selectFeatured(all).kind, 'live')
+  const upcoming = filterPublicLots(data, 'obra', 'scheduled')
+  assert.deepEqual(upcoming.live, [])
+  assert.deepEqual(upcoming.ended, [])
+  assert.equal(selectFeatured(upcoming).kind, 'scheduled')
+  assert.equal(upcoming.scheduled[0].phase, 'scheduled')
+  const ended = filterPublicLots(data, 'obra d', 'ended')
+  assert.equal(ended.ended[0].id, 'd')
+  assert.equal(selectFeatured(ended).kind, 'none')
+  assert.deepEqual(filterPublicLots(data, 'obra d', 'live').live, [])
+  assert.deepEqual(filterPublicLots(data, '', 'all'), original)
+  assert.deepEqual(data, original)
+})
 
 test('o destaque é o primeiro ao vivo', () => {
   const featured = selectFeatured(

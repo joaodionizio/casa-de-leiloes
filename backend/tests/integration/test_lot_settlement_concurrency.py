@@ -23,6 +23,7 @@ from tests.bid_support import (
     live_lot,
     lot_state,
     run_bid,
+    tamper,
 )
 from tests.lot_support import db_now
 from tests.settlement_support import (
@@ -327,12 +328,29 @@ def test_pg19_deposit_and_close_use_confirmed_wallet_balance(seeded, db_engine):
     assert wallet_row(seeded, ALICE) == (before[0] + 5000 - 12000, before[1] - 12000)
 
 
-def test_pg21_cancel_first_prevents_unsold_and_close_first_prevents_cancel(
-    seeded, db_engine
+@pytest.mark.parametrize("with_bid", [False, True], ids=["empty", "with-bid"])
+def test_pg21_cancel_first_prevents_settlement_and_close_first_prevents_cancel(
+    seeded, db_engine, with_bid
 ):
     from app.seed import DEMO_AUCTIONEER_ID
 
     lot_id = live_lot(seeded)
+    if with_bid:
+        assert isinstance(run_bid(seeded, lot_id, ALICE, 12000), PlacedBid)
+    deadline = db_now(seeded) + timedelta(seconds=1)
+    tamper(seeded, "UPDATE lots SET ends_at=:end WHERE id=:id", end=deadline, id=lot_id)
+    before = wallet_row(seeded, ALICE)
+
+    def wait_until_due():
+        with seeded() as observer:
+            observer.execute(
+                text(
+                    "SELECT pg_sleep(GREATEST(EXTRACT(EPOCH FROM "
+                    "(CAST(:end AS timestamptz)-clock_timestamp())),0)+0.01)"
+                ),
+                {"end": deadline},
+            )
+
     _, result = overlap(
         seeded,
         db_engine,
@@ -343,9 +361,14 @@ def test_pg21_cancel_first_prevents_unsold_and_close_first_prevents_cancel(
             integrity=integrity(),
         ),
         lambda: run_settle(seeded, lot_id),
+        during=wait_until_due,
     )
     assert result == "lot_cancelled"
-    lot_two = live_lot(seeded)
+    assert wallet_row(seeded, ALICE) == (
+        before[0],
+        before[1] - (12000 if with_bid else 0),
+    )
+    lot_two = sold_lot(seeded) if with_bid else live_lot(seeded)
     expire(seeded, lot_two)
 
     def cancel_second():
@@ -363,6 +386,7 @@ def test_pg21_cancel_first_prevents_unsold_and_close_first_prevents_cancel(
         seeded, db_engine, lambda session: prep(session, lot_two), cancel_second
     )
     assert refusal == CancellationRefusal.LOT_ENDED
+    assert wallet_row(seeded, ALICE) == (before[0] - (12000 if with_bid else 0), 0)
 
 
 def test_pg17_existing_http_reads_never_settle_pending_expired_lot(

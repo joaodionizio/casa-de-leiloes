@@ -1032,6 +1032,18 @@ As stories 6.5 a 6.7 são opcionais e só entram se o obrigatório estiver verde
 (regra de corte do cronograma). O dia 29/10 é buffer: só a 6.4 e correções
 pequenas.
 
+**Reabertura humana posterior ao fechamento obrigatório — 29/10/2026:**
+6.5–6.7 foram inicialmente cortadas por prazo após a entrega obrigatória e posteriormente reativadas por decisão humana para implementar os opcionais.
+Decidi executar 6.5 → focais → 6.6 → focais → 6.7 + footer → focais,
+com um único gate integral do candidato combinado. Não apago o fechamento
+obrigatório já validado em produção. O novo candidato permanece local até review
+agregado independente posterior. Footer é polimento complementar da 6.7, sem
+story numerada nova. Incluí também refinamentos pós-entrega derivados de feedback
+humano externo: senha forte em novos cadastros com confirmação apenas na interface,
+ajuda contextual e contexto financeiro do líder com dados confiáveis. Não os
+atribuo às exigências da Verzel. Descartei reabrir regras de recusa de lance,
+criar novas rotas de escrita ou consultar a AIC nos filtros.
+
 ### Story 6.1: Revisão de segurança e de erros
 
 Como responsável pela entrega,
@@ -1202,3 +1214,14 @@ Decididas na criação da story indicada, não aqui:
   dependência da 4.1 preserva a pergunta original, não reabre a decisão da 3.5.
 - Q5 resolvida nas 3.2/3.4; Q7 na 2.3; Q8 na 2.5; Q10 parcialmente nas
   1.2/2.2/2.4/2.5. Questões realmente abertas: lista viva no `CLAUDE.md`.
+
+
+## Resultado local da reativação — 29/10/2026
+
+Decidi manter 6.5, 6.6 e 6.7 em review e o Épico 6 reaberto/in-progress, após
+implementação, focais, um único VERIFY_E2E=1 ./verify.sh exit 0, real-stack separado
+e inspeção visual. Não executei review independente nesta sessão. 6.1–6.4 e as
+provas publicadas anteriores permanecem preservadas. Footer é polimento da 6.7;
+senha forte/confirmada, ajuda e contexto do líder são refinamentos de feedback
+humano externo, sem nova story ou atribuição à Verzel. Registro completo:
+[fechamento e candidato dos opcionais](../../docs/FECHAMENTO-EPICO-6.md).
