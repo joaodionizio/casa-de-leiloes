@@ -9,7 +9,7 @@ const PASSWORD = 'Demo123!'
 async function signIn(page: Page, email: string, password = PASSWORD) {
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Senha').fill(password)
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 }
 
 test.describe('login e returnTo', () => {
@@ -244,3 +244,87 @@ test.describe('header por papel', () => {
     await expect(page.getByText('Sua sessão expirou. Entre novamente.')).toBeVisible()
   })
 })
+
+for (const [label, email, role] of [
+  ['Leiloeiro', 'auctioneer@example.com', 'Leiloeiro'],
+  ['Licitante 1', 'bidder1@example.com', 'Licitante'],
+  ['Licitante 2', 'bidder2@example.com', 'Licitante'],
+]) {
+  test(`demo ${label}: login JSON direto e retorno ao lote`, async ({ page }) => {
+    const api = await mockApi(page, { lots: LOTS })
+    await page.goto(`/lots/${lotId(2)}`)
+    await page.getByRole('link', { name: 'Entrar', exact: true }).click()
+    const request = page.waitForRequest('**/api/auth/login')
+    await page.getByRole('button', { name: `Entrar como ${label}`, exact: true }).click()
+    const sent = await request
+    expect(sent.method()).toBe('POST')
+    expect(sent.headers()['content-type']).toBe('application/json')
+    expect(sent.postDataJSON()).toEqual({ email, password: PASSWORD })
+    await expect(page).toHaveURL(new RegExp(`/lots/${lotId(2)}$`))
+    await expect(page.getByText(email, { exact: true })).toBeVisible()
+    await expect(page.locator('.site-header').getByText(role, { exact: true })).toBeVisible()
+    expect(api.count('POST /api/auth/login')).toBe(1)
+  })
+}
+
+for (const first of ['manual', 'demo'] as const) {
+  for (const second of ['manual', 'demo'] as const) {
+    test(`login ${first} → ${second}: exclusão mútua síncrona e pendente`, async ({ page }) => {
+      const api = await mockApi(page)
+      const pending = api.hold('POST /api/auth/login')
+      await page.goto('/login')
+      await page.getByLabel('E-mail').fill('bidder1@example.com')
+      await page.getByLabel('Senha').fill(PASSWORD)
+      await page.evaluate(([first, second]) => {
+        const manual = () => document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+        const demo = () => (document.querySelector('.login-demo button') as HTMLButtonElement).click()
+        const run = (kind: string) => kind === 'manual' ? manual() : demo()
+        run(first); run(second)
+      }, [first, second])
+      await expect.poll(() => api.count('POST /api/auth/login')).toBe(1)
+      const active = first === 'manual' ? page.locator('button[type=submit]') : page.locator('.login-demo button').first()
+      await expect(active).toHaveText('Entrando…')
+      for (const button of await page.locator('.login-form button').all()) await expect(button).toBeDisabled()
+      await page.locator('form').dispatchEvent('submit')
+      expect(api.count('POST /api/auth/login')).toBe(1)
+      pending.fail()
+      await expect(page.getByRole('alert')).toContainText('Não foi possível falar com o servidor')
+      for (const button of await page.locator('.login-form button').all()) await expect(button).toBeEnabled()
+      await signIn(page, 'bidder1@example.com')
+      await expect(page).toHaveURL(/\/$/)
+      expect(api.count('POST /api/auth/login')).toBe(2)
+    })
+  }
+}
+
+for (const failure of ['401', '503', 'network']) {
+  test(`demo: erro ${failure} anunciado sem retry e controles liberados`, async ({ page }) => {
+    await mockApi(page)
+    let calls = 0
+    await page.route('**/api/auth/login', route => {
+      calls++
+      return failure === 'network' ? route.abort('failed') : route.fulfill({ status: Number(failure), json: { status: Number(failure), code: 'invalid_credentials' } })
+    })
+    await page.goto('/login')
+    await page.getByRole('button', { name: 'Entrar como Licitante 2', exact: true }).click()
+    await expect(page.getByRole('alert')).toContainText(failure === '401' ? 'E-mail ou senha inválidos.' : 'Não foi possível falar com o servidor')
+    for (const button of await page.locator('.login-form button').all()) await expect(button).toBeEnabled()
+    expect(calls).toBe(1)
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByRole('button', { name: 'Entrar como Licitante 2', exact: true })).toBeFocused()
+    await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+    await expect(page.getByLabel('E-mail')).toBeFocused()
+    expect(calls).toBe(1)
+  })
+}
+
+for (const target of ['https://evil.example/', '/auctioneer/lots']) {
+  test(`demo respeita retorno seguro/papel: ${target}`, async ({ page }) => {
+    await mockApi(page)
+    await page.goto('/login')
+    await page.evaluate(returnTo => history.replaceState({ returnTo }, '', '/login'), target)
+    await page.reload()
+    await page.getByRole('button', { name: 'Entrar como Licitante 1', exact: true }).click()
+    await expect(page).toHaveURL(/\/$/)
+  })
+}

@@ -6,8 +6,6 @@ import type { ConnectionState } from './lotRoomSocket'
 import BidForm from './BidForm'
 import type { BidNotice } from './bidFeedback'
 import type { BidPosition } from './bidPosition'
-import CountdownTimer from './CountdownTimer'
-import type { CountdownAnchor } from './countdown'
 import { formatDateTime, formatClock } from './lotTime'
 import { formatCents } from './money'
 
@@ -27,7 +25,6 @@ interface LotBidPanelProps {
   startingBidCents: number
   startsAt: string
   room: BidRoom
-  anchor: CountdownAnchor | null
   zeroConfirming: boolean
   zeroFailed: boolean
   // 201 aplicado, releitura pública ainda pendente ou falha: mínimo e posição ocultos.
@@ -51,7 +48,6 @@ interface LotBidPanelProps {
   onAmountChange: (value: string) => void
   onSubmit: () => void
   onRefresh: () => void
-  onZero: () => void
 }
 
 const POSITION_TEXT: Record<Exclude<BidPosition, 'hidden' | 'neutral'>, string> = {
@@ -80,9 +76,8 @@ function LotBidPanel(props: LotBidPanelProps) {
         <p className="room-phase-note">Os lances abrem em {formatDateTime(props.startsAt)}</p>
       )}
       {room.phase === 'ended' && (
-        <p className="room-phase-note">Encerrado, apurando resultado</p>
+        <p className="room-phase-note">{room.settlement_status === 'settled' ? 'Encerrado' : 'Encerrado, apurando resultado'}</p>
       )}
-      {live && <CountdownTimer anchor={props.anchor} onZero={props.onZero} />}
       {live && props.zeroConfirming && (
         <p role="status" className="muted">
           Confirmando encerramento com o servidor…
@@ -102,12 +97,7 @@ function LotBidPanel(props: LotBidPanelProps) {
           </dd>
           {room.current_bid_cents === null && <dd className="muted">Sem lances ainda</dd>}
         </div>
-        {room.phase !== 'ended' && (
-          <div>
-            <dt>Próximo lance mínimo</dt>
-            <dd className="bid-minimum">{minimumText}</dd>
-          </div>
-        )}
+
       </dl>
 
       {viewer === 'bidder' && props.position === 'winning' && (
@@ -116,6 +106,14 @@ function LotBidPanel(props: LotBidPanelProps) {
       {viewer === 'bidder' && props.position === 'outbid' && (
         <p className="bid-position bid-position-outbid">{POSITION_TEXT.outbid}</p>
       )}
+      <dl className="bid-figures">
+        {room.phase !== 'ended' && (
+          <div>
+            <dt>Próximo lance mínimo</dt>
+            <dd className="bid-minimum">{minimumText}</dd>
+          </div>
+        )}
+      </dl>
       {viewer === 'bidder' && props.participationUnavailable && (
         <p className="muted">Não foi possível carregar sua participação.</p>
       )}

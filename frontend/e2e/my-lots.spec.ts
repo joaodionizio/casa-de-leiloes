@@ -320,7 +320,7 @@ test.describe('resultado persistido e atualização (4.5)', () => {
 
   for (const width of [320, 375, 1440]) {
     test(`50 resultados, valor máximo e imagem falha em ${width}px`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 900 })
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 })
       await mockApi(page, owner('ok', { images: 'broken', myLots: Array.from({ length: 50 }, (_, index) => myLot(index + 1, 'ended', { title: index === 0 ? LONG_TITLE : `Obra de teste ${index + 1}`, bid_count: 3, settlement: { ...SOLD, final_amount_cents: index === 0 ? Number.MAX_SAFE_INTEGER - 49 * 13000 : 13000 } })) }))
       await page.goto(PATH)
       await expect(page.locator('li.lot-row')).toHaveCount(50)

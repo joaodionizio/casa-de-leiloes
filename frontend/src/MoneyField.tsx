@@ -4,6 +4,7 @@ import { formatCents, moneyErrorMessage, parseReaisToCents } from './money'
 interface MoneyFieldProps {
   id: string
   label: string
+  description?: string
   value: string
   // Erro vindo do "Revisar lote" ou do servidor; tem prioridade sobre o feedback vivo.
   error: string | undefined
@@ -27,12 +28,14 @@ interface MoneyFieldProps {
 function MoneyField({
   id,
   label,
+  description,
   value,
   error,
   inputRef,
   onChange,
   readOnly = false,
 }: MoneyFieldProps) {
+  const descriptionId = `${id}-description`
   const hintId = `${id}-hint`
   const feedbackId = `${id}-feedback`
   const parsed = parseReaisToCents(value)
@@ -61,9 +64,10 @@ function MoneyField({
           readOnly={readOnly}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={invalidMessage !== undefined}
-          aria-describedby={hasFeedback ? `${hintId} ${feedbackId}` : hintId}
+          aria-describedby={[description ? descriptionId : null, hintId, hasFeedback ? feedbackId : null].filter(Boolean).join(' ')}
         />
       </div>
+      {description && <p id={descriptionId} className="field-hint muted">{description}</p>}
       <p id={hintId} className="field-hint muted">
         Digite o valor em reais. Use vírgula para centavos. Ex.: 5,50 ou 1.250,00.
       </p>

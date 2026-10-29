@@ -58,7 +58,7 @@ async function leaveAndReturn(page: Page) {
 async function signIn(page: Page, email: string) {
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Senha').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 }
 
 test.describe('papéis', () => {
@@ -306,7 +306,9 @@ test.describe('contagem', () => {
     await openRoom(page)
     await page.clock.runFor(4_000)
 
-    await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+    await expect(page.locator('.lot-page-status .lot-state')).toHaveText('Encerrado, apurando resultado')
+    await expect(page.locator('.room-phase-note')).toHaveText('Encerrado, apurando resultado')
+    await expect(page.getByRole('timer')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Dar lance' })).toHaveCount(0)
 
     const before = api.count(ROOM)
@@ -518,7 +520,9 @@ test.describe('posição e participação', () => {
     await openRoom(page, lotId(201))
 
     await expect(page.getByText('Seu último lance:')).toHaveText('Seu último lance: R$ 110,00')
-    await expect(page.getByText('Encerrado, apurando resultado').first()).toBeVisible()
+    await expect(page.locator('.lot-page-status .lot-state')).toHaveText('Encerrado, apurando resultado')
+    await expect(page.locator('.room-phase-note')).toHaveText('Encerrado, apurando resultado')
+    await expect(page.getByRole('timer')).toHaveCount(0)
     await expect(page.getByLabel('Valor do lance')).toHaveCount(0)
     await expect(page.locator('.bid-history-list')).not.toContainText(OWN_ALIAS)
     const text = await page.locator('.bid-panel').innerText()
@@ -592,11 +596,11 @@ test.describe('sessão', () => {
 })
 
 test.describe('layout', () => {
-  for (const width of [320, 1280]) {
+  for (const width of [320, 375, 1440]) {
     test(`${width}px: sem overflow, painel antes do histórico, alvos de 44 px`, async ({
       page,
     }) => {
-      await page.setViewportSize({ width, height: 800 })
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 })
       const long = makeLot(1, 'live', { title: LONG_TITLE })
       await mockApi(
         page,
@@ -617,6 +621,15 @@ test.describe('layout', () => {
       expect(panel).not.toBeNull()
       expect(history).not.toBeNull()
       expect(history!.y).toBeGreaterThan(panel!.y)
+      await expect(page.locator('#lot-title')).toHaveText(LONG_TITLE)
+      await expect(page.getByRole('timer')).toHaveCount(1)
+      await expect(page.getByRole('timer')).toHaveAttribute('aria-live', 'off')
+      const timer = await page.getByRole('timer').boundingBox()
+      const art = await page.locator('.lot-page-art').boundingBox()
+      const title = await page.locator('#lot-title').boundingBox()
+      expect(timer!.y + timer!.height).toBeLessThan(title!.y)
+      if (width < 1024) expect(timer!.y + timer!.height).toBeLessThan(art!.y)
+      await expect(page.locator('.bid-history li')).toHaveCount(50)
       for (const name of ['Dar lance', 'Atualizar sala']) {
         const box = await page.getByRole('button', { name }).boundingBox()
         expect(box!.height).toBeGreaterThanOrEqual(43.5)
@@ -629,7 +642,7 @@ test.describe('hierarquia no celular (320 px)', () => {
   test('estado e prazo, obra, título, painel e histórico, nessa ordem e com um só timer', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 320, height: 800 })
+    await page.setViewportSize({ width: 320, height: 812 })
     await mockApi(page, bidder({ rooms: { [LOT]: { bids: makeBids(3, 11_000) } } }))
     await openRoom(page)
 

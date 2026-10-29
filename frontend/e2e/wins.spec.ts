@@ -16,7 +16,7 @@ test('anonymous returns after login; auctioneer never calls wins', async ({ page
   await expect(page).toHaveURL(/\/login$/)
   await page.getByLabel('E-mail').fill('bidder1@example.com')
   await page.getByLabel('Senha').fill('Demo123!')
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await expect(page).toHaveURL(/\/bidder\/wins$/)
   await expect(page.getByRole('heading', { name: 'Meus arremates' })).toBeVisible()
   const other = await page.context().newPage()
@@ -73,13 +73,20 @@ test('expired session returns to login', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByText(/sessão expirou/i)).toBeVisible()
 })
-test('50 long titles fit at 320px and desktop', async ({ page }) => {
+test('50 long titles and large amounts fit at 320/375/1440px', async ({ page }) => {
   await mockApi(page, { session: 'BIDDER' })
-  await winsApi(page, Array.from({ length: 50 }, (_, i) => ({ ...WIN, lot_id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, title: 'Uma obra de título longo '.repeat(8) })))
-  for (const width of [320, 1440]) {
-    await page.setViewportSize({ width, height: 900 })
+  await winsApi(page, Array.from({ length: 50 }, (_, i) => ({ ...WIN, lot_id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`, title: 'Uma obra de título longo '.repeat(8), final_amount_cents: Number.MAX_SAFE_INTEGER })))
+  for (const width of [320, 375, 1440]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 })
     await page.goto('/bidder/wins')
     await expect(page.locator('.my-win')).toHaveCount(50)
+    await expect(page.locator('.my-win h2').first()).toHaveAccessibleName('Uma obra de título longo '.repeat(8).trim())
+    for (const action of await page.locator('.my-win').first().locator('a, button').all()) {
+      await action.scrollIntoViewIfNeeded()
+      expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(43)
+      await action.focus()
+      expect(await action.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('solid')
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   }
 })

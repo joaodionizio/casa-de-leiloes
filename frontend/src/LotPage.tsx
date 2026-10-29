@@ -9,6 +9,7 @@ import { fetchWallet, type WalletResponse } from './api/wallet'
 import AppLink from './AppLink'
 import ArtworkImage from './ArtworkImage'
 import BidHistory from './BidHistory'
+import CountdownTimer from './CountdownTimer'
 import {
   ambiguousNotice,
   failureBelongsToField,
@@ -828,7 +829,10 @@ function LotPage({
 
   const roomStatus = roomData === null ? null : (
     <div className="lot-page-status">
-      <LotState phase={roomData.phase} />
+      <LotState phase={roomData.phase} text={roomData.phase === 'ended' && roomData.settlement_status === 'settled' ? 'Encerrado' : undefined} />
+      {roomData.phase === 'live' && roomData.settlement_status === 'pending' && (
+        <CountdownTimer anchor={anchor} onZero={handleZero} />
+      )}
       {when !== null && <p className="lot-page-when">{when}</p>}
     </div>
   )
@@ -888,7 +892,6 @@ function LotPage({
               startingBidCents={lot.starting_bid_cents}
               startsAt={lot.starts_at}
               room={roomData}
-              anchor={anchor}
               zeroConfirming={zeroReached && sync !== 'failed'}
               zeroFailed={zeroReached && sync === 'failed'}
               overlay={overlay}
@@ -909,7 +912,6 @@ function LotPage({
               onAmountChange={handleAmountChange}
               onSubmit={handleSubmit}
               onRefresh={refreshRoom}
-              onZero={handleZero}
             />
           )}
         </div>

@@ -22,7 +22,7 @@ const VIEWPORTS = [
 
 // Vitrine de estresse: título longo, valor máximo, vários lotes em cada grupo.
 function stressLots(): MockLot[] {
-  const lots = makeLots({ live: 5, scheduled: 4, ended: 9 })
+  const lots = makeLots({ live: 5, scheduled: 20, ended: 50 })
   lots[0] = makeLot(1, 'live', {
     title: LONG_TITLE,
     starting_bid_cents: MAX_CENTS,
@@ -140,7 +140,7 @@ for (const viewport of VIEWPORTS) {
       const art = await box(page, '.featured-art')
       const info = await box(page, '.featured-info')
       if (viewport.wide) {
-        expect(info.x).toBeGreaterThanOrEqual(art.right - TOLERANCE)
+        expect(art.x).toBeGreaterThanOrEqual(info.right - TOLERANCE)
         // A obra domina: cerca de 60% da largura do destaque.
         const featured = await box(page, '.featured')
         expect(art.width / featured.width).toBeGreaterThan(0.5)
@@ -368,4 +368,75 @@ test.describe('um lote ao vivo no celular ocupa a largura útil', () => {
 
     expect(card.width / rail.width).toBeGreaterThan(0.9)
   })
+})
+
+for (const width of [1440, 768, 375, 320]) {
+  test(`hero típico ${width}: ação no primeiro viewport e foco sem bloqueio`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 })
+    await mockApi(page, { lots: makeLots({ live: 5, scheduled: 20, ended: 50 }) })
+    await page.goto('/')
+    const cta = page.locator('.featured-cta')
+    await expect(cta).toBeVisible()
+    const bounds = await cta.boundingBox()
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(width === 1440 ? 900 : 812)
+    await cta.focus()
+    expect(await cta.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('solid')
+    expect(await cta.evaluate(node => {
+      const r = node.getBoundingClientRect()
+      return node.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2))
+    })).toBe(true)
+    await expect(page.locator('.closed-row')).toHaveCount(6)
+    await page.getByRole('button', { name: /Mostrar mais/ }).click()
+    await expect(page.locator('.closed-row')).toHaveCount(12)
+    await expect(page.locator('.rail-upcoming .rail-item')).toHaveCount(20)
+    await page.locator('.rail-upcoming .rail-item').last().focus()
+    expect(await horizontalOverflow(page)).toEqual({ page: width, width })
+    expect(await elementsBeyondViewport(page)).toEqual([])
+  })
+}
+
+for (const [shape, w, h] of [['paisagem', 1000, 670], ['retrato', 843, 1074], ['quadrada', 1000, 960]] as const) {
+  test(`hero ${shape}: contain, transição segura e caixa estável após mídia lenta`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const lot = makeLot(1, 'live')
+    await mockApi(page, { lots: [lot] })
+    let release = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let downloads = 0
+    await page.route(`**${lot.image_url}`, async route => {
+      downloads++
+      await gate
+      await route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="#967350"/></svg>` })
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.featured-info')).toBeVisible()
+    const before = await box(page, '.featured-info')
+    release()
+    await expect.poll(() => page.locator('.featured-art img').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(w)
+    expect(await box(page, '.featured-info')).toEqual(before)
+    expect(downloads).toBe(1)
+    expect(await page.locator('.featured-art img').evaluate(node => getComputedStyle(node).objectFit)).toBe('contain')
+    const transition = await page.locator('.featured-art').evaluate(node => ({
+      content: getComputedStyle(node, '::after').content,
+      pointerEvents: getComputedStyle(node, '::after').pointerEvents,
+    }))
+    if (shape === 'paisagem') {
+      expect(transition.content).toBe('""')
+      expect(transition.pointerEvents).toBe('none')
+    } else expect(transition.content).toBe('none')
+    for (const width of [375, 320]) {
+      await page.setViewportSize({ width, height: 812 })
+      expect(await page.locator('.featured-art').evaluate(node => getComputedStyle(node, '::after').content)).toBe('none')
+      expect(await elementsBeyondViewport(page)).toEqual([])
+    }
+  })
+}
+
+test('hero 503: fallback legível sem transição e CTA funcional', async ({ page }) => {
+  await mockApi(page, { lots: makeLots({ live: 1 }), images: 'broken' })
+  await page.goto('/')
+  await expect(page.locator('.featured-art')).toContainText('Imagem indisponível')
+  expect(await page.locator('.featured-art').evaluate(node => getComputedStyle(node, '::after').content)).toBe('none')
+  await page.locator('.featured-cta').click()
+  await expect(page).toHaveURL(new RegExp(`/lots/${lotId(1)}$`))
 })

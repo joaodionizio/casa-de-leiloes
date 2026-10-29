@@ -21,7 +21,7 @@ async function deposit(page: Page, amount: string) {
 async function signIn(page: Page, email: string) {
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Senha').fill(PASSWORD)
-  await page.getByRole('button', { name: 'Entrar' }).click()
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
 }
 
 interface Rect {

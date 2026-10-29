@@ -22,11 +22,12 @@ interface ArtworkImageProps {
 // do título). `large` (destaque e página do lote) carrega de imediato.
 function ArtworkImage({ src, alt, variant }: ArtworkImageProps) {
   const [failed, setFailed] = useState(false)
+  const [landscape, setLandscape] = useState(false)
   const large = variant === 'large'
 
   return (
     <>
-      <span className={`artwork-image artwork-image-${variant}`}>
+      <span className={`artwork-image artwork-image-${variant}`} data-failed={failed} data-landscape={landscape}>
         <img
           src={failed ? PLACEHOLDER_SRC : src}
           alt={failed ? '' : alt}
@@ -35,6 +36,7 @@ function ArtworkImage({ src, alt, variant }: ArtworkImageProps) {
           decoding="async"
           loading={large ? 'eager' : 'lazy'}
           referrerPolicy="no-referrer"
+          onLoad={(event) => setLandscape(event.currentTarget.naturalWidth > event.currentTarget.naturalHeight * 1.1)}
           onError={() => setFailed(true)}
         />
       </span>

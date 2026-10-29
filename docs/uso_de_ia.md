@@ -1926,3 +1926,165 @@ arquivos; depois disso não executou Git/gh. Não houve leitura de `.env*`,
 credenciais ou exposição de segredos/cookies/tokens reais. Evidência completa:
 `_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md`.
 
+## Especificação da Story 6.2 — 28/10/2026
+
+Usei Codex com a skill local `bmad-spec` para preparar exclusivamente identidade
+visual e responsividade. Decidi auditar o frontend vivo antes de propor mudanças;
+descartei reescrever telas já conformes ou usar referências como autorização para
+funcionalidades novas. Contrato completo em
+`_bmad-output/specs/spec-story-6-2-identidade-visual-e-responsividade/`:
+kernel, estado atual, mudanças mínimas e matrizes/plano de provas.
+
+A IA leu as fontes obrigatórias, componentes/tokens, testes frontend e artefatos
+das telas. Inspecionou as seis telas e login em Chromium a 1440/768/375/320, com
+API simulada, volumes e textos adversos; também percorreu a criação e conferiu
+três proporções de imagem com arquivos locais existentes. Não apareceu overflow
+global nas amostras; isso não comprova aceite visual de todos os estados. Foram
+identificados gaps de hierarquia do timer/títulos, links com estilo padrão do
+navegador, alvos em arremates, microcopy e provas faltantes. Nenhum código de
+produto ou teste foi implementado/alterado.
+
+Autorizei incluir a correção de apresentação da Sala: ended+pending mantém
+“Encerrado, apurando resultado”; ended+settled mostra “Encerrado”, preservando
+resultado recebido. Descartei mudar genericamente phaseStatusText(ended) ou alterar
+backend/settlement. A SPEC registra a expectativa legada da 4.4 desatualizada e
+exige provar os dois estados no futuro build, mantendo as regressões terminais.
+Enviei também a imagem ÁTRIO com o hero marcado; ela confirma a composição e o
+fade, sem autorizar copiar ativos ou controles da referência.
+
+A IA confirmou as três contas públicas no seed/README e a ausência de endpoint
+real de cadastro. Especificou login demo pelo fluxo existente, sem sessão paralela;
+cadastro ficou apenas como candidata funcional separada, sem tela/link morto.
+Dos benchmarks públicos, Vercel e Railway abriram e foram usados somente para
+responsividade; Render mostrou apenas 503/Application loading. Não houve login
+nesses serviços nem cópia de sua identidade/conteúdo.
+
+Baseline realmente executada: lint e typecheck exit 0, npm test 192 pass/0 fail,
+npm run build exit 0, Playwright 265 passed/5 skipped em 34,9 s, exit 0. Os skips
+são real-stack opt-in. A primeira tentativa Playwright parou por bind EPERM;
+a reexecução permitida passou. O navegador integrado não conectou; as sondas
+usaram Playwright já instalado e dados simulados, com evidências temporárias.
+Não executei verify completo/backend/PostgreSQL/Docker, real-stack ou deploy
+nesta especificação. Esses resultados são baseline, não prova do futuro build.
+
+Mantive a 6.1 intocada em review, com o gate publicado reservado a deploy/6.4,
+e a 6.2 em backlog no sprint. Não iniciei 6.3, não chamei bmad-build, não executei
+Git/gh/commit/push/merge/deploy nem li .env* ou credenciais privadas. A SPEC aguarda
+minha revisão integral e autorização posterior de implementação.
+
+
+## Build da Story 6.2 — 28/10/2026
+
+Autorizei Codex com `bmad-build` para implementar exclusivamente a SPEC aprovada
+com minimum diff. Decidi refinar o hero ÁTRIO, antecipar o único timer da Sala,
+corrigir QH-01 nas duas regiões visíveis, explicar os campos monetários e oferecer
+três contas demo pelo login existente. Descartei redesign geral, cadastro,
+autenticação alternativa, backend novo e funcionalidades de outras stories.
+
+A implementação foi delegada conforme a skill. O subagente atingiu limite de uso
+após os focais; o agente principal conferiu o diff sem Git, completou um ajuste de
+foco do login manual após falha demo e executou a verificação final. Preservei a
+baseline da 4.2 e autorizei uma pasta exclusiva de baseline para a 6.2. Nenhum
+code review independente foi executado.
+
+Implementei hero 40/60 com branco e fade estreito condicionado a imagem paisagem
+carregada; retrato/quase quadrada/fallback/mobile ficam sem efeito. A obra continua
+em contain, sem alteração de bytes nem download decorativo. Mantive o h1 integral
+da Sala, a mesma anchor/onZero e a lógica REST/WS. Pending diz “Encerrado, apurando
+resultado”; settled sold/unsold diz “Encerrado” nas duas regiões, sem “apurando”.
+MoneyField acumula descrição+dica+feedback, e manual/demos compartilham uma guarda
+síncrona. Carteira/Painel ficaram estruturalmente intactos.
+
+Resultados reais: focal inicial 174 passed/4 falhas de seletor novo de criação,
+corrigidas sem mudar a interface; focal final 240 passed; focal de sessão após
+ajuste final 25 passed, exit 0. `VERIFY_E2E=1 ./verify.sh` final exit 0: 2343 pytest,
+192 Node, 291 Playwright passed/5 skipped real-stack opt-in, Ruff/formato,
+ESLint/TypeScript, Vite e Docker aprovados. Executei em cópia isolada sem dotenv,
+com PostgreSQL de teste e fontes conferidas por SHA-256 (256 arquivos, zero
+divergências). Restaurei o mount original do PostgreSQL, Healthy/exit 0.
+
+A sonda estrutural mediu 28 cenários sem overflow global/descendentes críticos fora
+do viewport. Preparei screenshots temporárias do hero 1440/768/375/320, Sala,
+login e criação com obras locais e API simulada. O navegador integrado não
+conectou; usei Playwright existente. Os focais tiveram bloqueio inicial EPERM na
+porta local, superado pela execução permitida; a primeira captura teve seletor
+incorreto do searchbox, corrigido apenas no script temporário.
+
+Mantenho a 6.2 in-progress aguardando meu aceite visual; não declaro done nem pronta
+para review independente. Preservei 6.1 review, Épico 6 in-progress e 6.3 backlog.
+Não executei Git/gh/commit/push/merge/deploy nem li dotenv/credenciais privadas.
+Não houve regressão funcional nos gates; produção e aceite humano não são
+inferidos deles. Evidência completa, arquivos e limites em
+`_bmad-output/specs/spec-story-6-2-identidade-visual-e-responsividade/implementation-evidence.md`.
+
+
+### Story 6.2 — polimento das seções antes do aceite visual
+
+Solicitei indicadores decorativos discretos na Vitrine: ponto roxo respirando
+em 1,8s apenas em Ao vivo, relógio lilás estático em Próximos lotes e ponto
+avermelhado estático em Encerrados. Decidi usar CSS com markup mínimo e
+aria-hidden; descartei glow, biblioteca de ícones e animação contínua no relógio.
+A preferência de movimento reduzido remove a animação mantendo indicador/textos.
+
+Codex alterou App.css, LotRail.tsx, ClosedLots.tsx e o focal vitrine.spec.ts.
+Lint/typecheck passaram (exit 0); Playwright vitrine/layout/keyboard: 60 passed
+em 6.9s, exit 0. O teste novo prova nomes acessíveis, decoração oculta da árvore
+acessível, ausência de mudança da caixa e desligamento da animação em reduced motion.
+Screenshots novas em 1440×900,375×812,320×812 usam API simulada/obras locais e
+não mostram overflow global. Versões completas incluem as três seções.
+
+Não repeti verify completo nesta rodada, conforme solicitei para avaliar primeiro
+a estética. O gate anterior não comprova este novo candidato; após meu aceite
+visual será necessário renová-lo antes do code review independente. Mantenho
+Story/SPEC/sprint in-progress e não iniciei review ou outra story. Evidências e
+caminhos temporários no adendo de implementation-evidence.md da 6.2.
+
+### Story 6.2 — refinamento final dos indicadores
+
+Aprovei o primeiro polimento e solicitei a respiração roxa em todas as ocorrências
+Ao vivo da Vitrine, incluindo hero/itens, e vermelho mais evidente com fade lento
+em Encerrados. A instrução nova substituiu minha preferência anterior por vermelho
+estático. Codex alterou apenas App.css e o focal vitrine.spec.ts, além dos registros.
+Decidi reaproveitar os marcadores aria-hidden e o token danger, sem novo markup,
+dependência ou cor neon. Ao vivo respira em 1,8s; Encerrados varia só opacidade
+entre 1 e 0,85 em 2,8s. O relógio lilás permanece estático e reduced motion remove
+ambas as animações. A Sala não recebe a animação restrita à Vitrine.
+
+Lint/typecheck exit 0; Playwright vitrine/layout: 51 passed,7.0s,exit 0.
+O teste cobre todos os pontos ao vivo da fixture, ritmo lento de Encerrados,
+movimento reduzido e isolamento da Sala. Screenshots novas do primeiro viewport
+e página completa em 1440/375/320 não apresentam overflow global. Registrei os
+caminhos no adendo de implementation-evidence.md da 6.2. Não repeti verify completo
+nem iniciei review; aguardo meu aceite visual final antes de renovar os gates.
+
+
+### Story 6.2 — aceite visual FINAL e gate pós-build
+
+Concedi o aceite visual humano FINAL de hero ÁTRIO, responsividade, Sala,
+microcopy, login demo e indicadores finais. Aprovei a respiração roxa de 1,8s
+em todas as ocorrências pertinentes de Ao vivo na Vitrine, o vermelho mais
+evidente com fade contido de 2,8s em Encerrados e o relógio lilás estático em
+Próximos. A preferência reduced motion desliga as animações decorativas, com
+textos/indicadores preservados. Proibi novos ajustes visuais por iniciativa da IA.
+
+Codex executou novamente `VERIFY_E2E=1 ./verify.sh` completo após esse aceite,
+sem corrigir ou alterar código/testes. Resultado real: **exit 0**, **2343 pytest
+passed** (um warning preexistente, 138.46s), **192 Node pass/0 fail/0 skipped** e
+**292 Playwright passed/5 skipped** (30.6s). Ruff e formatação (110 arquivos),
+lint, typecheck, build Vite e Docker passaram. Nenhuma regressão foi observada.
+O teste dos indicadores/reduced motion integrou essa execução completa.
+
+Decidi manter a execução na raiz de uma cópia isolada idêntica sem dotenv/
+credenciais, como no gate anterior, para evitar os loaders automáticos. Foram
+conferidos 256 arquivos por SHA-256, sem divergência entre o candidato original
+e a cópia. Usei PostgreSQL de teste e valores locais fictícios documentados;
+restaurei depois o bind mount original, Healthy/exit 0, preservando o volume.
+
+Atualizei somente SPEC/evidência/artefato/sprint da 6.2 e este registro. Deixei
+Story/sprint **review**, SPEC **in-review**, pronta para review independente;
+não executei esse review nem marquei done. Mantive 6.1 review, Épico 6 in-progress
+e 6.3 backlog. Os cinco real-stack opt-in não executados e a ausência de prova
+publicada continuam limitações explícitas. Não executei Git/gh/commit/push/merge/
+deploy ou leitura de dotenv. Evidência vigente no adendo final de
+`_bmad-output/specs/spec-story-6-2-identidade-visual-e-responsividade/implementation-evidence.md`.
+

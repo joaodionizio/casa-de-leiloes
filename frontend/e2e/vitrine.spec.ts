@@ -5,6 +5,58 @@ import { lotId, makeBids, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './su
 
 const LOTS = makeLots({ live: 3, scheduled: 2, ended: 3 })
 
+test('indicadores decorativos: Ao vivo em toda a Vitrine, Encerrados mais lento e movimento reduzido estático', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await mockApi(page, { lots: LOTS })
+  await page.goto('/')
+
+  for (const name of ['Ao vivo', 'Próximos lotes', 'Encerrados']) {
+    const heading = page.getByRole('heading', { name, exact: true, level: 2 })
+    await expect(heading).toHaveAccessibleName(name)
+    await expect(heading.locator('.vitrine-section-indicator')).toHaveAttribute('aria-hidden', 'true')
+  }
+  const live = page.locator('#live-heading .vitrine-section-indicator')
+  const animationNames = () => page.locator('.vitrine-section-indicator').evaluateAll(nodes =>
+    nodes.map(node => getComputedStyle(node, '::before').animationName),
+  )
+  expect(await animationNames()).toEqual(['vitrine-live-breathe', 'none', 'vitrine-ended-breathe'])
+  expect(await page.locator('.vitrine-section-indicator-ended').evaluate(node =>
+    getComputedStyle(node, '::before').animationDuration,
+  )).toBe('2.8s')
+  const lotDots = page.locator('.vitrine .lot-state-dot')
+  await expect(lotDots).toHaveCount(3) // Hero e dois itens ao vivo, sem duplicar o destaque.
+  for (const dot of await lotDots.all()) {
+    await expect(dot).toHaveAttribute('aria-hidden', 'true')
+    expect(await dot.evaluate(node => getComputedStyle(node).animationName)).toBe('vitrine-live-breathe')
+  }
+  const before = await live.boundingBox()
+  await live.evaluate(node => {
+    for (const animation of node.getAnimations({ subtree: true })) {
+      animation.pause()
+      animation.currentTime = 900
+    }
+  })
+  expect(await live.boundingBox()).toEqual(before)
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await animationNames()).toEqual(['none', 'none', 'none'])
+  await expect(live).toBeVisible()
+  expect(await page.locator('.vitrine-section-indicator').evaluateAll(nodes =>
+    nodes.flatMap(node => node.getAnimations({ subtree: true })).length,
+  )).toBe(0)
+  for (const dot of await lotDots.all()) {
+    await expect(dot).toBeVisible()
+    expect(await dot.evaluate(node => getComputedStyle(node).animationName)).toBe('none')
+  }
+
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.locator('.featured-cta').click()
+  await expect(page.locator('.lot-page .lot-state-dot')).toBeVisible()
+  expect(await page.locator('.lot-page .lot-state-dot').evaluate(node =>
+    getComputedStyle(node).animationName,
+  )).toBe('none')
+})
+
 test.describe('anônimo', () => {
   test('abre a vitrine sem forçar login e sem controles do leiloeiro', async ({
     page,

@@ -62,7 +62,10 @@ function LotRail({ headingId, title, kind, lots, emptyText, onOpen }: LotRailPro
   return (
     <section className="vitrine-section" aria-labelledby={headingId}>
       <div className="vitrine-section-head">
-        <h2 id={headingId}>{title}</h2>
+        <h2 id={headingId}>
+          <span className={`vitrine-section-indicator vitrine-section-indicator-${kind}`} aria-hidden="true" />
+          {title}
+        </h2>
         {hasItems && scroll.overflow && (
           <div className="rail-controls">
             <button

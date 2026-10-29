@@ -106,6 +106,7 @@ function LotForm({ artwork, draft, serverProblems, onReview, onBack }: LotFormPr
             <MoneyField
               id="lot-starting-bid"
               label="Lance inicial"
+              description="Valor mínimo aceito para o primeiro lance deste lote."
               value={values.startingBid}
               error={errors.starting_bid_cents}
               inputRef={startingRef}
@@ -117,6 +118,7 @@ function LotForm({ artwork, draft, serverProblems, onReview, onBack }: LotFormPr
             <MoneyField
               id="lot-min-increment"
               label="Incremento mínimo"
+              description="Valor mínimo que cada novo lance deverá acrescentar ao lance atual."
               value={values.minIncrement}
               error={errors.min_increment_cents}
               inputRef={incrementRef}

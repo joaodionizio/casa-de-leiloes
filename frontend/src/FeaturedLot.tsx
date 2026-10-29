@@ -14,7 +14,7 @@ interface FeaturedLotProps {
 
 // Destaque image-led (blueprint §5, D12): a obra primeiro, só o necessário ao lado —
 // estado, título, artista, lance inicial, horário e um CTA. O lote em destaque não se
-// repete no rail da própria seção. Sem fundo roxo, sem overlay, sem badge.
+// repete no rail da própria seção. A transição desktop fica restrita à margem da arte.
 function FeaturedLot({ lot, onOpen }: FeaturedLotProps) {
   const title = lotTitleText(lot.title)
   return (
@@ -31,6 +31,7 @@ function FeaturedLot({ lot, onOpen }: FeaturedLotProps) {
         />
       </div>
       <div className="featured-info">
+        <p className="featured-kicker">Leilões de Arte</p>
         <LotState phase={lot.phase} />
         <h3 className="featured-title" title={title}>
           {lot.title !== null ? title : <span className="untitled">{title}</span>}

@@ -34,7 +34,10 @@ function ClosedLots({ lots, visible, onVisibleChange, onOpen }: ClosedLotsProps)
   return (
     <section className="vitrine-section" aria-labelledby="closed-heading">
       <div className="vitrine-section-head">
-        <h2 id="closed-heading">Encerrados</h2>
+        <h2 id="closed-heading">
+          <span className="vitrine-section-indicator vitrine-section-indicator-ended" aria-hidden="true" />
+          Encerrados
+        </h2>
       </div>
       {total === 0 ? (
         <p className="vitrine-empty muted">Nenhum lote encerrado ainda.</p>

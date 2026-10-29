@@ -70,6 +70,7 @@ for (const viewport of VIEWPORTS) {
         marca: page.locator('.site-brand'),
         Vitrine: nav.getByRole('link', { name: 'Vitrine' }),
         Carteira: nav.getByRole('link', { name: 'Carteira' }),
+        'Meus arremates': nav.getByRole('link', { name: 'Meus arremates' }),
         Sair: page.getByRole('button', { name: 'Sair' }),
       }
       for (const [name, locator] of Object.entries(targets)) {

@@ -59,12 +59,17 @@ test('adulterated withholds data; operational failure retries; 404 is explicit',
   await respond(page, audit(), 404); await page.reload()
   await expect(page.getByText('Lote não encontrado.')).toBeVisible()
 })
-for (const width of [320, 1280]) {
+for (const width of [320, 375, 1440]) {
   test(`100 events readable at ${width}px with expanded hashes`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 800 }); await mockApi(page); await respond(page, audit(100))
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 812 }); await mockApi(page); await respond(page, audit(100))
     await page.goto(`/lots/${ID}/audit`)
     await expect(page.locator('.audit-events > li')).toHaveCount(100)
-    await page.getByText('Detalhes técnicos do lance 100', { exact: true }).click()
+    const summary = page.getByText('Detalhes técnicos do lance 100', { exact: true })
+    await summary.focus()
+    await page.keyboard.press('Enter')
+    await expect(summary).toBeFocused()
+    expect(await summary.evaluate(node => getComputedStyle(node).outlineStyle)).toBe('solid')
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(43)
     await expect(page.locator('.audit-events > li').last().getByText('Hash atual', { exact: true })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
