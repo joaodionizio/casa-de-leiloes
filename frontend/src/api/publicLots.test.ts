@@ -15,6 +15,7 @@ function summary(overrides: Record<string, unknown> = {}): Record<string, unknow
     date_display: '1884–86, border added 1888–89',
     image_url: '/api/catalog/images/2d484387-2509-5e8e-2c43-22f9981972eb',
     starting_bid_cents: 10000,
+    current_bid_cents: null,
     starts_at: '2026-10-25T12:00:00.481203Z',
     ends_at: '2026-10-28T12:00:00.481203Z',
     phase: 'live',
@@ -71,6 +72,20 @@ test('a vitrine do exemplo do contrato é aceita', () => {
 test('campos de texto podem ser null', () => {
   const nulls = summary({ title: null, artist_display: null, date_display: null })
   assert.equal(isPublicLotsResponse(list({ live: [nulls] })), true)
+})
+
+test('lance atual obrigatório aceita null ou centavos inteiros no resumo e no detalhe', () => {
+  const base = detail().lot as Record<string, unknown>
+  for (const current_bid_cents of [null, 100000, 150000, 9007199254740991]) {
+    assert.equal(isPublicLotsResponse(list({ live: [summary({ current_bid_cents })] })), true)
+    assert.equal(isPublicLotDetailResponse({ ...detail(), lot: { ...base, current_bid_cents } }), true)
+  }
+  for (const current_bid_cents of [undefined, 100.5, 0, -1, '100', Number.NaN, 2 ** 53]) {
+    assert.equal(isPublicLotsResponse(list({ live: [summary({ current_bid_cents })] })), false)
+    assert.equal(isPublicLotDetailResponse({ ...detail(), lot: { ...base, current_bid_cents } }), false)
+  }
+  assert.equal(isPublicLotsResponse(list({ live: [without(summary(), 'current_bid_cents')] })), false)
+  assert.equal(isPublicLotDetailResponse({ ...detail(), lot: without(base, 'current_bid_cents') }), false)
 })
 
 test('a vitrine recusa phase fora dos três valores', () => {

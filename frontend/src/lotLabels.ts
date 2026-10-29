@@ -19,10 +19,11 @@ export function publicLotStatusText(lot: PublicLotSummary): string {
 }
 
 // Nome acessível do link de um lote: começa pelo título, depois o estado em texto e o
-// lance inicial (nunca "lance atual": ainda não existe lance). O encerrado não leva o
-// valor, como a linha dele na tela: o lance inicial pareceria preço final.
+// lance do snapshot. O encerrado não leva o valor, como a linha dele na tela:
+// o último lance não representa necessariamente um resultado de liquidação.
 export function lotLinkLabel(lot: PublicLotSummary): string {
   const base = `${lotTitleText(lot.title)}. ${publicLotStatusText(lot)}.`
   if (lot.phase === 'ended') return base
-  return `${base} Lance inicial ${formatCents(lot.starting_bid_cents)}.`
+  const label = lot.current_bid_cents !== null ? 'Lance atual' : 'Lance inicial'
+  return `${base} ${label} ${formatCents(lot.current_bid_cents ?? lot.starting_bid_cents)}.`
 }

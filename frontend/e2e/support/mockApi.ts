@@ -15,6 +15,7 @@ export interface MockLot {
   date_display: string | null
   image_url: string
   starting_bid_cents: number
+  current_bid_cents: number | null
   starts_at: string
   ends_at: string
   phase: Phase
@@ -66,6 +67,7 @@ export function makeLot(
     date_display: '1884–86',
     image_url: `/api/catalog/images/2d484387-2509-5e8e-2c43-22f9981972${String(n % 100).padStart(2, '0')}`,
     starting_bid_cents: 10_000 + n * 1_000,
+    current_bid_cents: null,
     ...window,
     phase,
     settlement_status: 'pending',
@@ -105,6 +107,7 @@ const SUMMARY_KEYS = [
   'date_display',
   'image_url',
   'starting_bid_cents',
+  'current_bid_cents',
   'starts_at',
   'ends_at',
   'phase',

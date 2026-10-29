@@ -62,6 +62,8 @@ function VitrineContent({ data, today, endedRestore, termRestore, phaseRestore }
   const total = filtered.live.length + filtered.scheduled.length + filtered.ended.length
   const hasFilters = term.trim() !== '' || phase !== 'all'
   const asOfLine = asOfText(data.as_of, today)
+  // Avisos usam a mesma fotografia da fase e do ends_at, sem relógio em execução.
+  const snapshotTime = Date.parse(data.as_of)
 
   function changeFilters(nextTerm: string, nextPhase: VitrinePhaseFilter, announce: boolean) {
     const next = filterPublicLots(data, nextTerm, nextPhase)
@@ -149,7 +151,7 @@ function VitrineContent({ data, today, endedRestore, termRestore, phaseRestore }
           </p>
         </section>
       ) : featured.kind !== 'none' ? (
-        <FeaturedLot lot={featured.lot} onOpen={rememberLot} />
+        <FeaturedLot lot={featured.lot} now={snapshotTime} onOpen={rememberLot} />
       ) : null}
       {asOfLine !== null && <p className="as-of muted">{asOfLine}</p>}
 
@@ -158,6 +160,7 @@ function VitrineContent({ data, today, endedRestore, termRestore, phaseRestore }
         title="Ao vivo"
         kind="live"
         lots={liveRail}
+        now={snapshotTime}
         emptyText={
           filtered.live.length === 0
             ? 'Nenhum lote ao vivo agora.'
@@ -170,6 +173,7 @@ function VitrineContent({ data, today, endedRestore, termRestore, phaseRestore }
         title="Próximos lotes"
         kind="upcoming"
         lots={scheduledRail}
+        now={snapshotTime}
         emptyText={
           filtered.scheduled.length === 0
             ? 'Nenhum lote agendado.'

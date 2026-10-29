@@ -12,6 +12,7 @@ function lot(overrides: Partial<PublicLotSummary> = {}): PublicLotSummary {
     date_display: null,
     image_url: '/api/catalog/images/x',
     starting_bid_cents: 1845000,
+    current_bid_cents: null,
     starts_at: '2026-10-25T12:00:00Z',
     ends_at: '2026-10-26T12:00:00Z',
     phase: 'live',
@@ -44,8 +45,15 @@ test('o encerrado não leva valor no nome do link', () => {
   )
 })
 
-test('o nome do link nunca fala em "lance atual"', () => {
-  assert.equal(lotLinkLabel(lot()).includes('atual'), false)
+test('o nome do link anuncia o lance atual do snapshot sem apresentar o inicial como vigente', () => {
+  assert.equal(
+    lotLinkLabel(lot({ starting_bid_cents: 10000, current_bid_cents: 100000 })),
+    'Nighthawks. Ao vivo. Lance atual R$ 1.000,00.',
+  )
+  assert.equal(
+    lotLinkLabel(lot({ starting_bid_cents: 10000, current_bid_cents: 150000 })),
+    'Nighthawks. Ao vivo. Lance atual R$ 1.500,00.',
+  )
 })
 
 

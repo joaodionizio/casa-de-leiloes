@@ -20,6 +20,7 @@ function lot(id: string, phase: PublicLotSummary['phase']): PublicLotSummary {
     date_display: null,
     image_url: `/api/catalog/images/${id}`,
     starting_bid_cents: 10000,
+    current_bid_cents: null,
     starts_at: '2026-10-25T12:00:00Z',
     ends_at: '2026-10-26T12:00:00Z',
     phase,

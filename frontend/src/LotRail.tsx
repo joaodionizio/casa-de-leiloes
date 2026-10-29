@@ -9,6 +9,7 @@ interface LotRailProps {
   title: string
   kind: 'live' | 'upcoming'
   lots: PublicLotSummary[]
+  now: number
   // Texto quando a seção não tem nenhum lote para mostrar (sem imagem, sem conteúdo
   // falso).
   emptyText: string
@@ -27,7 +28,7 @@ const NO_OVERFLOW: RailScrollState = {
 // ocuparem a faixa em vez de deixar vazio à direita; o conteúdo não muda. "Anterior"/"Próximo" só
 // existem no desktop (CSS) e só se há overflow de verdade; no toque e no teclado o
 // rail rola sozinho (Tab pelos links).
-function LotRail({ headingId, title, kind, lots, emptyText, onOpen }: LotRailProps) {
+function LotRail({ headingId, title, kind, lots, now, emptyText, onOpen }: LotRailProps) {
   const railRef = useRef<HTMLUListElement>(null)
   const [scroll, setScroll] = useState<RailScrollState>(NO_OVERFLOW)
   const hasItems = lots.length > 0
@@ -96,7 +97,7 @@ function LotRail({ headingId, title, kind, lots, emptyText, onOpen }: LotRailPro
         >
           {lots.map((lot) =>
             kind === 'live' ? (
-              <LiveLotItem key={lot.id} lot={lot} onOpen={onOpen} />
+              <LiveLotItem key={lot.id} lot={lot} now={now} onOpen={onOpen} />
             ) : (
               <UpcomingLotItem key={lot.id} lot={lot} onOpen={onOpen} />
             ),

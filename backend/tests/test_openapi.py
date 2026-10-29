@@ -371,6 +371,7 @@ def test_no_lot_schema_exposes_the_owner_or_the_demo_flag(
 # --- Story 2.5: vitrine e página do lote ---
 
 PUBLIC_SUMMARY_FIELDS = [
+    "current_bid_cents",
     "ends_at",
     "artist_display",
     "date_display",
@@ -393,6 +394,7 @@ PUBLIC_DETAIL_FIELDS = PUBLIC_SUMMARY_FIELDS + [
     "source_url",
 ]
 INTERNAL_FIELDS = {
+    "current_leader_id",
     "is_demo",
     "auctioneer_id",
     "created_at",
@@ -457,6 +459,11 @@ def test_public_lot_schemas_have_exactly_the_contract_fields(
     assert schemas["LotPhase"]["enum"] == ["scheduled", "live", "ended"]
     assert "HTTPValidationError" not in schemas
     for name in ("PublicLotSummary", "PublicLotDetail"):
+        assert "current_bid_cents" in schemas[name]["required"]
+        assert schemas[name]["properties"]["current_bid_cents"]["anyOf"] == [
+            {"type": "integer"},
+            {"type": "null"},
+        ]
         assert "settlement_status" in schemas[name]["required"]
         assert schemas[name]["properties"]["settlement_status"]["enum"] == [
             "pending",

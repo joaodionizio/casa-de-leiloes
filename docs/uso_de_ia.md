@@ -161,6 +161,37 @@ local/main; não o apresento como SHA autenticado pelo painel do Render. No smok
 final, Cloudflare/403 no destino oficial da coleção AIC foi uma ressalva LOW
 externa, sem defeito do ÁTRIO confirmado.
 
+## Correção do lance apresentado na Vitrine (29/10/2026)
+
+Usei Codex para corrigir a divergência de apresentação encontrada em produção:
+a Vitrine anunciava sempre o lance inicial, enquanto a Sala já apresentava o
+lance vigente. Autorizei somente a extensão do contrato público com
+`current_bid_cents` anulável e a escolha do valor/rótulo no snapshot da Vitrine,
+inclusive no nome acessível. Mantive as regras financeiras, lances, reservas,
+liquidação e WebSocket. Descartei requests individuais, polling e atualização
+em tempo real na Vitrine.
+
+Exigi testes de contrato, privacidade, detalhe público, renderização de
+`FeaturedLot`/`LiveLotItem`, filtros locais e atualização na fotografia seguinte,
+além do gate completo com E2E. A especificação e os resultados estão no
+[registro da correção](../_bmad-output/implementation-artifacts/spec-vitrine-lance-vigente.md).
+Git e deploy continuam sob meu controle; esta correção não foi publicada pela IA.
+
+## Avisos de encerramento na Vitrine (29/10/2026)
+
+Usei Codex para acrescentar os avisos discretos “Encerrando em breve” e “Últimos
+2 minutos” aos lotes ao vivo da Vitrine. Mantive o cálculo na fotografia pública,
+com `ends_at` e o `as_of` já retornados pela API; descartei relógio em execução,
+segundos, polling e WebSocket novo. O aviso é recalculado quando chega outro
+snapshot pelo fluxo existente, inclusive se o anti-sniping prorrogou o prazo.
+
+Exigi função pura com instante injetado, testes de fronteira, exclusão de
+agendados/encerrados, prorrogação, ausência de consultas extras e layout em
+320/375px. Não autorizei mudanças no backend, contratos ou regras de leilão.
+A especificação e a validação estão no
+[registro deste refinamento](../_bmad-output/implementation-artifacts/spec-vitrine-aviso-encerramento.md).
+Mantive commit, push e deploy sob meu controle.
+
 ## Evidências para aprofundar
 
 - [Enunciado](desafio-elite-dev.md) e [arquitetura com decisões e alternativas](ARQUITETURA.md).

@@ -1132,6 +1132,14 @@ h2[tabindex='-1']:focus-visible {
 }
 
 /* Vitrine. */
+.vitrine-ending-soon {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-brand-strong);
+  overflow-wrap: anywhere;
+}
+
 .vitrine {
   display: flex;
   flex-direction: column;

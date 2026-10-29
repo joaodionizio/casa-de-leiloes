@@ -103,6 +103,7 @@ def test_public_summary_has_exactly_the_contract_keys() -> None:
             "date_display",
             "image_url",
             "starting_bid_cents",
+            "current_bid_cents",
             "starts_at",
             "ends_at",
             "phase",
@@ -125,6 +126,25 @@ def test_public_summary_normalizes_timestamps_to_utc() -> None:
     assert summary.ends_at.tzinfo == UTC
 
 
+@pytest.mark.parametrize("current_bid_cents", [None, 100_000, 150_000])
+def test_public_dtos_serialize_current_bid_from_the_lot(
+    current_bid_cents: int | None,
+) -> None:
+    lot = make_lot()
+    lot.current_bid_cents = current_bid_cents
+    lot.current_leader_id = uuid.uuid4() if current_bid_cents is not None else None
+
+    summary = public_lot_summary(lot, START, has_settlement=False)
+    detail = public_lot_detail(lot, START, has_settlement=False)
+    listing = build_public_lots([lot], START, set())
+
+    for payload in (summary, detail, listing.live[0]):
+        serialized = payload.model_dump(mode="json")
+        assert serialized["current_bid_cents"] == current_bid_cents
+        assert serialized["starting_bid_cents"] == 10_000
+        assert "current_leader_id" not in serialized
+
+
 def test_public_detail_has_exactly_the_contract_keys() -> None:
     detail = public_lot_detail(make_lot(), END, has_settlement=False)
 
@@ -136,6 +156,7 @@ def test_public_detail_has_exactly_the_contract_keys() -> None:
             "date_display",
             "image_url",
             "starting_bid_cents",
+            "current_bid_cents",
             "starts_at",
             "ends_at",
             "phase",

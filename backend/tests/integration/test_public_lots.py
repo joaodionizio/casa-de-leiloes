@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import seed
+from app.bids import PlacedBid
 from app.lots import public_snapshot_statement, read_public_snapshot
 from tests.auth_support import (
     AUCTIONEER_EMAIL,
@@ -31,6 +32,7 @@ from tests.auth_support import (
     seed_demo_users,
     seeded_id,
 )
+from tests.bid_support import add_bidder, run_bid
 from tests.catalog_support import FakeArtic, install, raising, standard_handler
 from tests.lot_support import (
     IMAGE_ID,
@@ -55,6 +57,7 @@ SUMMARY_KEYS = sorted(
         "date_display",
         "image_url",
         "starting_bid_cents",
+        "current_bid_cents",
         "starts_at",
         "ends_at",
         "phase",
@@ -76,6 +79,7 @@ DETAIL_KEYS = sorted(
 )
 FORBIDDEN_KEYS = {
     "auctioneer_id",
+    "current_leader_id",
     "is_demo",
     "created_at",
     "image_id",
@@ -296,11 +300,48 @@ def test_vitrine_items_have_exactly_the_contract_keys_and_values(
     assert item["artist_display"] == "Artista\nDois"
     assert item["date_display"] == "1884"
     assert item["starting_bid_cents"] == 9_007_199_254_740_991
+    assert item["current_bid_cents"] is None
     assert item["image_url"] == f"/api/catalog/images/{IMAGE_ID}"
     assert item["starts_at"].endswith("Z")
     assert item["ends_at"].endswith("Z")
     assert item["phase"] == "live"
     assert response.headers["cache-control"] == "no-store"
+
+
+def test_public_snapshots_follow_valid_bids_without_exposing_the_leader(
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: sessionmaker[Session],
+    auctioneer_id: uuid.UUID,
+) -> None:
+    lot_id = insert_lot(seeded, auctioneer_id=auctioneer_id, starting_bid_cents=10_000)
+    first_bidder = add_bidder(seeded, total=500_000)
+    second_bidder = add_bidder(seeded, total=500_000)
+    client = client_for(monkeypatch, seeded)
+
+    for amount, bidder in (
+        (None, None),
+        (100_000, first_bidder),
+        (150_000, second_bidder),
+    ):
+        if amount is not None:
+            assert isinstance(run_bid(seeded, lot_id, bidder, amount), PlacedBid)
+
+        listing = client.get(URL)
+        detail = client.get(f"{URL}/{lot_id}")
+        assert listing.status_code == detail.status_code == 200
+        (item,) = listing.json()["live"]
+        public_detail = detail.json()["lot"]
+        assert sorted(item) == SUMMARY_KEYS
+        assert sorted(public_detail) == DETAIL_KEYS
+        for payload in (item, public_detail):
+            assert payload["current_bid_cents"] == amount
+            assert payload["starting_bid_cents"] == 10_000
+            if amount is not None:
+                assert type(payload["current_bid_cents"]) is int
+        for response in (listing, detail):
+            assert FORBIDDEN_KEYS.isdisjoint(keys_anywhere(response.json()))
+            for private_id in (first_bidder, second_bidder, auctioneer_id):
+                assert str(private_id) not in response.text
 
 
 def test_nothing_internal_is_exposed_anywhere(
@@ -728,7 +769,7 @@ def test_detail_is_the_same_for_every_role(
     assert len({response.content for response in responses}) == 1
 
 
-def test_detail_has_the_18_keys_and_the_values_of_the_row(
+def test_detail_has_the_contract_keys_and_the_values_of_the_row(
     monkeypatch: pytest.MonkeyPatch,
     seeded: sessionmaker[Session],
     auctioneer_id: uuid.UUID,
@@ -757,7 +798,7 @@ def test_detail_has_the_18_keys_and_the_values_of_the_row(
     assert sorted(body) == ["as_of", "lot"]
     lot = body["lot"]
     assert sorted(lot) == DETAIL_KEYS
-    assert len(lot) == 18
+    assert len(lot) == 19
     assert lot["id"] == str(lot_id)
     assert lot["external_id"] == 27992
     assert lot["title"] == "A Sunday on La Grande Jatte — 1884"
@@ -769,6 +810,7 @@ def test_detail_has_the_18_keys_and_the_values_of_the_row(
     assert lot["credit_line"] == "Helen Birch Bartlett Memorial Collection"
     assert lot["source_url"] == "https://www.artic.edu/artworks/27992"
     assert lot["starting_bid_cents"] == 10_000
+    assert lot["current_bid_cents"] is None
     assert lot["min_increment_cents"] == 1_000
     assert lot["image_url"] == f"/api/catalog/images/{IMAGE_ID}"
     assert FORBIDDEN_KEYS.isdisjoint(keys_anywhere(body))

@@ -13,7 +13,7 @@ interface UpcomingLotItemProps {
 }
 
 // Próximo lote no rail: menos peso que o ao vivo (blueprint §7 e §9) — descoberta,
-// não urgência. Mostra quando começa e, com peso menor, o lance inicial.
+// não urgência. Mostra quando começa e, com peso menor, o lance do snapshot.
 function UpcomingLotItem({ lot, onOpen }: UpcomingLotItemProps) {
   const title = lotTitleText(lot.title)
   return (
@@ -37,7 +37,8 @@ function UpcomingLotItem({ lot, onOpen }: UpcomingLotItemProps) {
             <span className="rail-artist muted">{lot.artist_display}</span>
           )}
           <span className="rail-bid rail-bid-light muted">
-            Lance inicial {formatCents(lot.starting_bid_cents)}
+            {lot.current_bid_cents !== null ? 'Lance atual' : 'Lance inicial'}{' '}
+            {formatCents(lot.current_bid_cents ?? lot.starting_bid_cents)}
           </span>
         </div>
       </AppLink>

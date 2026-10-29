@@ -692,7 +692,8 @@ def test_other_lots_stay_public_and_no_phase_is_cancelled(
 
     assert [item["id"] for item in body["live"]] == [str(kept)]
     assert detail.status_code == 200 and detail.json()["lot"]["phase"] == "live"
-    assert len(detail.json()["lot"]) == 18  # inclui settlement_status (R6.4-01)
+    assert len(detail.json()["lot"]) == 19  # inclui current_bid_cents
+    assert detail.json()["lot"]["current_bid_cents"] is None
     assert detail.json()["lot"]["settlement_status"] == "pending"
 
 

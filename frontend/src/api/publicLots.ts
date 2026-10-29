@@ -11,6 +11,7 @@ export interface PublicLotSummary {
   date_display: string | null
   image_url: string
   starting_bid_cents: number
+  current_bid_cents: number | null
   starts_at: string
   ends_at: string
   phase: LotPhase
@@ -74,6 +75,7 @@ export function isPublicLotSummary(value: unknown): value is PublicLotSummary {
     isNullableString(value.date_display) &&
     typeof value.image_url === 'string' &&
     isCents(value.starting_bid_cents) &&
+    (value.current_bid_cents === null || isCents(value.current_bid_cents)) &&
     typeof value.starts_at === 'string' &&
     typeof value.ends_at === 'string' &&
     isLotPhase(value.phase) &&

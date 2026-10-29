@@ -1,9 +1,172 @@
 // Vitrine pública em navegador real (Story 2.5): anônimo, deep-link, History API,
 // "Mostrar mais" e imagem quebrada. API simulada por interceptação de rede.
 import { expect, test } from '@playwright/test'
-import { lotId, makeBids, makeLot, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './support/mockApi'
+import { AS_OF, lotId, makeBids, makeLot, makeLots, mockApi, OWN_ALIAS, OTHER_ALIAS } from './support/mockApi'
 
 const LOTS = makeLots({ live: 3, scheduled: 2, ended: 3 })
+
+test.describe('aviso de encerramento do snapshot', () => {
+  const endsIn = (milliseconds: number) => new Date(Date.parse(AS_OF) + milliseconds).toISOString()
+
+  for (const [remaining, label] of [
+    [600001, null],
+    [600000, 'Encerrando em breve'],
+    [120001, 'Encerrando em breve'],
+    [120000, 'Últimos 2 minutos'],
+    [60000, 'Últimos 2 minutos'],
+    [0, null],
+    [-1, null],
+  ] as const) {
+    test(`destaque e rail com ${remaining}ms restantes: ${label ?? 'sem aviso'}`, async ({ page }) => {
+      const api = await mockApi(page, { lots: [1, 2].map(n => makeLot(n, 'live', { ends_at: endsIn(remaining) })) })
+      await page.goto('/')
+      await expect(page.locator('.featured')).toBeVisible()
+      await expect(page.locator('.rail-live .rail-link')).toBeVisible()
+      for (const selector of ['.featured', '.rail-live']) {
+        const notice = page.locator(`${selector} .vitrine-ending-soon`)
+        if (label === null) await expect(notice).toHaveCount(0)
+        else await expect(notice).toHaveText(label)
+      }
+      if (label !== null) await expect(page.locator('.rail-live .rail-link')).toHaveAccessibleName(new RegExp(`${label}\\.$`))
+      expect(api.count('GET /api/lots')).toBe(1)
+      expect(api.requests.some(request => request.startsWith('GET /api/lots/'))).toBe(false)
+      expect(api.unexpected).toEqual([])
+    })
+  }
+
+  test('agendados e encerrados não recebem aviso, inclusive agendado em destaque', async ({ page }) => {
+    const api = await mockApi(page, { lots: [
+      makeLot(1, 'live', { ends_at: endsIn(12 * 60000) }),
+      makeLot(101, 'scheduled', { starts_at: endsIn(30000), ends_at: endsIn(60000) }),
+      makeLot(102, 'scheduled', { starts_at: endsIn(30000), ends_at: endsIn(120000) }),
+      makeLot(201, 'ended', { ends_at: endsIn(-1) }),
+    ] })
+    await page.goto('/')
+    await expect(page.locator('.rail-upcoming .rail-link')).toHaveCount(2)
+    await expect(page.locator('.closed-row')).toHaveCount(1)
+    await expect(page.locator('.vitrine-ending-soon')).toHaveCount(0)
+    await page.getByRole('radio', { name: 'Próximos', exact: true }).check()
+    await expect(page.locator('.featured .lot-state')).toHaveText('Agendado')
+    await expect(page.locator('.vitrine-ending-soon')).toHaveCount(0)
+    expect(api.count('GET /api/lots')).toBe(1)
+    expect(api.unexpected).toEqual([])
+  })
+
+  test('prorrogação recalcula no próximo snapshot; tempo e filtros não criam atualização automática', async ({ page }) => {
+    await page.clock.install({ time: new Date(AS_OF) })
+    const lots = [1, 2].map(n => makeLot(n, 'live', { ends_at: endsIn(2 * 60000) }))
+    const sockets: string[] = []
+    page.on('websocket', socket => sockets.push(socket.url()))
+    const api = await mockApi(page, { lots })
+    await page.goto('/')
+    await expect(page.locator('.featured .vitrine-ending-soon')).toHaveText('Últimos 2 minutos')
+    await expect(page.locator('.rail-live .vitrine-ending-soon')).toHaveText('Últimos 2 minutos')
+    const reads = api.requests.filter(request => !request.includes('/api/catalog/images/'))
+
+    for (const lot of lots) lot.ends_at = endsIn(4 * 60000)
+    await page.clock.fastForward(15 * 60000)
+    await page.getByRole('searchbox').fill('Obra de teste 2')
+    await expect(page.locator('.featured .vitrine-ending-soon')).toHaveText('Últimos 2 minutos')
+    await page.getByRole('button', { name: 'Limpar filtros' }).click()
+    await expect(page.locator('.rail-live .vitrine-ending-soon')).toHaveText('Últimos 2 minutos')
+    expect(api.requests.filter(request => !request.includes('/api/catalog/images/'))).toEqual(reads)
+
+    await page.reload()
+    await expect(page.locator('.featured .vitrine-ending-soon')).toHaveText('Encerrando em breve')
+    await expect(page.locator('.rail-live .vitrine-ending-soon')).toHaveText('Encerrando em breve')
+    for (const lot of lots) lot.ends_at = endsIn(12 * 60000)
+    await page.reload()
+    await expect(page.locator('.featured')).toBeVisible()
+    await expect(page.locator('.vitrine-ending-soon')).toHaveCount(0)
+    await expect(page.locator('.rail-live .rail-link')).not.toHaveAccessibleName(/Encerrando em breve|Últimos 2 minutos/)
+    expect(api.count('GET /api/lots')).toBe(3)
+    expect(api.requests.some(request => request.startsWith('GET /api/lots/'))).toBe(false)
+    expect(sockets).toEqual([])
+    expect(api.unexpected).toEqual([])
+  })
+
+  for (const width of [1440, 375, 320]) {
+    test(`avisos discretos legíveis, sem overflow ou sobreposição em ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await mockApi(page, { lots: [
+        makeLot(1, 'live', { ends_at: endsIn(120000) }),
+        makeLot(2, 'live', { ends_at: endsIn(600000) }),
+      ] })
+      await page.goto('/')
+      await expect(page.locator('.featured .vitrine-ending-soon')).toHaveText('Últimos 2 minutos')
+      await expect(page.locator('.rail-live .vitrine-ending-soon')).toHaveText('Encerrando em breve')
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      for (const selector of ['.featured-info', '.rail-body']) {
+        const container = page.locator(selector)
+        const notice = container.locator('.vitrine-ending-soon')
+        const state = (await container.locator('.lot-state').boundingBox())!
+        const label = (await notice.boundingBox())!
+        const title = (await container.locator('h3').boundingBox())!
+        const parent = (await container.boundingBox())!
+        expect(label.y).toBeGreaterThanOrEqual(state.y + state.height)
+        expect(title.y).toBeGreaterThanOrEqual(label.y + label.height)
+        expect(label.x).toBeGreaterThanOrEqual(parent.x)
+        expect(label.x + label.width).toBeLessThanOrEqual(parent.x + parent.width + 1)
+        expect(await notice.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+        expect(await notice.evaluate(node => getComputedStyle(node).animationName)).toBe('none')
+      }
+    })
+  }
+})
+
+test.describe('lance do snapshot público na Vitrine', () => {
+  for (const currentBid of [null, 100000]) {
+    test(`FeaturedLot e LiveLotItem apresentam ${currentBid === null ? 'lance inicial' : 'lance atual'}`, async ({ page }) => {
+      const lots = [1, 2].map(n => makeLot(n, 'live', {
+        starting_bid_cents: 10000,
+        current_bid_cents: currentBid,
+      }))
+      const api = await mockApi(page, { lots })
+      const sockets: string[] = []
+      page.on('websocket', socket => sockets.push(socket.url()))
+      await page.goto('/')
+
+      const label = currentBid === null ? 'Lance inicial' : 'Lance atual'
+      const value = currentBid === null ? 'R$ 100,00' : 'R$ 1.000,00'
+      await expect(page.locator('.featured-bid-label')).toHaveText(label)
+      await expect(page.locator('.featured-bid-value')).toHaveText(value)
+      await expect(page.locator('.rail-live .rail-label')).toHaveText(label)
+      await expect(page.locator('.rail-live .rail-value')).toHaveText(value)
+      await expect(page.locator('.rail-live .rail-link')).toHaveAccessibleName(`Obra de teste 2. Ao vivo. ${label} ${value}.`)
+      if (currentBid !== null) {
+        for (const bid of await page.locator('.featured-bid, .rail-live .rail-bid').all()) {
+          await expect(bid).not.toContainText('Lance inicial')
+          await expect(bid).not.toContainText('R$ 100,00')
+        }
+      }
+
+      const reads = api.requests.filter(request => !request.includes('/api/catalog/images/'))
+      await page.getByRole('searchbox', { name: 'Buscar obras' }).fill('Obra de teste 2')
+      await expect(page.locator('.featured-bid-label')).toHaveText(label)
+      await expect(page.locator('.featured-bid-value')).toHaveText(value)
+      await page.getByRole('radio', { name: 'Ao vivo', exact: true }).check()
+      await page.getByRole('button', { name: 'Limpar filtros' }).click()
+      await expect(page.locator('.rail-live .rail-value')).toHaveText(value)
+      expect(api.count('GET /api/lots')).toBe(1)
+      expect(api.requests.filter(request => !request.includes('/api/catalog/images/'))).toEqual(reads)
+      expect(api.requests.some(request => request.startsWith('GET /api/lots/'))).toBe(false)
+
+      // O snapshot já exibido permanece estável; a próxima listagem traz o aumento.
+      for (const lot of lots) lot.current_bid_cents = 150000
+      await expect(page.locator('.featured-bid-value')).toHaveText(value)
+      await page.reload()
+      await expect(page.locator('.featured-bid-label')).toHaveText('Lance atual')
+      await expect(page.locator('.featured-bid-value')).toHaveText('R$ 1.500,00')
+      await expect(page.locator('.rail-live .rail-label')).toHaveText('Lance atual')
+      await expect(page.locator('.rail-live .rail-value')).toHaveText('R$ 1.500,00')
+      await expect(page.locator('.rail-live .rail-link')).toHaveAccessibleName('Obra de teste 2. Ao vivo. Lance atual R$ 1.500,00.')
+      expect(api.count('GET /api/lots')).toBe(2)
+      expect(api.requests.some(request => request.startsWith('GET /api/lots/'))).toBe(false)
+      expect(sockets).toEqual([])
+      expect(api.unexpected).toEqual([])
+    })
+  }
+})
 
 test.describe('busca e filtro locais (6.5)', () => {
   const searchableLots = [

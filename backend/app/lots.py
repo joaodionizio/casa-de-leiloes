@@ -519,6 +519,7 @@ class PublicLotSummary(BaseModel):
     date_display: str | None
     image_url: str
     starting_bid_cents: int
+    current_bid_cents: int | None
     starts_at: datetime
     ends_at: datetime
     phase: LotPhase
@@ -741,6 +742,7 @@ def public_lot_summary(
         date_display=lot.date_display,
         image_url=image_url_for(lot.image_id),
         starting_bid_cents=lot.starting_bid_cents,
+        current_bid_cents=lot.current_bid_cents,
         starts_at=lot.starts_at.astimezone(UTC),
         ends_at=lot.ends_at.astimezone(UTC),
         phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
