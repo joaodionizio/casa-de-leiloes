@@ -20,3 +20,8 @@ Implementei cadastro público conforme [SPEC](../specs/spec-story-6-2a-cadastro-
 Resultados e limites em [implementation-evidence.md](../specs/spec-story-6-2a-cadastro-de-usuarios/implementation-evidence.md). SPEC in-review e story/sprint review; não marco done sem review humano. 6.2 done por aceite humano com LOW aceito, 6.1 continua review por CA2 público pendente, épico 6 in-progress e 6.3 backlog. Não fiz Git/gh/deploy nem li .env*.
 
 
+## Exceção de processo vigente — 29/10/2026, Story 6.3
+
+Por decisão humana de prazo, review independente individual DEFERIDO ao review
+agregado final do Épico 6. Gates anteriores permanecem registrados; mantenho
+review sem alegar revisão independente. A ausência não bloqueou a 6.3.

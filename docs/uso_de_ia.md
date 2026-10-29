@@ -1,5 +1,55 @@
 # Uso de IA no desenvolvimento — ÁTRIO (antes Casa de Leilões)
 
+## Síntese atual e rastreabilidade — Story 6.3, 29/10/2026
+
+Decidi usar IA (Claude Code e Codex, conforme os registros abaixo) para auxiliar
+planejamento, arquitetura, especificação, implementação backend/frontend, testes,
+documentação e reviews em sessões independentes. Mantive decisões de produto,
+ADs, direção visual, aceite de findings e operações Git/deploy sob responsabilidade
+humana. Descartei aceitar código ou alegações apenas por confiança na IA.
+
+| Fase/stories | Uso e evidência rastreável |
+| --- | --- |
+| Planejamento/arquitetura | [ADs e alternativas](ARQUITETURA.md), [enunciado](desafio-elite-dev.md), [epics](../_bmad-output/planning-artifacts/epics.md) e memlogs das specs registram decisões humanas e auxílio da IA. |
+| 1.1–1.4 | Fundação, PostgreSQL dev/test, migrations, SPA e Docker/Render; relatos por story abaixo e [review retrospectivo de integração](../_bmad-output/implementation-artifacts/code-review-epic-1.md). A 1.1 não tem arquivo individual de story. |
+| 2.1–2.5 | Erros/Origin, login/papéis, AIC, criação/seed e Vitrine; relatos abaixo, specs e [review retrospectivo de integração](../_bmad-output/implementation-artifacts/code-review-epic-2.md). |
+| 3.1–3.6 | Carteira, regras, integridade, transações/travas, Sala e cancelamento; relatos abaixo, specs e [review agregado/correção/re-review](../_bmad-output/implementation-artifacts/code-review-epic-3.md). |
+| 4.1–4.5 | WS, heartbeat/reconexão, liquidação, scheduler/catch-up e resultado; relatos abaixo e specs/evidências em [specs](../_bmad-output/specs). |
+| 5.1–5.3 | Auditoria, comprovante e participações/vitórias; relatos abaixo e [review agregado independente](../_bmad-output/implementation-artifacts/code-review-epic-5.md), com limites estáticos declarados. |
+| 6.1 | Inventário de escritas, Origin/JSON, indisponibilidade externa e erros; [evidência](../_bmad-output/specs/spec-story-6-1-revisao-de-seguranca-e-de-erros/implementation-evidence.md) e [re-review](../_bmad-output/implementation-artifacts/code-review-story-6-1.md). CA2 publicado permanece pendente. |
+| 6.2 | Refinamento visual, aceite visual humano final, gates e [review independente](../_bmad-output/implementation-artifacts/code-review-story-6-2.md); LOW R6.2-01 aceito conscientemente sem correção. |
+| 6.2A | Cadastro público adicionado por decisão humana, implementação e [gates/smoke](../_bmad-output/specs/spec-story-6-2a-cadastro-de-usuarios/implementation-evidence.md); review individual deferido ao agregado final por prazo. |
+| 6.3 | Auditoria documental, README completo, esta síntese e [validação focal](../_bmad-output/specs/spec-story-6-3-readme-e-uso-de-ia/implementation-evidence.md). Sem novo code review ou publicação. |
+
+Corrigi com auxílio da IA problemas demonstrados por evidência: imagens hotlink
+com 403 detectadas no teste humano levaram ao proxy (2.3); tela branca por
+Intl.DateTimeFormat passou pelo verify e exigiu teste manual/correção (2.4);
+guarda de depósito após remontagem (3.1), conclusão de POST na Sala (3.5/agregado 3)
+e avisos stale após reconexão (4.2) foram corrigidos com regressões pertinentes.
+Não tratei teste verde como substituto de inspeção humana ou smoke integrado.
+Testes críticos usaram PostgreSQL real, concorrência controlada e mutações
+restauradas; Playwright com API simulada não prova Render e limita-se a Chromium.
+Reviews retrospectivos 1/2 não são revisão dos diffs originais; os limites dos
+reviews existentes permanecem nos respectivos relatórios.
+
+**Vigência:** a direção antiga “sem cadastro público” é histórica, superada pela
+6.2A. Decidi ambos os papéis, sem Nome/migration/autologin; senha 8–1024 sem
+composição, e-mail trim/lower com formato mínimo, sem confirmação, duplicidade
+explícita aceita. Cadastro leva ao login e cria carteira zero para ambos sem
+conceder lance/depósito ao leiloeiro. Os gates passaram; não houve review
+independente individual da 6.2A. Adiei esse review para o agregado final por prazo.
+
+A AD-5 vigente soma 2 minutos ao término atual, cumulativa e sem teto, em
+0 < restante <= 2 minutos; “now + 2 min” permanece apenas no relato intermediário.
+Também preservei propostas antigas de catch-up/POST como história: hoje migrations
+→ seed → catch-up → scheduler → tráfego; GET e POST vencido não liquidam.
+
+6.2A e 6.3 aguardam review agregado independente; 6.1 conserva evidência pública
+pendente, Épico 6 in-progress e 6.4 não executada. Cortei 6.5–6.7 por prazo.
+O deploy antigo 2+3 não comprova o candidato atual. Os registros cronológicos
+abaixo ficam preservados integralmente e descrevem o estado de cada sessão.
+
+
 ## Fechamento oficial do Epic 3 — registro em 27/10/2026
 
 Registrei o review agregado do Epic 3, a correção de F-01 MEDIUM e o re-review
@@ -2098,4 +2148,24 @@ Gerei capturas temporárias Cadastro 1440/375/320 e Login; ficam para inspeção
 
 Não executei revisão independente, Git/gh/commit/push/merge/deploy ou li .env*. Usei cópia permitida com hashes conferidos e bancos isolados *_test; nenhum banco de desenvolvimento. Limites e comandos reais em implementation-evidence.md da 6.2A; não inicio 6.3.
 
+
+## Story 6.3 — documentação final — 29/10/2026
+
+Autorizei bmad-spec + bmad-build sem aprovação intermediária e proibi code review
+nesta sessão. A IA auditou fontes vivas e artefatos históricos; reestruturou README
+com instalação, comandos, contas, cadastro, roteiro completo, deploy e limites.
+Preservou este histórico e acrescentou síntese rastreável. Um agente fez a redação
+inicial do README; após limite de uso dele, a coordenação completou documentos,
+status e verificações. Não atribuo identificador de modelo sem confirmação.
+
+Usei somente conferência estática de código/config, links/âncoras, sintaxe dos
+snippets shell e comparação de arquivos/hashes sem Git. Não repeti verify,
+pytest, Node, Playwright, Docker build ou smoke: documentação não alterou código
+executável. A evidência anterior da 6.2A registra os gates reais, sem ser nova
+execução da 6.3. Resultados desta sessão e limites estão na evidência da 6.3.
+
+Não houve code review, aceite visual humano novo, deploy ou validação pública.
+Entrego 6.3 pronta para review agregado, com 6.2A reservada ao mesmo gate; não
+inicio 6.4 nem opcionais. Git/gh/commit/push/merge/deploy e leitura de .env* ou
+credenciais não foram executados.
 

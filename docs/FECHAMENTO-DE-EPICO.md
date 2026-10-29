@@ -167,3 +167,17 @@ Estrutura mínima do artefato (adotada pelos três relatórios):
 
 Descarto usar reviews por story como prova suficiente do agregado, inventar
 reviews retroativos aprovados e fazer da retrospective opcional um gate.
+
+
+## Exceção autorizada — Épico 6, 29/10/2026
+
+Decidi por prazo reservar 6.2A e 6.3 ao review agregado independente final, sem
+review individual agora; não bloqueio 6.3 pela ausência de review da 6.2A. 6.2
+já tem review e aceite humano com LOW R6.2-01 aceito. A 6.3 é documental e usa
+checagens focais, sem repetir o gate completo verde registrado na 6.2A.
+Descartei reduzir funcionalidades obrigatórias ou inventar aprovação de review.
+
+Após 6.3 paro: agregado em sessão independente; somente depois da aprovação faço
+Git/commit/push/merge/deploy manualmente. Após deploy executo 6.4 e concluo
+evidência publicada pendente da 6.1. Épico 6 permanece in-progress. 6.5–6.7
+estão cortadas por prazo. Esta exceção não aprova o agregado nem o ambiente público.
