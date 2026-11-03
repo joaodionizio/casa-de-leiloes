@@ -1,4 +1,21 @@
 /* Shell da página: header, área principal flexível e rodapé. */
+
+/* Resultado pessoal do arremate, distinguível sem depender apenas de cor. */
+.bid-settlement-notice {
+  padding: 1rem 1.25rem;
+  margin-block: 1rem;
+  background: var(--color-surface-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+.bid-settlement-notice h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.125rem;
+  color: var(--color-ink);
+}
+.bid-settlement-notice p { margin: 0.25rem 0; }
+.bid-settlement-won { border-color: var(--color-success); }
+.bid-settlement-won h3 { color: var(--color-success); }
 .app {
   min-height: 100vh;
   min-height: 100dvh;
@@ -2406,6 +2423,15 @@ a:focus-visible, summary:focus-visible { outline: 2px solid var(--color-brand-st
 .password-requirements { margin: 0; font-size: .8125rem; color: var(--color-muted); }
 .password-requirements p { margin: .25rem 0; }
 @media (max-width: 40rem) { .site-footer-top { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; } }
+/* 320px: nav com duas linhas mantém 44px de toque sem sobrepor links;
+   a composição compacta deixa o CTA principal no primeiro viewport. */
+@media (max-width: 22rem) {
+  .site-nav { row-gap: .75rem; }
+  .app-main:has(.vitrine) { padding-top: .75rem; }
+  .vitrine-filters { padding-bottom: .25rem; }
+  .featured-info { gap: .375rem; }
+  .featured-cta { margin-top: .375rem; }
+}
 @media print {
   :root, [data-theme="dark"] { color-scheme: light; --color-canvas: #fff; --color-surface: #fff; --color-surface-subtle: #f4f1f8; --color-ink: #18131f; --color-text: #29242f; --color-muted: #514659; --color-border: #ddd7e2; --color-brand: #7330da; --color-brand-strong: #6021c0; --color-success: #2d7552; --color-danger: #9b2c2c; --color-warning: #8b6418; }
   .site-header, .site-footer, .context-help-trigger { display: none; }

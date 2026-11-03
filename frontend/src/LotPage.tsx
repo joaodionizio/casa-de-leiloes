@@ -470,8 +470,9 @@ function LotPage({
         if (!shouldApplyRoom(current, terminal, false, lotId, event.lot_id)) return
         publicEpochRef.current++
         applyRoom(terminal, roomRoundRef.current)
-        // Reconcile only public history. Private freshness/errors are independent.
-        void loadRoom(roomRoundRef.current)
+        // Revalida também a participação privada após a liquidação.
+        // Um snapshot anterior não confirma o resultado pessoal do leilão.
+        void runRound({ detail: false, wallet: true }, false)
         return
       }
       // A current connection's snapshot restores public freshness even when
@@ -544,7 +545,7 @@ function LotPage({
       transport.stop()
       if (transportRef.current === transport) transportRef.current = null
     }
-  }, [lotId, applyRoom, cancelRound, loadRoom, loadPrivate, markNotFound, markCancelled])
+  }, [lotId, applyRoom, cancelRound, loadRoom, loadPrivate, runRound, markNotFound, markCancelled])
 
   // Lote cancelado ao vivo: a tela inteira muda, então o foco vai para o título (que o
   // leitor de tela anuncia) em vez de cair no `body` quando o campo do lance desmonta.
@@ -903,6 +904,8 @@ function LotPage({
               walletStale={walletStale}
               participationUnavailable={participationUnavailable}
               ownAlias={mineData?.bidder_alias ?? null}
+              ownBidCount={mineData?.my_bid_count ?? null}
+              participationVerified={paired}
               lastOwnBidCents={lastOwnBidCents}
               notice={notice}
               acceptedSyncFailed={acceptedSyncFailed}
