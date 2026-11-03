@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 import { UUID_PATTERN } from '../route.ts'
 
 export interface MyWin {
@@ -40,10 +41,10 @@ export function isMyWinsResponse(v: unknown): v is MyWinsResponse {
 }
 export async function fetchWins(signal?: AbortSignal): Promise<WinsResult> {
   try {
-    const response = await fetch('/api/me/wins', { credentials: 'same-origin', cache: 'no-store', signal })
+    const response = await apiFetch('/api/me/wins', { cache: 'no-store', signal })
     if (response.status === 401) return { ok: false, failure: 'unauthorized' }
     if (response.status === 403) return { ok: false, failure: 'forbidden' }
-    const body: unknown = await response.json()
+    const body: unknown = await readJson(response)
     if (response.status === 409 && record(body) && body.code === 'lot_integrity_conflict') return { ok: false, failure: 'integrity' }
     if (response.status !== 200 || !isMyWinsResponse(body)) return { ok: false, failure: 'server' }
     return { ok: true, data: body }

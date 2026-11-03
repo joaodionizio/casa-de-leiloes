@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP da sala do lote (Story 3.5). O servidor decide fase, mínimo e aceite:
 // este módulo só lê, valida o formato e classifica respostas. Os textos nascem do
 // status e do `code`, nunca do `message`. Sem retry: um lance nunca é reenviado
@@ -185,13 +186,6 @@ function errorCode(value: unknown): string | null {
   return typeof value.code === 'string' ? value.code : null
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 async function fetchRead<T>(
   path: string,
@@ -200,7 +194,7 @@ async function fetchRead<T>(
 ): Promise<ReadResult<T>> {
   let response: Response
   try {
-    response = await fetch(path, { credentials: 'same-origin', signal })
+    response = await apiFetch(path, { signal })
   } catch {
     return { ok: false, failure: 'server' }
   }
@@ -260,9 +254,8 @@ export function classifyBidResponse(status: number, body: unknown): BidResult {
 export async function placeBid(lotId: string, amountCents: number): Promise<BidResult> {
   let response: Response
   try {
-    response = await fetch(`/api/lots/${encodeURIComponent(lotId)}/bids`, {
+    response = await apiFetch(`/api/lots/${encodeURIComponent(lotId)}/bids`, {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount_cents: amountCents }),
     })

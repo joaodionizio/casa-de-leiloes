@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_CENTS = Number.MAX_SAFE_INTEGER
 
@@ -81,10 +82,10 @@ export function isAudit(value: unknown, lotId: string): value is Audit {
 
 export async function fetchAudit(lotId: string, signal: AbortSignal): Promise<AuditResult> {
   try {
-    const response = await fetch(`/api/lots/${encodeURIComponent(lotId)}/audit`, { credentials: 'same-origin', cache: 'no-store', signal })
+    const response = await apiFetch(`/api/lots/${encodeURIComponent(lotId)}/audit`, { cache: 'no-store', signal })
     if (response.status === 404) return { ok: false, failure: 'not_found' }
     if (response.status !== 200) return { ok: false, failure: 'server' }
-    const data: unknown = await response.json()
+    const data: unknown = await readJson(response)
     if (isAudit(data, lotId)) return { ok: true, data }
   } catch { /* Network, malformed JSON and abort are discarded by the caller. */ }
   return { ok: false, failure: 'server' }

@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 export interface Receipt {
   lot_id: string
   title: string | null
@@ -29,11 +30,11 @@ export function isReceipt(value: unknown, lotId: string): value is Receipt {
 }
 export async function fetchReceipt(lotId: string, signal: AbortSignal): Promise<ReceiptResult> {
   try {
-    const response = await fetch(`/api/lots/${encodeURIComponent(lotId)}/receipt`, { credentials: 'same-origin', cache: 'no-store', signal })
+    const response = await apiFetch(`/api/lots/${encodeURIComponent(lotId)}/receipt`, { cache: 'no-store', signal })
     if (response.status === 404) return { ok: false, failure: 'not_found' }
     if (response.status === 409) return { ok: false, failure: 'conflict' }
     if (response.status === 200) {
-      const data: unknown = await response.json()
+      const data: unknown = await readJson(response)
       if (isReceipt(data, lotId)) return { ok: true, data }
     }
   } catch { /* Request failure or abort. */ }
