@@ -207,3 +207,20 @@ Mantive commit, push e deploy sob meu controle.
 Os artefatos históricos preservam seus próprios recortes; a decisão final de
 fechamento e o smoke final regem o estado publicado. Esta edição apenas substitui
 o relato cronológico por uma explicação do processo, sem apagar as evidências.
+
+## Refatoração para portfólio — autorização excepcional (03/11/2026)
+
+Autorizei o ChatGPT a criar commits numa branch de trabalho para corrigir a
+manutenibilidade e a experiência apontadas pela Verzel; reservo a revisão e o
+merge final para mim. Mantive a decisão de não modificar produção nem dados
+reais durante a refatoração. Os commits devem ser coesos, revisáveis e passar
+por GitHub Actions com PostgreSQL isolado e Playwright.
+
+A primeira rodada corrigiu a confirmação de vitória ao licitante, consolidou
+o decodificador JSON do frontend e corrigiu problemas de usabilidade em 320px.
+A segunda rodada documentou a AD-31, separou endpoints HTTP em
+`lot_routes.py`/`bid_routes.py` e leituras em `lot_queries.py`/`bid_reads.py`,
+sem mover modelos ORM nem operações transacionais. No frontend, extraí componentes
+somente de apresentação de `LotPage.tsx` e separei o CSS em módulos mantendo a
+mesma ordem na cascata. Os testes automatizados continuam sendo o gate para
+considerar essas alterações aptas ao merge; não confundo commit com validação.
