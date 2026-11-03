@@ -8,6 +8,8 @@ import {
 import { fetchWallet, type WalletResponse } from './api/wallet'
 import AppLink from './AppLink'
 import ArtworkImage from './ArtworkImage'
+import LotArtworkDetails from './LotArtworkDetails'
+import LotPageFallback from './LotPageFallback'
 import BidHistory from './BidHistory'
 import CountdownTimer from './CountdownTimer'
 import {
@@ -33,7 +35,7 @@ import {
 import { createLotConnection } from './lotConnection'
 import { lotTitleText } from './lotLabels'
 import { formatDateTime } from './lotTime'
-import { formatCents, moneyErrorMessage, parseReaisToCents } from './money'
+import { moneyErrorMessage, parseReaisToCents } from './money'
 import { navigate } from './navigation'
 import { shouldHandleClick, type NavState } from './route'
 
@@ -740,61 +742,10 @@ function LotPage({
   }
 
   if (cancelled) {
-    return <section className="notice-page" aria-labelledby="lot-title">
-      <h1 id="lot-title" ref={headingRef} tabIndex={-1}>Este lote foi cancelado</h1>
-      <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
-      <AppLink to="/" className="button button-secondary">Ir para a vitrine</AppLink>
-    </section>
+    return <LotPageFallback status="cancelled" lotId={lotId} headingRef={headingRef} onRetry={retry} />
   }
-
-  if (detail.status === 'loading') {
-    return (
-      <section className="notice-page" aria-labelledby="lot-title">
-        <h1 id="lot-title" ref={headingRef} tabIndex={-1}>
-          Carregando lote…
-        </h1>
-        <p role="status" className="muted">
-          Buscando os dados do lote.
-        </p>
-        <div className="lot-page-reserve" aria-hidden="true" />
-      </section>
-    )
-  }
-
-  if (detail.status === 'not_found') {
-    return (
-      <section className="notice-page" aria-labelledby="lot-title">
-        <h1 id="lot-title" ref={headingRef} tabIndex={-1}>
-          Lote indisponível ou não encontrado
-        </h1>
-        <p>O lote pode ter sido removido ou o endereço está incompleto.</p>
-        <p><AppLink to={`/lots/${lotId}/audit`}>Consultar auditoria pública</AppLink></p>
-        <AppLink to="/" className="button button-secondary">
-          Ir para a vitrine
-        </AppLink>
-      </section>
-    )
-  }
-
-  if (detail.status === 'failed') {
-    return (
-      <section className="notice-page" aria-labelledby="lot-title">
-        <h1 id="lot-title" ref={headingRef} tabIndex={-1}>
-          Não foi possível carregar o lote
-        </h1>
-        <p role="alert" className="form-error">
-          O servidor não respondeu como esperado. Tente novamente em instantes.
-        </p>
-        <div className="notice-actions">
-          <button type="button" className="button button-secondary" onClick={retry}>
-            Tentar novamente
-          </button>
-          <AppLink to="/" className="button button-secondary">
-            Ir para a vitrine
-          </AppLink>
-        </div>
-      </section>
-    )
+  if (detail.status !== 'ready') {
+    return <LotPageFallback status={detail.status} lotId={lotId} headingRef={headingRef} onRetry={retry} />
   }
 
   const { lot } = detail.data
@@ -821,15 +772,6 @@ function LotPage({
         : roomData.phase === 'scheduled'
           ? `Começa ${formatDateTime(lot.starts_at)}`
           : `Terminou ${formatDateTime(roomData.ends_at)}`
-  const facts: Array<[string, string | null]> = [
-    ['Técnica', lot.medium_display],
-    ['Dimensões', lot.dimensions],
-    ['Departamento', lot.department_title],
-    ['Tipo', lot.artwork_type_title],
-    ['Crédito', lot.credit_line],
-    ['Nº no acervo', String(lot.external_id)],
-  ]
-
   const roomStatus = roomData === null ? null : (
     <div className="lot-page-status">
       <LotState phase={roomData.phase} text={roomData.phase === 'ended' && roomData.settlement_status === 'settled' ? 'Encerrado' : undefined} />
@@ -932,57 +874,7 @@ function LotPage({
         />
       )}
 
-      <div className="lot-page-details">
-        <section aria-labelledby="lot-terms-title" className="lot-page-block">
-          <h2 id="lot-terms-title">Leilão</h2>
-          <dl className="lot-facts">
-            <div>
-              <dt>Lance inicial</dt>
-              <dd className="lot-money">{formatCents(lot.starting_bid_cents)}</dd>
-            </div>
-            <div>
-              <dt>Incremento mínimo</dt>
-              <dd className="lot-money">{formatCents(lot.min_increment_cents)}</dd>
-            </div>
-            <div>
-              <dt>Início</dt>
-              <dd>{formatDateTime(lot.starts_at)}</dd>
-            </div>
-            {roomData !== null && (
-              <div>
-                <dt>Término</dt>
-                <dd>{formatDateTime(roomData.ends_at)}</dd>
-              </div>
-            )}
-          </dl>
-        </section>
-
-        <section aria-labelledby="lot-work-title" className="lot-page-block">
-          <h2 id="lot-work-title">Ficha da obra</h2>
-          <dl className="lot-facts">
-            {facts.map(([label, value]) =>
-              value === null ? null : (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{value}</dd>
-                </div>
-              ),
-            )}
-          </dl>
-          {lot.source_url.startsWith('https://') && (
-            <a
-              className="source-link"
-              href={lot.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Ver a obra no site do Art Institute of Chicago
-              <span className="visually-hidden"> (abre em nova aba)</span>
-              <span aria-hidden="true"> ↗</span>
-            </a>
-          )}
-        </section>
-      </div>
+      <LotArtworkDetails lot={lot} endsAt={roomData?.ends_at ?? null} />
     </article>
   )
 }

@@ -1,0 +1,866 @@
+/* ---------------------------------------------------------------------------
+   Navegação, vitrine e página do lote (Story 2.5). A obra é a protagonista; roxo só
+   em marca, CTA, foco e no marcador "ao vivo". Sem sombra, sem pill, sem card
+   decorativo. Estado sempre em texto (DESIGN §14). Nada depende de hover.
+   --------------------------------------------------------------------------- */
+
+/* Links do cabeçalho: marca, navegação e "Entrar". */
+.site-brand, .site-footer-brand {
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-nav-item {
+  text-decoration: none;
+}
+
+a.button {
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+}
+
+/* Foco programático em títulos de vista (`tabIndex={-1}`). */
+h1[tabindex='-1']:focus-visible,
+h2[tabindex='-1']:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 4px;
+}
+
+.untitled {
+  font-style: italic;
+}
+
+.notice-page {
+  width: 100%;
+  max-width: 36rem;
+  margin: 2rem auto;
+}
+
+.notice-page h1 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.notice-page p {
+  margin: 0 0 1rem;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Estado do lote: o texto sempre aparece; a cor só reforça. */
+.lot-state {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.lot-state-live {
+  color: var(--color-brand-strong);
+}
+
+.lot-state-ended {
+  font-weight: 500;
+  color: var(--color-muted);
+}
+
+.lot-state-dot {
+  margin-right: 0.375rem;
+}
+
+/* Vitrine. */
+.vitrine-ending-soon {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-brand-strong);
+  overflow-wrap: anywhere;
+}
+
+.vitrine {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.vitrine > * {
+  min-width: 0;
+}
+
+/* Busca no snapshot: controles discretos antes da obra, sem faixa de chips. */
+.vitrine-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: .5rem 2rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.vitrine-search { flex: 1 1 20rem; min-width: 0; }
+.vitrine-search input { min-height: 2.75rem; }
+.vitrine-phase-select { display: none; }
+.vitrine-phase-filters { min-width: 0; border: 0; padding: 0; margin: 0; }
+.vitrine-phase-filters legend { padding: 0; font-size: .875rem; font-weight: 600; color: var(--color-ink); }
+.vitrine-phase-options { display: flex; flex-wrap: wrap; gap: 0 .75rem; }
+.vitrine-phase-option { display: flex; align-items: center; gap: .375rem; min-height: 2.75rem; cursor: pointer; font-size: .875rem; }
+.vitrine-phase-option input { margin: 0; accent-color: var(--color-brand-strong); }
+.vitrine-phase-option:has(input:checked) span { font-weight: 600; text-decoration: underline; text-underline-offset: .25em; }
+.vitrine-filter-summary { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 0 1rem; min-height: 2.75rem; font-size: .8125rem; }
+.vitrine-filter-summary p { margin: 0; }
+.vitrine-clear { min-height: 2.75rem; padding: .5rem 0; border: 0; background: transparent; color: var(--color-brand-strong); font: inherit; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+
+@media (max-width: 63.99rem) {
+  .app-main:has(.vitrine) { padding-block: 1rem; }
+  .vitrine { gap: 1rem; }
+  .vitrine-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7.5rem, .6fr); gap: .25rem .75rem; padding-bottom: .5rem; }
+  .vitrine-phase-filters { display: none; }
+  .vitrine-phase-select { display: flex; }
+  .vitrine-phase-select select { width: 100%; min-height: 2.75rem; padding: .625rem .375rem; border: 1px solid var(--color-border); border-radius: 2px; background: var(--color-surface); color: var(--color-ink); font: inherit; }
+  .vitrine-filter-summary { grid-column: 1 / -1; min-height: 1.125rem; }
+}
+
+.vitrine > .as-of {
+  margin-top: -1.25rem;
+}
+
+.as-of {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.vitrine-failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.vitrine-failure .form-error {
+  margin: 0;
+}
+
+.featured-reserve {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 50vh;
+  background: var(--color-surface-subtle);
+}
+
+/* Obra cedo no mobile; composição editorial lateral somente quando há espaço. */
+.featured {
+  display: grid;
+  gap: .75rem;
+  background: var(--color-surface);
+}
+
+.featured > * { min-width: 0; }
+.featured-art { position: relative; }
+.featured-art .artwork-image-large {
+  height: clamp(12rem, 55vw, 22rem);
+  max-height: none;
+  aspect-ratio: auto;
+  background: var(--color-surface);
+}
+.featured-info { padding: 0 1rem 1.25rem; }
+@media (max-width: 63.99rem) {
+  .featured-art .artwork-image-large { height: clamp(12rem, 50vw, 17rem); }
+}
+.featured-kicker {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .featured {
+    grid-template-columns: 2fr 3fr;
+    gap: 0;
+    align-items: center;
+    min-height: 32rem;
+  }
+  .featured-info { grid-column: 1; grid-row: 1; padding: 2rem 1.5rem 2rem 2rem; }
+  .featured-kicker { display: block; margin-bottom: .75rem; }
+  .featured-art { grid-column: 2; grid-row: 1; }
+  .featured-art .artwork-image-large { height: 30rem; }
+  /* Faixa estreita na borda: a obra inteira permanece em contain. Desligada em
+     retratos/quadrados, carga pendente e fallback; nunca recebe eventos. */
+  .featured-art:has([data-landscape='true'][data-failed='false'])::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 1.75rem 0;
+    width: 10%;
+    background: linear-gradient(90deg, var(--color-surface), transparent);
+    pointer-events: none;
+  }
+}
+
+.featured-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.featured-info > * {
+  max-width: 100%;
+}
+
+.featured-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+
+@media (min-width: 64rem) {
+  .featured-title {
+    font-size: 2.25rem;
+  }
+}
+
+.featured-artist {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.featured-bid {
+  display: flex;
+  flex-direction: column;
+  margin: 0.5rem 0 0;
+}
+
+.featured-bid-label {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.featured-bid-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+.featured-when {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.featured-cta {
+  margin-top: 0.75rem;
+  min-height: 2.75rem;
+}
+
+.featured-empty {
+  padding-block: 2rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.featured-empty h2 {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.featured-empty p {
+  margin: 0;
+}
+
+/* Seções. */
+.vitrine-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.vitrine-section-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.vitrine-section-indicator {
+  display: inline-block;
+  position: relative;
+  width: .75rem;
+  height: .75rem;
+  margin-right: .5rem;
+  vertical-align: .05em;
+}
+
+.vitrine-section-indicator-live::before,
+.vitrine-section-indicator-ended::before {
+  content: '';
+  position: absolute;
+  inset: .125rem;
+  border-radius: 50%;
+}
+
+.vitrine-section-indicator-live::before {
+  background: var(--color-brand);
+}
+
+.vitrine-section-indicator-live::before,
+.vitrine .lot-state-dot {
+  animation: vitrine-live-breathe 1.8s ease-in-out infinite;
+}
+
+.vitrine .lot-state-dot {
+  display: inline-block;
+}
+
+.vitrine-section-indicator-upcoming {
+  border: 1px solid var(--color-brand);
+  border-radius: 50%;
+  background: var(--color-brand-soft);
+  opacity: .65;
+}
+
+.vitrine-section-indicator-upcoming::before {
+  content: '';
+  position: absolute;
+  top: .125rem;
+  left: .25rem;
+  width: .1875rem;
+  height: .25rem;
+  border-left: 1px solid var(--color-brand-strong);
+  border-bottom: 1px solid var(--color-brand-strong);
+}
+
+.vitrine-section-indicator-ended::before {
+  background: var(--color-danger);
+  animation: vitrine-ended-breathe 2.8s ease-in-out infinite;
+}
+
+@keyframes vitrine-live-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .55; transform: scale(.85); }
+}
+
+@keyframes vitrine-ended-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vitrine-section-indicator-live::before,
+  .vitrine-section-indicator-ended::before,
+  .vitrine .lot-state-dot { animation: none; }
+}
+
+.vitrine-empty {
+  margin: 0;
+}
+
+/* Botões do rail: só no desktop (e só com overflow, decidido no componente). */
+.rail-controls {
+  display: none;
+  gap: 0.5rem;
+}
+
+@media (min-width: 64rem) {
+  .rail-controls {
+    display: flex;
+  }
+}
+
+/* Rails horizontais com `scroll-snap`; parte do próximo item fica visível. */
+/* `overflow-x: auto` também corta no eixo vertical e nas bordas: o contorno de foco dos
+   links (2 px + 4 px de `outline-offset`) saía cortado no topo e à esquerda do primeiro
+   item. O padding de 0.5rem abre espaço para ele, e a margem negativa devolve a posição:
+   nada muda de lugar na tela. `scroll-padding` mantém o `scroll-snap` alinhado ao conteúdo. */
+.rail {
+  display: flex;
+  gap: 1rem;
+  margin: -0.5rem -0.5rem 0;
+  padding: 0.5rem;
+  scroll-padding-inline: 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  list-style: none;
+  scroll-snap-type: x mandatory;
+}
+
+.rail-item {
+  flex: 0 0 80vw;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.rail-item-upcoming {
+  flex-basis: 70vw;
+}
+
+@media (min-width: 48rem) {
+  .rail-item {
+    flex-basis: 38%;
+  }
+
+  .rail-item-upcoming {
+    flex-basis: 31%;
+  }
+}
+
+@media (min-width: 75rem) {
+  .rail-item {
+    flex-basis: 29%;
+  }
+
+  .rail-item-upcoming {
+    flex-basis: 21%;
+  }
+}
+
+.rail-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.rail-link:hover .rail-title,
+.closed-link:hover .closed-title {
+  text-decoration: underline;
+}
+
+.rail-link:focus-visible,
+.closed-link:focus-visible {
+  outline: 2px solid var(--color-brand-strong);
+  outline-offset: 4px;
+}
+
+/* A obra nunca é cortada: `contain` numa caixa 4:3 reservada. */
+.artwork-image-card {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.artwork-image-card img {
+  object-fit: contain;
+}
+
+.rail-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink);
+}
+
+.rail-artist {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  font-size: 0.9375rem;
+}
+
+.rail-bid {
+  display: flex;
+  flex-direction: column;
+}
+
+.rail-label {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.rail-value {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+.rail-bid-light {
+  display: block;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.rail-when {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Encerrados: lista densa, peso visual menor. */
+.closed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.closed-row {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.closed-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem 0.875rem;
+  padding: 0.75rem 0.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.closed-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.closed-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 400;
+  color: var(--color-ink);
+}
+
+.closed-artist {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  font-size: 0.9375rem;
+}
+
+.closed-status {
+  display: flex;
+  flex-direction: column;
+  grid-column: 2;
+  gap: 0.125rem;
+  min-width: 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 48rem) {
+  .closed-link {
+    grid-template-columns: 4.5rem minmax(0, 1fr) minmax(15rem, 20rem);
+    gap: 1rem;
+  }
+
+  .closed-status {
+    grid-column: auto;
+    text-align: right;
+  }
+}
+
+.closed-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-top: 1rem;
+}
+
+.closed-more p {
+  margin: 0;
+}
+
+.closed-more .button {
+  min-height: 2.75rem;
+}
+
+/* Página do lote: obra à esquerda e ficha à direita no desktop; uma coluna abaixo. */
+.lot-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.lot-page-back {
+  margin: 0 0 1rem;
+}
+
+.back-link {
+  color: var(--color-brand-strong);
+  text-underline-offset: 0.2em;
+}
+
+.lot-page-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+/* Estado e prazo vêm antes da obra no mobile (ordem do DOM); no desktop ficam acima do
+   título, na coluna da ficha. */
+.lot-page-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lot-page-grid > * {
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .lot-page-grid {
+    grid-template-columns: 3fr 2fr;
+    grid-template-rows: auto 1fr;
+    column-gap: 2.5rem;
+    row-gap: 0.5rem;
+    align-items: start;
+  }
+
+  .lot-page-status {
+    grid-column: 2;
+  }
+
+  .lot-page-art {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: 1rem;
+  }
+
+  .lot-page-info {
+    grid-column: 2;
+  }
+
+  .lot-page-art .artwork-image-large {
+    max-height: 80vh;
+  }
+}
+
+.lot-page-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lot-page-info > * {
+  max-width: 100%;
+}
+
+.lot-page-when {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lot-page-title {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+.lot-page-artist,
+.lot-page-date {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.lot-page-block h2 {
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.lot-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+
+@media (min-width: 30rem) {
+  .lot-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lot-facts > div {
+  min-width: 0;
+}
+
+.lot-facts dt {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.lot-facts dd {
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+.lot-page-block .as-of {
+  margin-top: 0.75rem;
+}
+
+.lot-page-block .source-link {
+  display: inline-block;
+  margin-top: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.lot-page-reserve {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 50vh;
+  background: var(--color-surface-subtle);
+}
+
+/* Densidade dos rails (retoque depois do teste manual): poucos lotes não deixam vazio
+   à direita. A classe `rail-n-N` vem do componente (1, 2, 3 ou 4 = quatro ou mais) e
+   só muda a largura dos itens: um lote sozinho vira um cartão largo e horizontal, dois
+   dividem a faixa, três ocupam as três colunas do desktop, e com quatro ou mais o rail
+   volta a rolar com parte do próximo item visível. A obra continua em 4:3, sem corte. */
+.rail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+/* Um item só ocupa a largura útil também no celular. */
+.rail-n-1 .rail-item {
+  flex-basis: 100%;
+}
+
+@media (min-width: 48rem) {
+  /* Um lote sozinho: cartão horizontal, obra à esquerda, ficha à direita. */
+  .rail-n-1 .rail-item {
+    flex-basis: 100%;
+    max-width: 46rem;
+  }
+
+  .rail-n-1 .rail-link {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  /* Dois lotes dividem a faixa. */
+  .rail-n-2 .rail-item {
+    flex: 1 1 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  .rail-n-2 .rail-link {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  /* Três lotes ocupam as três colunas. */
+  .rail-n-3 .rail-item {
+    flex: 0 0 calc((100% - 2rem) / 3);
+  }
+}
+
+/* Alvos de toque (review da 2.5, L3): o header e "← Vitrine" chegam perto de 44 px de
+   área acionável sem aumentar a fonte nem a caixa visual. A área extra é um pseudo-elemento
+   transparente do próprio link ou botão (conta como o elemento no toque e no clique). O
+   espaço entre as linhas do header é de 0.75rem: nenhuma extensão passa da metade dele, e
+   por isso as áreas de linhas vizinhas não se sobrepõem. */
+.site-brand,
+.site-nav-item,
+.site-login-link,
+.account .button,
+.back-link {
+  position: relative;
+}
+
+.site-brand::after,
+.site-nav-item::after,
+.site-login-link::after,
+.account .button::after,
+.back-link::after {
+  content: '';
+  position: absolute;
+}
+
+.site-brand::after {
+  inset: -0.625rem 0 -0.375rem;
+}
+
+.site-nav-item::after {
+  inset: -0.375rem 0;
+}
+
+.site-login-link::after,
+.account .button::after {
+  inset: -0.25rem 0;
+}
+
+.back-link::after {
+  inset: -0.8125rem 0;
+}
+
