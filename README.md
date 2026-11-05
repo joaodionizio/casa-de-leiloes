@@ -169,6 +169,15 @@ e no [CI](https://github.com/joaodionizio/casa-de-leiloes/actions/workflows/qual
 as alterações desse Pull Request não devem ser consideradas publicadas até o
 merge e o deploy serem executados e testados separadamente.
 
+### Preservação do banco de demonstração
+
+O banco PostgreSQL gratuito da Render tem suspensão informada para **23/11/2026**.
+As alterações desta PR não realizam backup nem upgrade automaticamente. Antes
+que expire, execute o [procedimento de exportação e teste de restauração](docs/PRESERVACAO-BANCO-RENDER.md)
+em um ambiente confiável e mantenha a cópia fora do Git. Para um portfólio de
+longo prazo, prefira uma instância persistente adequada ou migre o banco com
+a mesma abordagem de backup/restauração.
+
 ## Instalação e execução local
 
 Pré-requisitos: **Python 3.13+, uv, Node.js 24/npm, Docker e Compose v2**.

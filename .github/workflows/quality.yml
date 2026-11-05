@@ -63,6 +63,8 @@ jobs:
       APP_ORIGIN: http://localhost:5173
     steps:
       - uses: actions/checkout@v4
+      - name: Validate backup script syntax
+        run: bash -n scripts/backup-render-postgres.sh
       - uses: astral-sh/setup-uv@v6
       - name: Install Python
         run: uv python install 3.13
