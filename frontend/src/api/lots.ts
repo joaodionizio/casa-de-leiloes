@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP dos lotes (Story 2.4). O servidor é a única fonte do snapshot da
 // obra: o corpo do POST leva só `external_id` e os termos. Os textos exibidos
 // nascem do status, do `code` e do `details.type`, nunca do `message`.
@@ -222,20 +223,12 @@ function problemsFrom(value: unknown): FieldProblem[] {
 }
 
 // Corpo JSON da resposta, ou null se não for JSON.
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 export async function createLot(request: CreateLotRequest): Promise<CreateLotResult> {
   let response: Response
   try {
-    response = await fetch('/api/lots', {
+    response = await apiFetch('/api/lots', {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })
@@ -269,7 +262,7 @@ export async function createLot(request: CreateLotRequest): Promise<CreateLotRes
 export async function fetchMyLots(signal: AbortSignal): Promise<MyLotsResult> {
   let response: Response
   try {
-    response = await fetch('/api/lots/mine', { credentials: 'same-origin', signal })
+    response = await apiFetch('/api/lots/mine', { signal })
   } catch {
     return { ok: false, failure: 'server' }
   }
@@ -317,9 +310,8 @@ export function classifyCancelResponse(
 export async function cancelLot(lotId: string): Promise<CancelLotResult> {
   let response: Response
   try {
-    response = await fetch(`/api/lots/${encodeURIComponent(lotId)}/cancel`, {
+    response = await apiFetch(`/api/lots/${encodeURIComponent(lotId)}/cancel`, {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
     })
   } catch {

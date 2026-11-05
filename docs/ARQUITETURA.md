@@ -12,7 +12,7 @@ de entrega fica no sprint e o fechamento operacional segue
 `docs/FECHAMENTO-DE-EPICO.md`. Questões restantes são de implementação.
 Esta atualização de cabeçalho (26/10/2026) não declara o Epic 3 encerrado.
 
-Todas as decisões abaixo (AD-1 a AD-30) são **vinculantes**: código que as
+Todas as decisões abaixo (AD-1 a AD-31) são **vinculantes**: código que as
 contraria está errado. Para mudar uma, altero primeiro este documento. Toda
 decisão tem a alternativa descartada; onde eu não registrei uma, está escrito.
 As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + n).
@@ -51,6 +51,7 @@ As decisões AD-19 a AD-30 correspondem às antigas perguntas Q1 a Q12 (AD-18 + 
 | AD-28 | Monorepo; `uv`; Dockerfile multi-stage; FastAPI serve a SPA; sem estado no filesystem do contêiner | Não registrei | Um serviço, uma origem |
 | AD-29 | JWT de 8 h; cookie HttpOnly/Secure/SameSite=Lax/Path=/ sem Domain, `__Host-` quando possível; CSRF: GET/HEAD/OPTIONS sem efeito, JSON, validar Origin (Referer se faltar), sem CORS permissivo | Não registrei | Token copiado vale até `exp` |
 | AD-30 | Inglês em código, banco e API; interface e mensagens em português; rotas `/api/...` | Misturar português e inglês no domínio técnico | Tabelas `users`, `wallets`, `lots`, `bids`, `receipts` |
+| AD-31 | Refatoração incremental de apresentação, roteamento e domínio em módulos pequenos, sem alterar transações ou contratos externos | Reescrita geral em camadas e manutenção dos arquivos monolíticos | Rotas separadas das regras; verificações de regressão obrigatórias |
 
 ## Decisões
 
@@ -868,6 +869,38 @@ comportamento transacional do PostgreSQL.
 - Não misturo português e inglês dentro do domínio técnico.
 
 **Descartei:** misturar português e inglês no domínio técnico.
+
+### AD-31. Refatoração de manutenibilidade para portfólio (03/11/2026)
+
+**Decidi:** após receber o feedback técnico do desafio Elite Dev, manter o ÁTRIO como
+portfólio e substituir gradualmente arquivos grandes por módulos coesos. O primeiro
+passo separa os endpoints HTTP dos serviços e consultas de lotes e lances, preservando
+as importações públicas usadas pelo código existente. No frontend, a apresentação
+da Sala reside em `LotPage.tsx` e sua orquestração em `useLotRoomController.ts`;
+componentes estáticos foram extraídos sem reescrever a arbitragem de snapshots,
+o mecanismo de reconexão nem os estados transacionais.
+
+**Motivo:** o projeto funciona e possui testes extensos, mas o acoplamento entre HTTP,
+domínio, persistência e apresentação dificulta compreender e revisar mudanças.
+Quero conseguir explicar essas fronteiras a outro desenvolvedor.
+
+**Limites obrigatórios:** mantenho ordenação das rotas e modelo OpenAPI, bloqueios
+do PostgreSQL, instantes lidos do banco, anti-sniping, HMAC, liquidação
+idempotente, schemas, tipos REST/WS e semântica de erros. As alterações passam
+por revisão do diff e pelos testes de integração PostgreSQL e navegador antes
+de qualquer merge. Não mover modelos ORM às cegas para não alterar a
+descoberta de metadados e migrations.
+
+**Alternativas descartadas:** reescrever tudo em Clean Architecture de uma vez
+(criaria abstrações artificiais e risco transacional), continuar com arquivos
+grandes sem separar responsabilidades (mantém a crítica de manutenção) e
+adotar um novo framework sem necessidade.
+
+**Governança específica:** autorizei excepcionalmente commits automatizados em
+uma branch de portfólio nesta conversa, com revisão humana ao final. Isso não
+autoriza merge automático, mudanças na `main`, alteração do banco de produção
+ou deploy. A preferência geral de Git manual de AD-18 continua vigente fora
+deste escopo.
 
 ## Revisão final: contradições
 

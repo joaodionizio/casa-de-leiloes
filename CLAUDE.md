@@ -20,6 +20,9 @@ que não mudam a arquitetura.
 - **Git é meu.** Nunca execute git (add, commit, branch, merge, push, status,
   diff). Leia arquivos com as ferramentas de leitura. Um commit por unidade
   coerente/story; eu reviso antes de cada commit.
+  Exceção pontual autorizada em 03/11/2026: para a refatoração de portfólio,
+  commits em branch isolada são permitidos; nunca fazer merge, push na main
+  nem deploy sem revisão humana final. Fora dela, mantenho a regra acima.
 - **As decisões são minhas.** Implemente a partir delas. Não decida nada em
   "Questões para a implementação" nem invente decisão para preencher lacuna:
   pergunte, com opções, consequências, custo e recomendação, e espere.

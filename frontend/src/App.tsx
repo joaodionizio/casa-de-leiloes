@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import './styles/auction-experience.css'
+import './styles/account-and-support.css'
 import {
   failureMessage,
   fetchCurrentUser,

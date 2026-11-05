@@ -8,6 +8,7 @@ import type { ConnectionState } from './lotRoomSocket'
 import BidForm from './BidForm'
 import type { BidNotice } from './bidFeedback'
 import type { BidPosition } from './bidPosition'
+import BidderSettlementNotice from './BidderSettlementNotice'
 import { formatDateTime, formatClock } from './lotTime'
 import { formatCents } from './money'
 
@@ -38,6 +39,8 @@ interface LotBidPanelProps {
   // Participação ausente ou de outra rodada que a sala exibida: a posição não se calcula.
   participationUnavailable: boolean
   ownAlias: string | null
+  ownBidCount: number | null
+  participationVerified: boolean
   // Último lance próprio, só com o lote encerrado.
   lastOwnBidCents: number | null
   notice: BidNotice | null
@@ -87,6 +90,16 @@ function LotBidPanel(props: LotBidPanelProps) {
       {room.phase === 'ended' && (
         <p className="room-phase-note">{room.settlement_status === 'settled' ? 'Encerrado' : 'Encerrado, apurando resultado'}</p>
       )}
+      {viewer === 'bidder' && (
+        <BidderSettlementNotice
+          lotId={props.lotId}
+          room={room}
+          ownAlias={props.ownAlias}
+          ownBidCount={props.ownBidCount}
+          participationVerified={props.participationVerified}
+          participationUnavailable={props.participationUnavailable}
+        />
+      )}
       {live && props.zeroConfirming && (
         <p role="status" className="muted">
           Confirmando encerramento com o servidor…
@@ -124,7 +137,7 @@ function LotBidPanel(props: LotBidPanelProps) {
           </div>
         )}
       </dl>
-      {viewer === 'bidder' && props.participationUnavailable && (
+      {viewer === 'bidder' && props.participationUnavailable && room.settlement_status !== 'settled' && (
         <p className="muted">Não foi possível carregar sua participação.</p>
       )}
       {viewer === 'bidder' && props.ownAlias !== null && (

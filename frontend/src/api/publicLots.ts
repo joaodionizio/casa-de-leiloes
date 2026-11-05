@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP público dos lotes (Story 2.5). Sem sessão: a resposta não depende de
 // quem pede. O front só apresenta o que o servidor classificou: `phase` chega pronta
 // e nunca é recalculada aqui. Resposta fora do contrato vira falha `server`.
@@ -120,20 +121,13 @@ export function isPublicLotDetailResponse(
   return typeof value.as_of === 'string' && isPublicLotDetail(value.lot)
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 // Cada chamada é uma fotografia nova: a fase só muda num novo `GET` (P3). O chamador
 // ignora o resultado quando o `signal` já foi abortado.
 export async function fetchPublicLots(signal: AbortSignal): Promise<PublicLotsResult> {
   let response: Response
   try {
-    response = await fetch('/api/lots', { credentials: 'same-origin', signal })
+    response = await apiFetch('/api/lots', { signal })
   } catch {
     return { ok: false, failure: 'server' }
   }
@@ -149,8 +143,7 @@ export async function fetchPublicLot(
 ): Promise<PublicLotResult> {
   let response: Response
   try {
-    response = await fetch(`/api/lots/${encodeURIComponent(lotId)}`, {
-      credentials: 'same-origin',
+    response = await apiFetch(`/api/lots/${encodeURIComponent(lotId)}`, {
       signal,
     })
   } catch {

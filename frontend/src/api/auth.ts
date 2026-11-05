@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP de autenticação (Story 2.2). O token vive só no cookie HttpOnly:
 // este módulo nunca o lê, e nada de sessão vai para localStorage/sessionStorage.
 
@@ -61,8 +62,8 @@ export async function register(email: string, password: string, role: UserRole):
   const failed = (failure: RegistrationFailure, fields: RegistrationField[] = []): RegisterResult => ({ ok: false, failure, fields })
   let response: Response
   try {
-    response = await fetch('/api/auth/register', {
-      method: 'POST', credentials: 'same-origin',
+    response = await apiFetch('/api/auth/register', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, role }),
     })
@@ -110,19 +111,11 @@ function isApiErrorBody(value: unknown): value is ApiErrorBody {
   return typeof candidate.status === 'number' && typeof candidate.code === 'string'
 }
 
-// Corpo JSON da resposta, ou null se não for JSON.
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 export async function fetchCurrentUser(): Promise<MeResult> {
   let response: Response
   try {
-    response = await fetch('/api/me', { credentials: 'same-origin' })
+    response = await apiFetch('/api/me')
   } catch {
     return { ok: false, failure: 'server' }
   }
@@ -139,9 +132,8 @@ export async function login(
 ): Promise<LoginResult> {
   let response: Response
   try {
-    response = await fetch('/api/auth/login', {
+    response = await apiFetch('/api/auth/login', {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     })
@@ -169,9 +161,8 @@ export async function login(
 export async function logout(): Promise<LogoutResult> {
   let response: Response
   try {
-    response = await fetch('/api/auth/logout', {
+    response = await apiFetch('/api/auth/logout', {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
     })
   } catch {

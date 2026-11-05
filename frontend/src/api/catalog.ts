@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP do catálogo do Art Institute of Chicago (Story 2.3). Leitura
 // pura: o servidor devolve só estes campos, nunca o JSON da AIC. Os textos
 // exibidos nascem do `code`/status, nunca do `message` do servidor.
@@ -79,13 +80,6 @@ function errorCode(value: unknown): string | null {
 }
 
 // Corpo JSON da resposta, ou null se não for JSON.
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 // Falha a partir do status e do código do erro. `not_found` só vale no detalhe.
 async function failureFrom(
@@ -111,9 +105,9 @@ export async function searchArtworks(
 ): Promise<SearchResult> {
   let response: Response
   try {
-    response = await fetch(
+    response = await apiFetch(
       `/api/catalog/artworks?q=${encodeURIComponent(term)}`,
-      { credentials: 'same-origin', signal },
+      { signal },
     )
   } catch {
     return { ok: false, failure: 'server' }
@@ -132,9 +126,9 @@ export async function fetchArtwork(
 ): Promise<DetailResult> {
   let response: Response
   try {
-    response = await fetch(
+    response = await apiFetch(
       `/api/catalog/artworks/${encodeURIComponent(String(externalId))}`,
-      { credentials: 'same-origin', signal },
+      { signal },
     )
   } catch {
     return { ok: false, failure: 'server' }

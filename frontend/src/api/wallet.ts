@@ -1,3 +1,4 @@
+import { apiFetch, readJson } from './http.ts'
 // Contrato HTTP da carteira (Story 3.1). O servidor é a única fonte dos saldos: este
 // módulo só lê e classifica respostas. Os textos exibidos nascem do status e do `code`,
 // nunca do `message`. Sem retry: um depósito nunca é reenviado automaticamente (P8).
@@ -64,20 +65,13 @@ function errorCode(value: unknown): string | null {
 }
 
 // Corpo JSON da resposta, ou null se não for JSON.
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
 
 // Um `fetch` abortado cai no `catch` como qualquer falha de rede; quem chama descarta
 // o resultado quando o próprio sinal foi abortado.
 export async function fetchWallet(signal?: AbortSignal): Promise<WalletReadResult> {
   let response: Response
   try {
-    response = await fetch('/api/wallet', { credentials: 'same-origin', signal })
+    response = await apiFetch('/api/wallet', { signal })
   } catch {
     return { ok: false, failure: 'server' }
   }
@@ -93,9 +87,8 @@ export async function depositToWallet(amountCents: number): Promise<DepositResul
   const request: DepositRequest = { amount_cents: amountCents }
   let response: Response
   try {
-    response = await fetch('/api/wallet/deposit', {
+    response = await apiFetch('/api/wallet/deposit', {
       method: 'POST',
-      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })

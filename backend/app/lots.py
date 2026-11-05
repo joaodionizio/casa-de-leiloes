@@ -1,6 +1,7 @@
 """Lotes (Story 2.4, AD-3, AD-6, AD-12, AD-23, AD-26, AD-30).
 
-Um módulo, como `catalog.py`: modelo, schemas, regra pura, serviço e rotas. Dois
+Modelo, schemas e regras do lote; consultas SQL em `lot_queries.py` e rotas
+HTTP em `lot_routes.py`. Dois
 níveis de serviço, separados de propósito (A3):
 
 - `resolve_artwork_for_lot`: a única ponte entre a criação de lote e a AIC. Só a
@@ -18,10 +19,9 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from pydantic import (
     AfterValidator,
     AwareDatetime,
@@ -31,7 +31,6 @@ from pydantic import (
     Field,
     StrictInt,
     StringConstraints,
-    ValidationError,
     model_validator,
 )
 from pydantic_core import PydanticCustomError
@@ -43,7 +42,6 @@ from sqlalchemy import (
     Select,
     String,
     Text,
-    and_,
     false,
     func,
     select,
@@ -52,29 +50,19 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.sql.expression import CTE
 
-from app.access import NO_STORE, AccessPolicy, api_route, require_auctioneer
-from app.artic import IMAGE_ID_PATTERN, ArticClient, CatalogUnavailable
+from app.artic import IMAGE_ID_PATTERN, ArticClient
 from app.bid_integrity import GENESIS_HASH, AnchorState, compute_anchor_hmac
 from app.catalog import (
     MAX_EXTERNAL_ID,
     ArtworkDetail,
     LookupStatus,
-    get_artic_client,
     get_artwork,
     image_url_for,
 )
 from app.config import IntegrityConfig
-from app.db import Base, get_session
-from app.errors import (
-    ARTWORK_NOT_ELIGIBLE,
-    CATALOG_UNAVAILABLE,
-    LOT_INTEGRITY_CONFLICT,
-    error_response,
-    error_responses,
-)
+from app.db import Base
 from app.lot_time import LotPhase, lot_phase
 from app.money import MAX_CENTS, Cents
-from app.users import User
 
 if TYPE_CHECKING:
     from app.bids import IntegrityConflict
@@ -550,402 +538,73 @@ class PublicLotDetailResponse(BaseModel):
 
 
 def _clock_cte() -> CTE:
-    """`clock_timestamp()` avaliado uma única vez: o CTE `MATERIALIZED` nunca é
-    embutido na consulta, então o valor se repete em todas as linhas."""
-    return (
-        select(func.clock_timestamp().label("as_of"))
-        .cte("clock")
-        .prefix_with("MATERIALIZED")
-    )
+    from app.lot_queries import _clock_cte as query
+
+    return query()
 
 
 def public_snapshot_statement() -> Select:
-    """O único statement da vitrine: o instante e todos os lotes no mesmo snapshot.
-    O `LEFT OUTER JOIN` parte do CTE (uma linha), então há `as_of` mesmo sem lotes. O
-    cancelado (Story 3.6, D3) é excluído na condição do JOIN, nunca num `WHERE`: o
-    `WHERE` apagaria a linha do `as_of` quando só há lotes cancelados."""
-    from app.lot_settlement import LotSettlement
+    from app.lot_queries import public_snapshot_statement as query
 
-    clock = _clock_cte()
-    return (
-        select(clock.c.as_of, Lot, LotSettlement.id.label("settlement_id"))
-        .select_from(clock)
-        .outerjoin(Lot, Lot.cancelled_at.is_(None))
-        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
-        .execution_options(autoflush=False)
-    )
+    return query()
 
 
 def my_lots_statement(auctioneer_id: uuid.UUID) -> Select:
-    """O statement da lista do leiloeiro (Story 3.6, D7): o instante e os lotes do dono
-    no mesmo snapshot, **inclusive os cancelados**. Parte do CTE, então há `as_of` mesmo
-    sem lotes; a ordem é a de sempre, `created_at DESC, id DESC`."""
-    from app.lot_settlement import LotSettlement, Receipt
+    from app.lot_queries import my_lots_statement as query
 
-    clock = _clock_cte()
-    lot_columns = [name for name in LotResponse.model_fields if name != "image_url"] + [
-        "cancelled_at",
-        "bid_count",
-        "current_bid_cents",
-        "current_leader_id",
-        "final_hash",
-    ]
-    settlement_columns = (
-        "id",
-        "lot_id",
-        "outcome",
-        "winner_user_id",
-        "winner_alias",
-        "winning_bid_sequence",
-        "final_amount_cents",
-        "bid_count",
-        "final_hash",
-        "settled_at",
-    )
-    receipt_columns = (
-        "id",
-        "lot_id",
-        "settlement_id",
-        "winner_alias",
-        "winning_bid_sequence",
-        "final_amount_cents",
-        "bid_count",
-        "final_hash",
-        "settled_at",
-    )
-    return (
-        select(
-            clock.c.as_of,
-            *[getattr(Lot, name).label("l_" + name) for name in lot_columns],
-            *[
-                getattr(LotSettlement, name).label("s_" + name)
-                for name in settlement_columns
-            ],
-            *[getattr(Receipt, name).label("r_" + name) for name in receipt_columns],
-        )
-        .select_from(clock)
-        .outerjoin(Lot, Lot.auctioneer_id == auctioneer_id)
-        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
-        .outerjoin(Receipt, Receipt.lot_id == Lot.id)
-        .order_by(Lot.created_at.desc().nulls_last(), Lot.id.desc().nulls_last())
-        .execution_options(autoflush=False)
-    )
+    return query(auctioneer_id)
 
 
 def read_my_lots_snapshot(
     session: Session, auctioneer_id: uuid.UUID
 ) -> "MyLotsResponse | IntegrityConflict":
-    from app.bids import IntegrityConflict, IntegrityFailure
-    from app.lot_settlement import _structural_conflict
+    from app.lot_queries import read_my_lots_snapshot as query
 
-    rows = session.execute(my_lots_statement(auctioneer_id)).all()
-    as_of = rows[0].as_of.astimezone(UTC)
-    items = []
-    total = 0
-    for row in rows:
-
-        def projected(prefix, row=row):
-            values = {
-                name[2:]: value
-                for name, value in row._mapping.items()
-                if name.startswith(prefix)
-            }
-            return SimpleNamespace(**values) if values["id"] is not None else None
-
-        lot, settlement, receipt = projected("l_"), projected("s_"), projected("r_")
-        if lot is None:
-            continue
-        conflict = _structural_conflict(settlement, receipt)
-        summary = None
-        if settlement is not None and not conflict:
-            try:
-                summary = PrivateLotSettlementSummary(
-                    **{
-                        name: getattr(settlement, name)
-                        for name in PrivateLotSettlementSummary.model_fields
-                    }
-                )
-                valid = (
-                    lot.cancelled_at is None
-                    and lot_phase(lot.starts_at, lot.ends_at, as_of) == LotPhase.ENDED
-                    and settlement.lot_id == lot.id
-                    and summary.settled_at >= lot.ends_at
-                    and settlement.bid_count == lot.bid_count
-                    and settlement.final_hash == lot.final_hash
-                    and re.fullmatch(r"[0-9a-f]{64}", settlement.final_hash) is not None
-                    and settlement.final_amount_cents == lot.current_bid_cents
-                    and settlement.winner_user_id == lot.current_leader_id
-                    and (
-                        settlement.outcome != "sold"
-                        or (
-                            settlement.winner_user_id is not None
-                            and settlement.winning_bid_sequence == settlement.bid_count
-                        )
-                    )
-                )
-            except ValidationError:
-                valid = False
-            if not valid:
-                conflict = IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
-        if conflict:
-            logger.error(
-                "private lot read failed lot_id=%s category=settlement_structure",
-                lot.id,
-            )
-            return conflict
-        items.append(my_lot_response(lot, as_of, summary))
-        if summary and summary.outcome == "sold":
-            total += summary.final_amount_cents
-    if total > MAX_CENTS:
-        logger.error("private lot read failed category=total_range")
-        return IntegrityConflict(IntegrityFailure.SETTLEMENT_MISMATCH)
-    return MyLotsResponse(as_of=as_of, items=items, total_received_cents=total)
+    return query(session, auctioneer_id)
 
 
 def read_public_snapshot(
     session: Session,
 ) -> tuple[datetime, list[Lot], set[uuid.UUID]]:
-    rows = session.execute(public_snapshot_statement()).all()
-    as_of = rows[0].as_of.astimezone(UTC)
-    return (
-        as_of,
-        [row.Lot for row in rows if row.Lot is not None],
-        {row.Lot.id for row in rows if row.settlement_id is not None},
-    )
+    from app.lot_queries import read_public_snapshot as query
+
+    return query(session)
 
 
 def read_public_lot_snapshot(
     session: Session, lot_id: uuid.UUID
 ) -> tuple[datetime, Lot | None, bool]:
-    # A condição do id (e a do cancelamento, D3) fica no JOIN, nunca num WHERE: o WHERE
-    # apagaria a linha do `as_of` quando o lote não existe ou está cancelado.
-    from app.lot_settlement import LotSettlement
+    from app.lot_queries import read_public_lot_snapshot as query
 
-    clock = _clock_cte()
-    row = session.execute(
-        select(clock.c.as_of, Lot, LotSettlement.id.label("settlement_id"))
-        .select_from(clock)
-        .outerjoin(Lot, and_(Lot.id == lot_id, Lot.cancelled_at.is_(None)))
-        .outerjoin(LotSettlement, LotSettlement.lot_id == Lot.id)
-        .execution_options(autoflush=False)
-    ).one()
-    return row.as_of.astimezone(UTC), row.Lot, row.settlement_id is not None
+    return query(session, lot_id)
 
 
 def public_lot_summary(
     lot: Lot, as_of: datetime, *, has_settlement: bool
 ) -> PublicLotSummary:
-    return PublicLotSummary(
-        id=lot.id,
-        title=lot.title,
-        artist_display=lot.artist_display,
-        date_display=lot.date_display,
-        image_url=image_url_for(lot.image_id),
-        starting_bid_cents=lot.starting_bid_cents,
-        current_bid_cents=lot.current_bid_cents,
-        starts_at=lot.starts_at.astimezone(UTC),
-        ends_at=lot.ends_at.astimezone(UTC),
-        phase=lot_phase(lot.starts_at, lot.ends_at, as_of),
-        settlement_status="settled" if has_settlement else "pending",
-    )
+    from app.lot_queries import public_lot_summary as query
+
+    return query(lot, as_of, has_settlement=has_settlement)
 
 
 def public_lot_detail(
     lot: Lot, as_of: datetime, *, has_settlement: bool
 ) -> PublicLotDetail:
-    return PublicLotDetail(
-        **public_lot_summary(lot, as_of, has_settlement=has_settlement).model_dump(),
-        external_id=lot.external_id,
-        medium_display=lot.medium_display,
-        dimensions=lot.dimensions,
-        department_title=lot.department_title,
-        artwork_type_title=lot.artwork_type_title,
-        credit_line=lot.credit_line,
-        source_url=lot.source_url,
-        min_increment_cents=lot.min_increment_cents,
-    )
+    from app.lot_queries import public_lot_detail as query
+
+    return query(lot, as_of, has_settlement=has_settlement)
 
 
 def build_public_lots(
     lots: list[Lot], as_of: datetime, settled_lot_ids: set[uuid.UUID]
 ) -> PublicLotsResponse:
-    """Classifica todos os lotes com o MESMO `as_of` e ordena cada grupo (P4, D3):
-    ao vivo `ends_at ASC`, agendados `starts_at ASC`, encerrados `ends_at DESC`;
-    `id ASC` desempata nos três."""
-    by_phase: dict[LotPhase, list[Lot]] = {phase: [] for phase in LotPhase}
-    for lot in lots:
-        by_phase[lot_phase(lot.starts_at, lot.ends_at, as_of)].append(lot)
-    live = sorted(by_phase[LotPhase.LIVE], key=lambda lot: (lot.ends_at, lot.id))
-    scheduled = sorted(
-        by_phase[LotPhase.SCHEDULED], key=lambda lot: (lot.starts_at, lot.id)
-    )
-    # `reverse=True` preserva a estabilidade: o `id ASC` do primeiro sort sobrevive.
-    ended = sorted(by_phase[LotPhase.ENDED], key=lambda lot: lot.id)
-    ended.sort(key=lambda lot: lot.ends_at, reverse=True)
-    return PublicLotsResponse(
-        as_of=as_of,
-        live=[
-            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
-            for lot in live
-        ],
-        scheduled=[
-            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
-            for lot in scheduled
-        ],
-        ended=[
-            public_lot_summary(lot, as_of, has_settlement=lot.id in settled_lot_ids)
-            for lot in ended
-        ],
-    )
+    from app.lot_queries import build_public_lots as query
 
-
-def _violation_response(violation: ScheduleViolation) -> Response:
-    field = (
-        "starts_at"
-        if violation == ScheduleViolation.STARTS_AT_NOT_IN_FUTURE
-        else "ends_at"
-    )
-    return error_response(
-        422,
-        "validation_error",
-        details=[{"loc": ["body", field], "type": violation.value}],
-        headers=NO_STORE,
-    )
+    return query(lots, as_of, settled_lot_ids)
 
 
 def register_lot_routes(app: FastAPI) -> None:
-    @api_route(
-        app,
-        "/api/lots",
-        methods=["POST"],
-        policy=AccessPolicy.AUCTIONEER,
-        status_code=201,
-        response_model=LotResponse,
-        responses=error_responses(401, 403, 422, 503),
-    )
-    def create(
-        body: CreateLotRequest,
-        response: Response,
-        user: User = Depends(require_auctioneer),
-        session: Session = Depends(get_session),
-        client: ArticClient = Depends(get_artic_client),
-        integrity: IntegrityConfig = Depends(get_integrity_config),
-    ) -> LotResponse | Response:
-        # D1: guardo o id antes do rollback (que expira o `User`) e encerro a
-        # leitura da autenticação antes da AIC. Nenhuma transação fica aberta
-        # durante a chamada externa, que leva até alguns segundos.
-        auctioneer_id = user.id
-        session.rollback()
+    """Compatibility entrypoint; HTTP routes live in a dedicated module."""
+    from app.lot_routes import register_lot_routes as register
 
-        # Validação que não depende de `now` sai antes da AIC (não gasta a cota).
-        if ends_not_after_scheduled_start(body.starts_at, body.ends_at):
-            return _violation_response(ScheduleViolation.ENDS_AT_NOT_AFTER_START)
-
-        try:
-            resolved = resolve_artwork_for_lot(client, body.external_id)
-        except CatalogUnavailable as error:
-            # Só a categoria vai ao log: nunca o corpo, o usuário nem a resposta da AIC.
-            logger.warning(
-                "artic request failed: operation=create_lot reason=%s", error.reason
-            )
-            return error_response(503, CATALOG_UNAVAILABLE, headers=NO_STORE)
-        if isinstance(resolved, ArtworkRefusal):
-            logger.info("lot creation refused: reason=%s", resolved)
-            return error_response(422, ARTWORK_NOT_ELIGIBLE, headers=NO_STORE)
-
-        # Transação de escrita: um único instante do banco para as regras e para o
-        # `created_at`; a transação só insere e confirma.
-        now = database_now(session)
-        result = create_lot(
-            session,
-            snapshot=resolved,
-            terms=body,
-            auctioneer_id=auctioneer_id,
-            now=now,
-            audit_hmac_secret=integrity.audit_hmac_secret,
-        )
-        if isinstance(result, ScheduleViolation):
-            session.rollback()
-            return _violation_response(result)
-        session.commit()
-
-        response.headers["Cache-Control"] = "no-store"
-        return lot_response(result)
-
-    # Registrada antes de `/api/lots/{lot_id}` (2.5, D4): senão "mine" cairia no
-    # parâmetro.
-    @api_route(
-        app,
-        "/api/lots/mine",
-        methods=["GET"],
-        policy=AccessPolicy.AUCTIONEER,
-        response_model=MyLotsResponse,
-        responses=error_responses(401, 403, 409, 500),
-    )
-    def my_lots(
-        response: Response,
-        user: User = Depends(require_auctioneer),
-        session: Session = Depends(get_session),
-    ) -> MyLotsResponse | Response:
-        # Leitura pura (AD-19): um SELECT, só o dono da sessão, sem a AIC, sem limite.
-        # Inclui os cancelados (D3); a fase vem do `as_of` do banco, não do navegador.
-        from app.bids import IntegrityConflict
-
-        try:
-            result = read_my_lots_snapshot(session, user.id)
-        except Exception:
-            logger.error("private lot read failed category=operational")
-            return error_response(500, "internal_error", headers=NO_STORE)
-        finally:
-            session.rollback()
-        if isinstance(result, IntegrityConflict):
-            return error_response(409, LOT_INTEGRITY_CONFLICT, headers=NO_STORE)
-        response.headers["Cache-Control"] = "no-store"
-        return result
-
-    @api_route(
-        app,
-        "/api/lots",
-        methods=["GET"],
-        policy=AccessPolicy.PUBLIC,
-        response_model=PublicLotsResponse,
-    )
-    def public_lots(
-        response: Response, session: Session = Depends(get_session)
-    ) -> PublicLotsResponse:
-        # Leitura pública (AD-19): um único statement `SELECT`, sem trava, sem a AIC e
-        # sem sessão. O instante e as linhas vêm do mesmo snapshot (P2 refinada).
-        as_of, lots, settled_lot_ids = read_public_snapshot(session)
-        result = build_public_lots(lots, as_of, settled_lot_ids)
-        session.rollback()  # encerra a transação de leitura antes da resposta (D2)
-        response.headers["Cache-Control"] = "no-store"
-        return result
-
-    # Sempre depois de `/api/lots/mine` (D4).
-    @api_route(
-        app,
-        "/api/lots/{lot_id}",
-        methods=["GET"],
-        policy=AccessPolicy.PUBLIC,
-        response_model=PublicLotDetailResponse,
-        responses=error_responses(404, 422),
-    )
-    def public_lot(
-        lot_id: uuid.UUID,
-        response: Response,
-        session: Session = Depends(get_session),
-    ) -> PublicLotDetailResponse | Response:
-        as_of, lot, has_settlement = read_public_lot_snapshot(session, lot_id)
-        result = (
-            None
-            if lot is None
-            else PublicLotDetailResponse(
-                as_of=as_of,
-                lot=public_lot_detail(lot, as_of, has_settlement=has_settlement),
-            )
-        )
-        session.rollback()
-        if result is None:
-            return error_response(404, "not_found", headers=NO_STORE)
-        response.headers["Cache-Control"] = "no-store"
-        return result
+    register(app)

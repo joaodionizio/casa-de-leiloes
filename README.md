@@ -138,6 +138,46 @@ As salas WS e o scheduler usam memória local; múltiplos workers exigiriam outr
 coordenação. Descartei microservices nessa escala. Decisões e alternativas em
 [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
+### Organização para manutenção
+
+A [AD-31](docs/ARQUITETURA.md) registra a evolução pós-desafio em pequenas
+refatorações, sempre com integração PostgreSQL e testes de navegador. O objetivo
+é deixar os limites visíveis sem sacrificar as garantias financeiras:
+
+| Responsabilidade | Localização |
+| --- | --- |
+| Regras e escritas dos lotes | `backend/app/lots.py` |
+| Consultas e snapshots dos lotes | `backend/app/lot_queries.py` |
+| Endpoints HTTP dos lotes | `backend/app/lot_routes.py` |
+| Regras e transação de lance | `backend/app/bids.py` |
+| Leituras da sala e participação | `backend/app/bid_reads.py` |
+| Endpoints HTTP dos lances | `backend/app/bid_routes.py` |
+| Controlador da sala (REST, WebSocket, lances e sincronização) | `frontend/src/useLotRoomController.ts` |
+| Apresentação da sala, foco e navegação | `frontend/src/LotPage.tsx` |
+| Estados e ficha da obra | `frontend/src/LotPageFallback.tsx` e `LotArtworkDetails.tsx` |
+| Transporte HTTP same-origin, JSON e clientes tipados | `frontend/src/api/http.ts` e demais arquivos em `frontend/src/api/` |
+| Estilos por área | `frontend/src/App.css` e `frontend/src/styles/` |
+
+Os antigos pontos de importação do backend continuam disponíveis por funções
+compatíveis, para não interromper testes, scripts e integrações durante a
+migração. Os testes de concorrência, liquidação e integridade seguem usando
+PostgreSQL real; a UI é verificada também no Chromium. O histórico de alterações
+está no [Pull Request de qualidade](https://github.com/joaodionizio/casa-de-leiloes/pull/1)
+e no [CI](https://github.com/joaodionizio/casa-de-leiloes/actions/workflows/quality.yml).
+
+**Importante:** o endereço público da Render apresenta o último deploy realizado;
+as alterações desse Pull Request não devem ser consideradas publicadas até o
+merge e o deploy serem executados e testados separadamente.
+
+### Preservação do banco de demonstração
+
+O banco PostgreSQL gratuito da Render tem suspensão informada para **23/11/2026**.
+As alterações desta PR não realizam backup nem upgrade automaticamente. Antes
+que expire, execute o [procedimento de exportação e teste de restauração](docs/PRESERVACAO-BANCO-RENDER.md)
+em um ambiente confiável e mantenha a cópia fora do Git. Para um portfólio de
+longo prazo, prefira uma instância persistente adequada ou migre o banco com
+a mesma abordagem de backup/restauração.
+
 ## Instalação e execução local
 
 Pré-requisitos: **Python 3.13+, uv, Node.js 24/npm, Docker e Compose v2**.
