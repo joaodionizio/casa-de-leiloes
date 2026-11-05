@@ -224,3 +224,13 @@ sem mover modelos ORM nem operações transacionais. No frontend, extraí compon
 somente de apresentação de `LotPage.tsx` e separei o CSS em módulos mantendo a
 mesma ordem na cascata. Os testes automatizados continuam sendo o gate para
 considerar essas alterações aptas ao merge; não confundo commit com validação.
+
+## Sala do lote: controlador separado da apresentação (04/11/2026)
+
+Autorizei extrair o controlador de `LotPage.tsx` para `useLotRoomController.ts`,
+sem redesenhar a sincronização REST/WebSocket, a reconexão, a confirmação de
+arremate ou o `POST` de lances. A página mantém o foco, a navegação e a
+apresentação; o hook cuida de leituras, gerações, envio e recuperação de estado.
+A aceitação continua condicionada ao mesmo CI, incluindo a regressão E2E
+no Chromium e as transações com PostgreSQL real. Esta alteração não significa
+merge nem deploy de produção.

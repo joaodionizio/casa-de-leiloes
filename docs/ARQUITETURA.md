@@ -875,9 +875,10 @@ comportamento transacional do PostgreSQL.
 **Decidi:** após receber o feedback técnico do desafio Elite Dev, manter o ÁTRIO como
 portfólio e substituir gradualmente arquivos grandes por módulos coesos. O primeiro
 passo separa os endpoints HTTP dos serviços e consultas de lotes e lances, preservando
-as importações públicas usadas pelo código existente. No frontend, posso extrair
-componentes de apresentação sem reescrever a arbitragem de snapshots, o mecanismo
-de reconexão nem os estados transacionais.
+as importações públicas usadas pelo código existente. No frontend, a apresentação
+da Sala reside em `LotPage.tsx` e sua orquestração em `useLotRoomController.ts`;
+componentes estáticos foram extraídos sem reescrever a arbitragem de snapshots,
+o mecanismo de reconexão nem os estados transacionais.
 
 **Motivo:** o projeto funciona e possui testes extensos, mas o acoplamento entre HTTP,
 domínio, persistência e apresentação dificulta compreender e revisar mudanças.

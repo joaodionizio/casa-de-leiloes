@@ -152,7 +152,8 @@ refatorações, sempre com integração PostgreSQL e testes de navegador. O obje
 | Regras e transação de lance | `backend/app/bids.py` |
 | Leituras da sala e participação | `backend/app/bid_reads.py` |
 | Endpoints HTTP dos lances | `backend/app/bid_routes.py` |
-| Orquestração da sala | `frontend/src/LotPage.tsx` |
+| Controlador da sala (REST, WebSocket, lances e sincronização) | `frontend/src/useLotRoomController.ts` |
+| Apresentação da sala, foco e navegação | `frontend/src/LotPage.tsx` |
 | Estados e ficha da obra | `frontend/src/LotPageFallback.tsx` e `LotArtworkDetails.tsx` |
 | Transporte HTTP same-origin, JSON e clientes tipados | `frontend/src/api/http.ts` e demais arquivos em `frontend/src/api/` |
 | Estilos por área | `frontend/src/App.css` e `frontend/src/styles/` |
